@@ -1,0 +1,54 @@
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const path = require('path');
+require('dotenv').config();
+
+const authRoutes = require('./routes/auth.routes');
+const itemsRoutes = require('./routes/items.routes');
+const ordersRoutes = require('./routes/orders.routes');
+const shipmentsRoutes = require('./routes/shipments.routes');
+const settingsRoutes = require('./routes/settings.routes');
+const statsRoutes = require('./routes/stats.routes');
+const questionsRoutes = require('./routes/questions.routes');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+app.use(morgan('dev'));
+
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/items', itemsRoutes);
+app.use('/api/orders', ordersRoutes);
+app.use('/api/shipments', shipmentsRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/questions', questionsRoutes);
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Mercado Libre Manager API',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Error interno del servidor',
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(` Mercado Libre Manager Backend corriendo en http://localhost:${PORT}`);
+  console.log(` Modo Demo y Rutas de API listas.`);
+});
+
+module.exports = app;

@@ -1,0 +1,61 @@
+{
+  "settings": {
+    "appId": "8410220120357196",
+    "clientSecret": "KJWBdQk7fNkSVuZpBY8EYzcAegZDKtqt",
+    "redirectUri": "https://httpbin.org/get",
+    "siteId": "MLA",
+    "lowStockThreshold": 5,
+    "autoSyncMinutes": 15
+  },
+  "auth": {
+    "accessToken": "APP_USR-8410220120357196-100419-2648c0acae44d53470bba2f79e301dc0-139483581",
+    "refreshToken": "TG-6ac2df3ed316aa0001e2e33b-139483581",
+    "expiresAt": 1791177630368,
+    "userId": 139483581,
+    "nickname": "GRANA3DOK",
+    "permalink": "http://perfil.mercadolibre.com.ar/GRANA3DOK",
+    "siteId": "MLA"
+  },
+  "packingMetadata": {
+    "48168467003": {
+      "printed": false,
+      "packed": true,
+      "qualityChecked": true,
+      "note": "",
+      "packedAt": "2026-10-04T23:39:17.993Z",
+      "updatedAt": "2026-10-04T23:39:21.475Z"
+    },
+    "48167643408": {
+      "printed": false,
+      "packed": true,
+      "qualityChecked": true,
+      "note": "",
+      "updatedAt": "2026-10-04T23:39:22.615Z",
+      "packedAt": "2026-10-04T23:39:22.614Z"
+    },
+    "48164856585": {
+      "printed": true,
+      "packed": false,
+      "qualityChecked": false,
+      "note": "",
+      "updatedAt": "2026-10-04T23:39:24.579Z",
+      "printedAt": "2026-10-04T23:39:24.578Z"
+    },
+    "48163130772": {
+      "printed": true,
+      "packed": false,
+      "qualityChecked": false,
+      "note": "",
+      "updatedAt": "2026-10-04T23:39:46.390Z",
+      "printedAt": "2026-10-04T23:39:46.389Z"
+    },
+    "48162806765": {
+      "printed": true,
+      "packed": false,
+      "qualityChecked": false,
+      "note": "",
+      "updatedAt": "2026-10-04T23:55:05.568Z",
+      "printedAt": "2026-10-04T23:55:05.568Z"
+    }
+  }
+}
