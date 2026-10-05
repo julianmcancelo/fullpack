@@ -43,6 +43,7 @@ router.post('/scan', async (req, res) => {
     const trimmed = rawCode.trim();
     // Normalize code: extract numbers, extract parameters from ML QR URLs, or use clean string
     const numbersFound = trimmed.match(/\b\d{9,16}\b/g) || [];
+    const candidateId = numbersFound.length > 0 ? numbersFound[0] : trimmed;
     const candidatePool = [trimmed, ...numbersFound];
     
     // Also support parsing URLs like https://.../shipments/48164856585 or ?shipment_id=...
@@ -114,8 +115,9 @@ router.post('/scan', async (req, res) => {
         : (matched.buyer?.nickname || 'Comprador');
 
       const actionType = wasAlreadyPacked ? 'DUPLICATE_SCAN' : 'FIRST_PACK_VERIFIED';
+      const loggedCode = String(matched.id) || candidateId;
 
-      await addScanLog(candidateId, String(matched.id), actionType, {
+      await addScanLog(loggedCode, String(matched.id), actionType, {
         title: firstItem.title || 'Producto Mercado Libre',
         buyer: buyerName,
         status: matched.status,
