@@ -199,6 +199,46 @@ function updatePackingMetadata(shipmentId, updates) {
   return db.packingMetadata[shipmentId];
 }
 
+// Persists to Neon and WAITS for the write (required on serverless: the function
+// may be frozen right after responding, losing fire-and-forget writes).
+async function updatePackingMetadataAsync(shipmentId, updates) {
+  await refreshPackingFromNeon();
+  const db = readDb();
+  if (!db.packingMetadata) db.packingMetadata = {};
+  db.packingMetadata[shipmentId] = {
+    ...(db.packingMetadata[shipmentId] || {
+      printed: false,
+      packed: false,
+      qualityChecked: false,
+      note: '',
+    }),
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  writeDb(db);
+  try {
+    await neon.savePackingMetadataToNeon(shipmentId, db.packingMetadata[shipmentId]);
+  } catch (e) {
+    console.warn('Neon persist packing failed:', e.message);
+  }
+  return db.packingMetadata[shipmentId];
+}
+
+// Pulls the latest packing state from Neon (source of truth shared by all instances).
+async function refreshPackingFromNeon() {
+  try {
+    const neonPacking = await neon.getPackingMetadataFromNeon();
+    if (neonPacking && Object.keys(neonPacking).length > 0) {
+      const db = readDb();
+      db.packingMetadata = { ...(db.packingMetadata || {}), ...neonPacking };
+      writeDb(db);
+    }
+  } catch (e) {
+    // fall back to local cache
+  }
+  return getPackingMetadata();
+}
+
 async function addScanLog(barcode, shipmentId, action, details = {}) {
   const db = readDb();
   if (!db.scanLogs) db.scanLogs = [];
@@ -213,7 +253,7 @@ async function addScanLog(barcode, shipmentId, action, details = {}) {
   db.scanLogs.unshift(logItem);
   if (db.scanLogs.length > 200) db.scanLogs = db.scanLogs.slice(0, 200);
   writeDb(db);
-  neon.logScanToNeon(barcode, shipmentId, action, details).catch(() => {});
+  try { await neon.logScanToNeon(barcode, shipmentId, action, details); } catch (e) {}
   return logItem;
 }
 
@@ -411,6 +451,8 @@ module.exports = {
   clearAuth,
   getPackingMetadata,
   updatePackingMetadata,
+  updatePackingMetadataAsync,
+  refreshPackingFromNeon,
   addScanLog,
   getScanLogs,
   findUserByEmail,

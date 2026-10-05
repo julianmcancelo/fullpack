@@ -5,7 +5,7 @@ const {
   getShipmentLabel,
   updatePackingMetadata,
 } = require('../services/mlShipments.service');
-const { addScanLog, getScanLogs } = require('../db/store');
+const { addScanLog, getScanLogs, updatePackingMetadataAsync } = require('../db/store');
 
 // GET /api/shipments
 router.get('/', async (req, res) => {
@@ -119,7 +119,7 @@ router.post('/scan', async (req, res) => {
         }
 
         const wasAlreadyDispatchChecked = Boolean(prevPacking.dispatchChecked);
-        const updatedPacking = updatePackingMetadata(String(matched.id), {
+        const updatedPacking = await updatePackingMetadataAsync(String(matched.id), {
           dispatchChecked: true,
           dispatchCheckedAt: nowIso,
           lastScannedAt: nowIso,
@@ -163,7 +163,7 @@ router.post('/scan', async (req, res) => {
       };
 
       if (autoPack && !wasAlreadyPacked) {
-        updatedPacking = updatePackingMetadata(String(matched.id), {
+        updatedPacking = await updatePackingMetadataAsync(String(matched.id), {
           packed: true,
           qualityChecked: true,
           packedAt: nowIso,
@@ -172,7 +172,7 @@ router.post('/scan', async (req, res) => {
           scanCount: newScanCount,
         });
       } else {
-        updatedPacking = updatePackingMetadata(String(matched.id), {
+        updatedPacking = await updatePackingMetadataAsync(String(matched.id), {
           scanCount: newScanCount,
           lastScannedAt: nowIso,
           firstScannedAt,
@@ -236,14 +236,15 @@ router.get('/:id/label', async (req, res) => {
 });
 
 // PUT /api/shipments/:id/packing (Update packing checklist: printed, packed, qualityChecked, note, statusOverride)
-router.put('/:id/packing', (req, res) => {
+router.put('/:id/packing', async (req, res) => {
   try {
-    const { printed, packed, qualityChecked, note, statusOverride } = req.body;
+    const { printed, packed, qualityChecked, dispatchChecked, note, statusOverride } = req.body;
     const nowIso = new Date().toISOString();
-    const updated = updatePackingMetadata(req.params.id, {
+    const updated = await updatePackingMetadataAsync(req.params.id, {
       ...(printed !== undefined ? { printed: Boolean(printed), ...(printed ? { printedAt: nowIso } : {}) } : {}),
       ...(packed !== undefined ? { packed: Boolean(packed), ...(packed ? { packedAt: nowIso } : {}) } : {}),
       ...(qualityChecked !== undefined ? { qualityChecked: Boolean(qualityChecked) } : {}),
+      ...(dispatchChecked !== undefined ? { dispatchChecked: Boolean(dispatchChecked), ...(dispatchChecked ? { dispatchCheckedAt: nowIso } : {}) } : {}),
       ...(note !== undefined ? { note } : {}),
       ...(statusOverride !== undefined ? { statusOverride } : {}),
     });
@@ -254,13 +255,16 @@ router.put('/:id/packing', (req, res) => {
 });
 
 // POST /api/shipments/batch-packing (Bulk mark as printed or packed or update statusOverride)
-router.post('/batch-packing', (req, res) => {
+router.post('/batch-packing', async (req, res) => {
   try {
     const { shipmentIds, updates } = req.body;
     if (!Array.isArray(shipmentIds)) {
       return res.status(400).json({ error: 'Array de shipmentIds requerido.' });
     }
-    const results = shipmentIds.map(id => updatePackingMetadata(String(id), updates));
+    const results = [];
+    for (const id of shipmentIds) {
+      results.push(await updatePackingMetadataAsync(String(id), updates));
+    }
     res.json({ success: true, results });
   } catch (err) {
     res.status(500).json({ error: err.message });

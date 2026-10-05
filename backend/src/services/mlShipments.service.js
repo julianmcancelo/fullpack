@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { getAuth, getPackingMetadata, updatePackingMetadata } = require('../db/store');
+const { getAuth, getPackingMetadata, updatePackingMetadata, refreshPackingFromNeon } = require('../db/store');
 const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
@@ -25,7 +25,7 @@ async function getShipments(query = {}) {
 
   const orders = ordersRes.data.results || [];
   const shipmentsList = [];
-  const packingMeta = getPackingMetadata();
+  const packingMeta = await refreshPackingFromNeon();
 
   // Extract unique shipment IDs to fetch official live status from /shipments in parallel chunks
   const shipmentIds = orders.map(o => o.shipping && o.shipping.id).filter(Boolean);

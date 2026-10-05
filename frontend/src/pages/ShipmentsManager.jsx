@@ -47,9 +47,9 @@ export default function ShipmentsManager({ connection }) {
   const [error, setError] = useState(null);
   const [manifestModalOpen, setManifestModalOpen] = useState(false);
 
-  const loadShipments = async () => {
+  const loadShipments = async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       setError(null);
       const params = {};
       if (statusTab !== 'all') {
@@ -73,14 +73,27 @@ export default function ShipmentsManager({ connection }) {
       setShipments(res.results || []);
     } catch (err) {
       console.error('Error al cargar envíos:', err);
-      setError(err.message);
+      if (!isBackground) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadShipments();
+
+    // Auto-sync every 10 seconds in background so mobile scanner updates reflect instantly
+    const interval = setInterval(() => {
+      loadShipments(true);
+    }, 10000);
+
+    const onFocus = () => loadShipments(true);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [statusTab, logisticFilter, packingFilter]);
 
   const handleSearchSubmit = (e) => {
@@ -100,7 +113,7 @@ export default function ShipmentsManager({ connection }) {
 
       setShipments((prev) =>
         prev.map((s) =>
-          s.id === shipment.id
+          String(s.id) === String(shipment.id)
             ? { ...s, packing: { ...(s.packing || {}), [field]: nextVal } }
             : s
         )
@@ -122,7 +135,7 @@ export default function ShipmentsManager({ connection }) {
       });
       setShipments((prev) =>
         prev.map((s) =>
-          s.id === activeNoteModal.id
+          String(s.id) === String(activeNoteModal.id)
             ? { ...s, packing: { ...(s.packing || {}), note: noteDraft } }
             : s
         )
@@ -141,7 +154,7 @@ export default function ShipmentsManager({ connection }) {
 
       setShipments((prev) =>
         prev.map((s) =>
-          s.id === shipmentId
+          String(s.id) === String(shipmentId)
             ? {
                 ...s,
                 status: newStatus,

@@ -38,7 +38,13 @@ import {
   UserCheck,
   ClipboardList,
   ShieldCheck,
-  X
+  X,
+  Play,
+  Pause,
+  Sliders,
+  CheckSquare,
+  Square,
+  Sparkles
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
@@ -190,11 +196,13 @@ export default function MobileTerminal({ connection }) {
   const [scanning, setScanning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [autoPackOnScan, setAutoPackOnScan] = useState(true);
   
-  // Scanner configuration
-  const [scannerMode, setScannerMode] = useState('pack'); // 'pack' (Etapa 1) or 'dispatch' (Etapa 2)
+  // SCANNER BEHAVIOR & ANTI-SPAM SETTINGS
+  // 'pack_direct' (Auto-marcar listo), 'pack_checklist' (Control ítem por ítem), 'query_only' (Solo consultar), 'dispatch' (Despacho chofer)
+  const [scannerAction, setScannerAction] = useState('pack_direct');
   const [scannerCarrierFilter, setScannerCarrierFilter] = useState('all'); // 'all', 'self_service', 'cross_docking', 'drop_off'
+  const [pauseCameraOnScan, setPauseCameraOnScan] = useState(false); // Auto-pause camera after scan
+  const [scanCooldown, setScanCooldown] = useState(0); // Cooldown seconds remaining
   
   // Scanned result state
   const [lastScanned, setLastScanned] = useState(null);
@@ -205,6 +213,11 @@ export default function MobileTerminal({ connection }) {
   const [dbStatus, setDbStatus] = useState(null);
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+  // Checklist Verification Modal State
+  const [checklistModalOpen, setChecklistModalOpen] = useState(false);
+  const [activeChecklistShipment, setActiveChecklistShipment] = useState(null);
+  const [checkedItemsMap, setCheckedItemsMap] = useState({});
 
   // Filter States: 'all_active', 'flex', 'today', 'past', 'tomorrow', 'shipped', 'all'
   const [dateFilter, setDateFilter] = useState('all_active');
@@ -218,6 +231,7 @@ export default function MobileTerminal({ connection }) {
   const html5QrCodeRef = useRef(null);
   const lastScannedCodeRef = useRef('');
   const lastScannedTimeRef = useRef(0);
+  const isCooldownRef = useRef(false);
 
   // Live ticking clock in Argentina time
   useEffect(() => {
@@ -227,9 +241,31 @@ export default function MobileTerminal({ connection }) {
     return () => clearInterval(timer);
   }, []);
 
-  const loadData = async () => {
+  // Cooldown timer interval
+  useEffect(() => {
+    let timer = null;
+    if (scanCooldown > 0) {
+      isCooldownRef.current = true;
+      timer = setInterval(() => {
+        setScanCooldown(prev => {
+          if (prev <= 1) {
+            isCooldownRef.current = false;
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      isCooldownRef.current = false;
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [scanCooldown]);
+
+  const loadData = async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       const [shipmentsRes, logsRes, dbRes] = await Promise.all([
         api.getShipments({ limit: 50 }).catch(() => ({ results: [] })),
         api.getScanLogs().catch(() => ({ logs: [] })),
@@ -241,13 +277,24 @@ export default function MobileTerminal({ connection }) {
     } catch (err) {
       console.error('Error al cargar datos móviles:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
+
+    // Auto-sync in background every 10 seconds so mobile stays 100% updated with any changes
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 10000);
+
+    const onFocus = () => loadData(true);
+    window.addEventListener('focus', onFocus);
+
     return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
       stopCamera();
     };
   }, []);
@@ -314,27 +361,47 @@ export default function MobileTerminal({ connection }) {
     setScanning(false);
   };
 
+  // Process Scanned Code with ANTI-SPAM DEBOUNCE and ACTION ROUTING
   const processScannedCode = async (rawCode) => {
     if (!rawCode) return;
     const clean = rawCode.trim();
 
+    // 1. Anti-spam Check: if cooldown is active, ignore frame entirely
+    if (isCooldownRef.current || isProcessingScan) {
+      return;
+    }
+
     const now = Date.now();
-    if (clean === lastScannedCodeRef.current && (now - lastScannedTimeRef.current) < 2500) {
+    // Debounce exact duplicate code within 4 seconds
+    if (clean === lastScannedCodeRef.current && (now - lastScannedTimeRef.current) < 4000) {
       return;
     }
     lastScannedCodeRef.current = clean;
     lastScannedTimeRef.current = now;
 
-    if (isProcessingScan) return;
+    // Activate 3-second anti-spam lock
     setIsProcessingScan(true);
+    setScanCooldown(3);
 
     try {
-      const targetMode = scannerMode;
+      // Determine what backend call to make based on scannerAction
+      const isAutoPack = scannerAction === 'pack_direct';
+      const scanMode = scannerAction === 'dispatch' ? 'dispatch' : 'pack';
       const targetCarrier = scannerCarrierFilter;
-      const res = await api.scanShipment(clean, autoPackOnScan, targetMode, targetCarrier);
+
+      const res = await api.scanShipment(clean, isAutoPack, scanMode, targetCarrier);
 
       if (res.found && res.shipment) {
-        // Handle CARRIER MISMATCH in Dispatch mode
+        const shipment = res.shipment;
+
+        // Optionally pause camera if auto-pause is enabled
+        if (pauseCameraOnScan && html5QrCodeRef.current) {
+          stopCamera();
+        }
+
+        // =========================================================
+        // CASE A: CARRIER MISMATCH IN DISPATCH MODE
+        // =========================================================
         if (res.carrierMismatch) {
           if (soundEnabled) playErrorBeep();
           if (voiceEnabled) speakSpanish(`Alerta de error. Paquete de ${res.actualCarrier}. No cargar al chofer de ${res.expectedCarrier}.`);
@@ -342,14 +409,19 @@ export default function MobileTerminal({ connection }) {
 
           setLastScanned({
             status: 'CARRIER_MISMATCH',
-            shipment: res.shipment,
+            shipment,
             expectedCarrier: res.expectedCarrier,
             actualCarrier: res.actualCarrier,
             message: res.message || `🚨 ¡ERROR! Este paquete es de ${res.actualCarrier}, NO pertenece al transporte ${res.expectedCarrier}.`,
             timestamp: new Date().toLocaleTimeString('es-AR'),
           });
-        } else if (targetMode === 'dispatch') {
-          // DISPATCH CONTROL MODE SUCCESS
+          return;
+        }
+
+        // =========================================================
+        // CASE B: DISPATCH CONTROL MODE
+        // =========================================================
+        if (scannerAction === 'dispatch') {
           if (res.alreadyDispatchChecked) {
             if (soundEnabled) playWarningBeep();
             if (voiceEnabled) speakSpanish(`Paquete ya verificado para este transporte`);
@@ -357,7 +429,7 @@ export default function MobileTerminal({ connection }) {
 
             setLastScanned({
               status: 'ALREADY_DISPATCHED',
-              shipment: res.shipment,
+              shipment,
               message: `⚠️ Este paquete ya había sido verificado para la salida del chofer.`,
               timestamp: new Date().toLocaleTimeString('es-AR'),
             });
@@ -368,53 +440,97 @@ export default function MobileTerminal({ connection }) {
             confetti({ particleCount: 45, spread: 70, origin: { y: 0.65 } });
 
             setShipments(prev =>
-              prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
+              prev.map(s => (s.id === shipment.id ? shipment : s))
             );
 
             setLastScanned({
               status: 'DISPATCH_VERIFIED',
-              shipment: res.shipment,
+              shipment,
               message: `🚚 ¡Paquete verificado con éxito para salida al transporte!`,
               timestamp: new Date().toLocaleTimeString('es-AR'),
             });
           }
+          return;
+        }
+
+        // =========================================================
+        // CASE C: CHECKLIST VERIFICATION MODE (Item by Item)
+        // =========================================================
+        if (scannerAction === 'pack_checklist') {
+          if (soundEnabled) playSuccessBeep();
+          if (voiceEnabled) speakSpanish(`Orden ${shipment.order_id}. Verifique los artículos.`);
+          
+          // Initialize checkbox state for items
+          const initialChecks = {};
+          (shipment.items || []).forEach((it, idx) => {
+            initialChecks[idx] = false;
+          });
+          setCheckedItemsMap(initialChecks);
+          setActiveChecklistShipment(shipment);
+          setChecklistModalOpen(true);
+
+          setLastScanned({
+            status: 'CHECKLIST_OPEN',
+            shipment,
+            message: `📋 Orden #${shipment.order_id} cargada. Verifique cada producto en el checklist antes de sellar.`,
+            timestamp: new Date().toLocaleTimeString('es-AR'),
+          });
+          return;
+        }
+
+        // =========================================================
+        // CASE D: QUERY ONLY MODE (Solo Consulta)
+        // =========================================================
+        if (scannerAction === 'query_only') {
+          if (soundEnabled) playSuccessBeep();
+          if (voiceEnabled) speakSpanish(`Orden ${shipment.order_id}`);
+
+          setLastScanned({
+            status: 'QUERY_RESULT',
+            shipment,
+            message: `🔍 Consulta: Orden #${shipment.order_id} de ${shipment.buyer?.first_name || 'Cliente'} (${shipment.status}).`,
+            timestamp: new Date().toLocaleTimeString('es-AR'),
+          });
+          return;
+        }
+
+        // =========================================================
+        // CASE E: DIRECT PACKING MODE (⚡ Empaque Rápido)
+        // =========================================================
+        if (res.alreadyPacked) {
+          if (soundEnabled) playWarningBeep();
+          if (voiceEnabled) speakSpanish(`Atención, paquete ya leído previamente`);
+          if (navigator.vibrate) navigator.vibrate([180, 100, 180]);
+
+          const packedTimeStr = res.firstScannedAt 
+            ? new Date(res.firstScannedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            : 'anteriormente';
+
+          setLastScanned({
+            status: 'ALREADY_PACKED',
+            shipment,
+            scanCount: res.scanCount || 2,
+            firstScannedAtStr: packedTimeStr,
+            message: `¡ATENCIÓN! Este paquete ya había sido empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
+            timestamp: new Date().toLocaleTimeString('es-AR'),
+          });
         } else {
-          // PACKING MODE (ETAPA 1)
-          if (res.alreadyPacked) {
-            if (soundEnabled) playWarningBeep();
-            if (voiceEnabled) speakSpanish(`Atención, paquete ya leído previamente`);
-            if (navigator.vibrate) navigator.vibrate([180, 100, 180]);
+          if (soundEnabled) playSuccessBeep();
+          if (voiceEnabled) speakSpanish(`Empaquetado y listo`);
+          if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
+          confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
 
-            const packedTimeStr = res.firstScannedAt 
-              ? new Date(res.firstScannedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-              : 'anteriormente';
+          setShipments(prev =>
+            prev.map(s => (s.id === shipment.id ? shipment : s))
+          );
 
-            setLastScanned({
-              status: 'ALREADY_PACKED',
-              shipment: res.shipment,
-              scanCount: res.scanCount || 2,
-              firstScannedAtStr: packedTimeStr,
-              message: `¡ATENCIÓN! Este paquete ya había sido empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
-              timestamp: new Date().toLocaleTimeString('es-AR'),
-            });
-          } else {
-            if (soundEnabled) playSuccessBeep();
-            if (voiceEnabled) speakSpanish(`Empaquetado y listo`);
-            if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
-            confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
-
-            setShipments(prev =>
-              prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
-            );
-
-            setLastScanned({
-              status: 'NEWLY_PACKED',
-              shipment: res.shipment,
-              scanCount: 1,
-              message: `¡Paquete verificado y empaquetado con éxito!`,
-              timestamp: new Date().toLocaleTimeString('es-AR'),
-            });
-          }
+          setLastScanned({
+            status: 'NEWLY_PACKED',
+            shipment,
+            scanCount: 1,
+            message: `¡Paquete verificado y marcado como EMPAQUETADO con éxito!`,
+            timestamp: new Date().toLocaleTimeString('es-AR'),
+          });
         }
       } else {
         if (soundEnabled) playErrorBeep();
@@ -440,7 +556,7 @@ export default function MobileTerminal({ connection }) {
     } finally {
       setTimeout(() => {
         setIsProcessingScan(false);
-      }, 800);
+      }, 500);
     }
   };
 
@@ -449,6 +565,51 @@ export default function MobileTerminal({ connection }) {
     if (!manualCode.trim()) return;
     processScannedCode(manualCode);
     setManualCode('');
+  };
+
+  // Complete Checklist Verification & Mark as Packed
+  const handleConfirmChecklist = async () => {
+    if (!activeChecklistShipment) return;
+    const shipmentId = activeChecklistShipment.id;
+
+    try {
+      await api.updateShipmentPacking(shipmentId, {
+        packed: true,
+        qualityChecked: true,
+      });
+
+      setShipments(prev =>
+        prev.map(s =>
+          s.id === shipmentId
+            ? {
+                ...s,
+                packing: {
+                  ...(s.packing || {}),
+                  packed: true,
+                  qualityChecked: true,
+                  packedAt: new Date().toISOString(),
+                },
+              }
+            : s
+        )
+      );
+
+      if (soundEnabled) playSuccessBeep();
+      if (voiceEnabled) speakSpanish(`Artículos verificados y caja sellada`);
+      confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
+
+      setLastScanned({
+        status: 'NEWLY_PACKED',
+        shipment: { ...activeChecklistShipment, packing: { ...activeChecklistShipment.packing, packed: true } },
+        message: `✅ ¡Orden #${activeChecklistShipment.order_id} verificada ítem por ítem y sellada con éxito!`,
+        timestamp: new Date().toLocaleTimeString('es-AR'),
+      });
+
+      setChecklistModalOpen(false);
+      setActiveChecklistShipment(null);
+    } catch (err) {
+      alert(`Error al confirmar empaque: ${err.message}`);
+    }
   };
 
   const handleUnpackShipment = async (shipmentId) => {
@@ -1346,6 +1507,21 @@ export default function MobileTerminal({ connection }) {
                             <span>PDF</span>
                           </a>
 
+                          <button
+                            onClick={() => {
+                              const initialChecks = {};
+                              (s.items || []).forEach((_, idx) => { initialChecks[idx] = false; });
+                              setCheckedItemsMap(initialChecks);
+                              setActiveChecklistShipment(s);
+                              setChecklistModalOpen(true);
+                            }}
+                            className="btn btn-outline btn-sm font-bold flex items-center gap-1 px-2.5 py-1.5 text-xs text-brand-ink dark:text-brand"
+                            title="Abrir checklist de verificación de ítems"
+                          >
+                            <CheckSquare className="h-3.5 w-3.5" />
+                            <span>Checklist</span>
+                          </button>
+
                           <select
                             value={s.status}
                             onChange={(e) => handleStatusOverride(s.id, e.target.value)}
@@ -1495,7 +1671,7 @@ export default function MobileTerminal({ connection }) {
               <div className="flex flex-wrap gap-2 pt-2 border-t border-line/60">
                 <button
                   onClick={() => {
-                    setScannerMode('dispatch');
+                    setScannerAction('dispatch');
                     setScannerCarrierFilter(dispatchCarrierFilter);
                     setActiveTab('scanner');
                     if (!scanning) startCamera();
@@ -1607,55 +1783,106 @@ export default function MobileTerminal({ connection }) {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB: ESCÁNER CON CÁMARA O PISTOLA */}
+        {/* TAB: ESCÁNER INTELIGENTE ANTI-SPAM Y SELECTOR DE ACCIÓN */}
         {/* ========================================================================= */}
         {activeTab === 'scanner' && (
           <div className="space-y-4 animate-in fade-in-50 duration-200">
             
-            {/* Lector de cámara */}
+            {/* Lector de cámara & Selector de Comportamiento */}
             <div className="card card-pad p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-ink">
                   <Camera className="h-4 w-4 text-brand" />
-                  <span>Lector Óptico de Etiquetas QR</span>
+                  <span>Lector de Etiquetas y QR</span>
                 </span>
 
-                <span className={`badge ${scanning ? 'badge-success' : 'badge-neutral'}`}>
-                  <span className={`h-2 w-2 rounded-full ${scanning ? 'bg-success animate-pulse-ring' : 'bg-ink-subtle'}`} aria-hidden="true" />
-                  {scanning ? 'Escaneando en vivo' : 'Cámara en pausa'}
-                </span>
+                <div className="flex items-center gap-2">
+                  {scanCooldown > 0 && (
+                    <span className="badge badge-warning text-[10px] font-black animate-pulse">
+                      ⏱️ Pausa de lectura ({scanCooldown}s)
+                    </span>
+                  )}
+                  <span className={`badge ${scanning ? 'badge-success' : 'badge-neutral'}`}>
+                    <span className={`h-2 w-2 rounded-full ${scanning ? 'bg-success animate-pulse-ring' : 'bg-ink-subtle'}`} aria-hidden="true" />
+                    {scanning ? 'Escaneando' : 'En pausa'}
+                  </span>
+                </div>
               </div>
 
-              {/* Mode Switcher inside Scanner: Empaque vs Despacho */}
-              <div className="p-1 bg-muted rounded-xl border border-line grid grid-cols-2 gap-1 text-xs font-bold">
-                <button
-                  onClick={() => setScannerMode('pack')}
-                  className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
-                    scannerMode === 'pack' ? 'bg-card text-ink shadow-xs font-black' : 'text-ink-muted'
-                  }`}
-                >
-                  <PackageCheck className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>Modo 1: Empaque</span>
-                </button>
-                <button
-                  onClick={() => setScannerMode('dispatch')}
-                  className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
-                    scannerMode === 'dispatch' ? 'bg-card text-ink shadow-xs font-black' : 'text-ink-muted'
-                  }`}
-                >
-                  <Truck className="h-3.5 w-3.5 text-blue-500" />
-                  <span>Modo 2: Despacho Chofer</span>
-                </button>
+              {/* ACTION SELECTOR PILLS: "¿Qué hacer al escanear?" */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-ink-subtle block">
+                  ¿Qué acción realizar al escanear?
+                </label>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-muted rounded-2xl border border-line text-xs font-bold">
+                  
+                  {/* 1. Empaque Directo */}
+                  <button
+                    onClick={() => setScannerAction('pack_direct')}
+                    className={`py-2 px-1.5 rounded-xl flex items-center justify-center gap-1 transition ${
+                      scannerAction === 'pack_direct' 
+                        ? 'bg-amber-400 text-slate-950 shadow-xs font-black' 
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Zap className="h-3.5 w-3.5 fill-current" />
+                    <span>⚡ Empaque Directo</span>
+                  </button>
+
+                  {/* 2. Control de Ítems / Checklist */}
+                  <button
+                    onClick={() => setScannerAction('pack_checklist')}
+                    className={`py-2 px-1.5 rounded-xl flex items-center justify-center gap-1 transition ${
+                      scannerAction === 'pack_checklist' 
+                        ? 'bg-emerald-500 text-white shadow-xs font-black' 
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    <span>📋 Control Ítems</span>
+                  </button>
+
+                  {/* 3. Solo Consulta */}
+                  <button
+                    onClick={() => setScannerAction('query_only')}
+                    className={`py-2 px-1.5 rounded-xl flex items-center justify-center gap-1 transition ${
+                      scannerAction === 'query_only' 
+                        ? 'bg-purple-600 text-white shadow-xs font-black' 
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    <span>🔍 Solo Consulta</span>
+                  </button>
+
+                  {/* 4. Control de Despacho */}
+                  <button
+                    onClick={() => setScannerAction('dispatch')}
+                    className={`py-2 px-1.5 rounded-xl flex items-center justify-center gap-1 transition ${
+                      scannerAction === 'dispatch' 
+                        ? 'bg-blue-600 text-white shadow-xs font-black' 
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Truck className="h-3.5 w-3.5" />
+                    <span>🚚 Despacho Chofer</span>
+                  </button>
+
+                </div>
               </div>
 
               {/* Carrier mismatch guard filter when in dispatch mode */}
-              {scannerMode === 'dispatch' && (
-                <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-blue-50/40 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-xs">
-                  <span className="font-bold text-blue-900 dark:text-blue-200">Transporte a cargar:</span>
+              {scannerAction === 'dispatch' && (
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-blue-50/50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-xs">
+                  <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                    <Truck className="h-3.5 w-3.5 text-blue-500" />
+                    <span>Transporte a cargar:</span>
+                  </span>
                   <select
                     value={scannerCarrierFilter}
                     onChange={(e) => setScannerCarrierFilter(e.target.value)}
-                    className="select select-sm py-0.5 px-2 text-xs font-extrabold"
+                    className="select select-sm py-0.5 px-2 text-xs font-extrabold border-blue-300"
                   >
                     <option value="all">🌐 Todos los transportes</option>
                     <option value="self_service">⚡ Chofer Flex</option>
@@ -1665,7 +1892,7 @@ export default function MobileTerminal({ connection }) {
                 </div>
               )}
 
-              {/* Visor de cámara */}
+              {/* Visor de cámara con Anti-Spam Overlay */}
               <div className={`relative overflow-hidden rounded-2xl border transition-all duration-300 ${scanning ? 'min-h-[260px] border-line bg-ink/90' : 'flex min-h-[140px] items-center justify-center border-dashed border-line-strong bg-muted'}`}>
                 <div id="mobile-camera-viewfinder" className="mx-auto w-full max-w-sm"></div>
 
@@ -1679,10 +1906,19 @@ export default function MobileTerminal({ connection }) {
 
                 {scanning && (
                   <div className="pointer-events-none absolute left-2 right-2 top-2 flex items-center justify-between">
-                    <span className="badge badge-solid gap-1.5 backdrop-blur bg-black/70 text-white border-0 text-[10px]">
+                    <span className="badge badge-solid gap-1.5 backdrop-blur bg-black/75 text-white border-0 text-[10px] font-bold">
                       <span className="h-2 w-2 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
-                      {scannerMode === 'dispatch' ? 'Lector de Despacho Chofer' : 'Lector de Empaque'}
+                      {scannerAction === 'pack_direct' && '⚡ Empaque Directo'}
+                      {scannerAction === 'pack_checklist' && '📋 Checklist de Ítems'}
+                      {scannerAction === 'query_only' && '🔍 Solo Consulta'}
+                      {scannerAction === 'dispatch' && '🚚 Control Despacho'}
                     </span>
+
+                    {scanCooldown > 0 && (
+                      <span className="badge badge-warning text-[10px] font-black shadow-md">
+                        Enfriamiento {scanCooldown}s
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1696,22 +1932,30 @@ export default function MobileTerminal({ connection }) {
                 <span>{scanning ? 'Pausar Cámara' : 'Iniciar Escaneo de Cámara'}</span>
               </button>
 
-              {/* Toggle de empaque automático */}
-              {scannerMode === 'pack' && (
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <label className="flex cursor-pointer items-center gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={autoPackOnScan}
-                      onChange={(e) => setAutoPackOnScan(e.target.checked)}
-                      className="check h-4 w-4"
-                    />
-                    <span className="font-bold text-ink-muted">
-                      Marcar como "Empaquetado y Listo" al detectar código
-                    </span>
-                  </label>
-                </div>
-              )}
+              {/* Scanner Control Options */}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-line/60">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={pauseCameraOnScan}
+                    onChange={(e) => setPauseCameraOnScan(e.target.checked)}
+                    className="check h-4 w-4"
+                  />
+                  <span className="font-bold text-ink-muted">
+                    Pausar cámara tras cada lectura para revisar
+                  </span>
+                </label>
+
+                {!scanning && lastScanned && (
+                  <button
+                    onClick={startCamera}
+                    className="btn btn-outline btn-sm font-extrabold flex items-center gap-1 text-xs"
+                  >
+                    <Play className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Siguiente Paquete</span>
+                  </button>
+                )}
+              </div>
 
               {cameraError && (
                 <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-3.5 text-xs text-warning">
@@ -1747,6 +1991,8 @@ export default function MobileTerminal({ connection }) {
                     ? 'bg-rose-600 text-white border-rose-700 ring-4 ring-rose-500/50 animate-bounce'
                     : lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED'
                     ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-400/40'
+                    : lastScanned.status === 'CHECKLIST_OPEN' || lastScanned.status === 'QUERY_RESULT'
+                    ? 'bg-brand/10 border-brand/40 text-ink ring-2 ring-brand/30'
                     : lastScanned.status === 'ALREADY_PACKED' || lastScanned.status === 'ALREADY_DISPATCHED'
                     ? 'bg-amber-500/15 dark:bg-amber-950/50 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 ring-2 ring-amber-400/40'
                     : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
@@ -1762,6 +2008,11 @@ export default function MobileTerminal({ connection }) {
                     {(lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED') && (
                       <div className="p-2.5 bg-emerald-500 text-white rounded-2xl shadow-md">
                         <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                    )}
+                    {(lastScanned.status === 'CHECKLIST_OPEN' || lastScanned.status === 'QUERY_RESULT') && (
+                      <div className="p-2.5 bg-brand text-brand-ink rounded-2xl shadow-md">
+                        <ClipboardList className="w-6 h-6" />
                       </div>
                     )}
                     {(lastScanned.status === 'ALREADY_PACKED' || lastScanned.status === 'ALREADY_DISPATCHED') && (
@@ -1780,6 +2031,8 @@ export default function MobileTerminal({ connection }) {
                         {lastScanned.status === 'CARRIER_MISMATCH' && '🚨 ¡ERROR CRÍTICO DE TRANSPORTE!'}
                         {lastScanned.status === 'NEWLY_PACKED' && '✅ ¡Nuevo Paquete Empaquetado!'}
                         {lastScanned.status === 'DISPATCH_VERIFIED' && '🚚 ¡Paquete Verificado para Chofer!'}
+                        {lastScanned.status === 'CHECKLIST_OPEN' && '📋 Checklist de Verificación Abierto'}
+                        {lastScanned.status === 'QUERY_RESULT' && '🔍 Datos del Envío Consultados'}
                         {lastScanned.status === 'ALREADY_PACKED' && '⚠️ ¡ATENCIÓN: PAQUETE YA LEÍDO!'}
                         {lastScanned.status === 'ALREADY_DISPATCHED' && '⚠️ ¡PAQUETE YA VERIFICADO P/ DESPACHO!'}
                         {lastScanned.status === 'NOT_FOUND' && '❌ Código No Encontrado'}
@@ -1802,6 +2055,8 @@ export default function MobileTerminal({ connection }) {
                       ? 'bg-white text-rose-600'
                       : lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED'
                       ? 'bg-emerald-500 text-white'
+                      : lastScanned.status === 'CHECKLIST_OPEN' || lastScanned.status === 'QUERY_RESULT'
+                      ? 'bg-brand text-brand-ink'
                       : lastScanned.status === 'ALREADY_PACKED' || lastScanned.status === 'ALREADY_DISPATCHED'
                       ? 'bg-amber-500 text-slate-950'
                       : 'bg-rose-500 text-white'
@@ -1809,6 +2064,8 @@ export default function MobileTerminal({ connection }) {
                     {lastScanned.status === 'CARRIER_MISMATCH' && 'MISMATCH'}
                     {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
                     {lastScanned.status === 'DISPATCH_VERIFIED' && 'CARGA OK'}
+                    {lastScanned.status === 'CHECKLIST_OPEN' && 'CHECKLIST'}
+                    {lastScanned.status === 'QUERY_RESULT' && 'CONSULTA'}
                     {lastScanned.status === 'ALREADY_PACKED' && 'DUPLICADO'}
                     {lastScanned.status === 'ALREADY_DISPATCHED' && 'YA VERIFICADO'}
                     {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
@@ -1970,6 +2227,149 @@ export default function MobileTerminal({ connection }) {
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: CHECKLIST INTERACTIVO DE EMPAQUE (CONTROL ÍTEM POR ÍTEM) */}
+      {/* ========================================================================= */}
+      {checklistModalOpen && activeChecklistShipment && (
+        <div className="modal-backdrop z-50 flex items-center justify-center p-3 bg-black/75 backdrop-blur-sm animate-in fade-in-50">
+          <div className="modal-box w-full max-w-lg bg-card border border-line shadow-2xl rounded-3xl p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+            
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-emerald-500 text-white shadow-md">
+                  <ClipboardList className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-base text-ink">
+                    Verificación de Contenido
+                  </h3>
+                  <p className="text-xs text-ink-muted">
+                    Orden #{activeChecklistShipment.order_id} • Envío #{activeChecklistShipment.id}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setChecklistModalOpen(false)}
+                className="btn btn-icon btn-outline h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Recipient & Destination Info */}
+            <div className="p-3 bg-muted/60 rounded-2xl border border-line flex items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-subtle block">Destinatario</span>
+                <p className="font-extrabold text-ink mt-0.5">
+                  {activeChecklistShipment.buyer?.first_name ? `${activeChecklistShipment.buyer.first_name} ${activeChecklistShipment.buyer.last_name || ''}` : activeChecklistShipment.buyer?.nickname}
+                </p>
+                {activeChecklistShipment.receiver_address?.city?.name && (
+                  <p className="text-[11px] text-ink-muted flex items-center gap-1 mt-0.5">
+                    <MapPin className="h-3 w-3 text-ink-subtle" />
+                    {activeChecklistShipment.receiver_address.city.name}
+                  </p>
+                )}
+              </div>
+
+              <div className="text-right">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-subtle block">Logística</span>
+                <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-black mt-0.5 ${activeChecklistShipment.meta?.isFlex ? 'bg-amber-400 text-slate-950' : 'bg-brand/20 text-brand-ink'}`}>
+                  {activeChecklistShipment.meta?.logisticLabel || 'MERCADO ENVÍOS'}
+                </span>
+              </div>
+            </div>
+
+            {/* Item checklist instructions */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs font-black text-ink uppercase tracking-wider flex items-center gap-1.5">
+                <PackageCheck className="h-4 w-4 text-emerald-500" />
+                <span>Productos a colocar en la caja:</span>
+              </span>
+
+              <button
+                onClick={() => {
+                  const allChecked = {};
+                  (activeChecklistShipment.items || []).forEach((_, idx) => {
+                    allChecked[idx] = true;
+                  });
+                  setCheckedItemsMap(allChecked);
+                }}
+                className="text-xs font-bold text-brand hover:underline"
+              >
+                Marcar todos [✓]
+              </button>
+            </div>
+
+            {/* Interactive Checklist Stream */}
+            <div className="space-y-2">
+              {(activeChecklistShipment.items || []).map((it, idx) => {
+                const isChecked = Boolean(checkedItemsMap[idx]);
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      setCheckedItemsMap(prev => ({ ...prev, [idx]: !prev[idx] }));
+                    }}
+                    className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                      isChecked
+                        ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/30'
+                        : 'border-line bg-card hover:border-line-strong'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`p-1.5 rounded-xl transition ${isChecked ? 'bg-emerald-500 text-white' : 'bg-muted text-ink-muted border border-line'}`}>
+                        {isChecked ? <Check className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-xs font-extrabold leading-snug line-clamp-2 ${isChecked ? 'text-emerald-700 dark:text-emerald-300' : 'text-ink'}`}>
+                          {it.item?.title || 'Producto'}
+                        </p>
+                        {it.item?.seller_sku ? (
+                          <p className="text-[11px] font-mono font-bold text-brand-ink dark:text-brand mt-0.5">
+                            SKU: {it.item.seller_sku}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] font-mono text-ink-subtle mt-0.5">
+                            Item #{it.item?.id}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center px-3.5 py-2 rounded-xl bg-yellow-400 text-slate-950 font-display font-black text-base shadow-xs text-center shrink-0 border border-yellow-500">
+                      <span>x{it.quantity || 1}</span>
+                      <span className="text-[8px] uppercase tracking-wider font-extrabold leading-none">CANTIDAD</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Checklist Action Buttons */}
+            <div className="pt-3 border-t border-line flex gap-2">
+              <button
+                onClick={handleConfirmChecklist}
+                className="btn btn-primary flex-1 py-3 text-xs font-black flex items-center justify-center gap-2 shadow-md"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Confirmar Empaque y Sellar Caja</span>
+              </button>
+
+              <button
+                onClick={() => setChecklistModalOpen(false)}
+                className="btn btn-outline text-xs font-bold px-4 py-3"
+              >
+                Cancelar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL: MANIFIESTO DE ENTREGA Y REMITO PARA CHOFER */}

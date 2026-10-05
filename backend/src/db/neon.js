@@ -59,12 +59,14 @@ async function initNeonDb() {
           printed BOOLEAN DEFAULT FALSE,
           packed BOOLEAN DEFAULT FALSE,
           quality_checked BOOLEAN DEFAULT FALSE,
+          dispatch_checked BOOLEAN DEFAULT FALSE,
           note TEXT DEFAULT '',
           status_override VARCHAR(50),
           printed_at TIMESTAMP,
           packed_at TIMESTAMP,
           first_scanned_at TIMESTAMP,
           last_scanned_at TIMESTAMP,
+          dispatch_checked_at TIMESTAMP,
           scan_count INT DEFAULT 0,
           sku VARCHAR(255),
           buyer_name VARCHAR(255),
@@ -72,9 +74,11 @@ async function initNeonDb() {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- Add status_override column if table already exists
+        -- Add columns if table already exists
         DO $$ BEGIN
           ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS status_override VARCHAR(50);
+          ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS dispatch_checked BOOLEAN DEFAULT FALSE;
+          ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS dispatch_checked_at TIMESTAMP;
         EXCEPTION WHEN others THEN NULL;
         END $$;
 
@@ -256,12 +260,14 @@ async function getPackingMetadataFromNeon() {
         printed: Boolean(row.printed),
         packed: Boolean(row.packed),
         qualityChecked: Boolean(row.quality_checked),
+        dispatchChecked: Boolean(row.dispatch_checked),
         note: row.note || '',
         statusOverride: row.status_override || null,
         printedAt: row.printed_at ? row.printed_at.toISOString() : null,
         packedAt: row.packed_at ? row.packed_at.toISOString() : null,
         firstScannedAt: row.first_scanned_at ? row.first_scanned_at.toISOString() : null,
         lastScannedAt: row.last_scanned_at ? row.last_scanned_at.toISOString() : null,
+        dispatchCheckedAt: row.dispatch_checked_at ? row.dispatch_checked_at.toISOString() : null,
         scanCount: Number(row.scan_count || 0),
         sku: row.sku || '',
         buyerName: row.buyer_name || '',
@@ -283,21 +289,23 @@ async function savePackingMetadataToNeon(shipmentId, data) {
     await initNeonDb();
     await p.query(
       `INSERT INTO ml_packing_metadata (
-         shipment_id, printed, packed, quality_checked, note, status_override,
-         printed_at, packed_at, first_scanned_at, last_scanned_at, scan_count, 
+         shipment_id, printed, packed, quality_checked, dispatch_checked, note, status_override,
+         printed_at, packed_at, first_scanned_at, last_scanned_at, dispatch_checked_at, scan_count, 
          sku, buyer_name, order_id, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
        ON CONFLICT (shipment_id) DO UPDATE SET
          printed = EXCLUDED.printed,
          packed = EXCLUDED.packed,
          quality_checked = EXCLUDED.quality_checked,
+         dispatch_checked = EXCLUDED.dispatch_checked,
          note = EXCLUDED.note,
          status_override = EXCLUDED.status_override,
          printed_at = EXCLUDED.printed_at,
          packed_at = EXCLUDED.packed_at,
          first_scanned_at = COALESCE(ml_packing_metadata.first_scanned_at, EXCLUDED.first_scanned_at),
          last_scanned_at = EXCLUDED.last_scanned_at,
+         dispatch_checked_at = EXCLUDED.dispatch_checked_at,
          scan_count = EXCLUDED.scan_count,
          sku = EXCLUDED.sku,
          buyer_name = EXCLUDED.buyer_name,
@@ -308,12 +316,14 @@ async function savePackingMetadataToNeon(shipmentId, data) {
         Boolean(data.printed),
         Boolean(data.packed),
         Boolean(data.qualityChecked),
+        Boolean(data.dispatchChecked),
         data.note || '',
         data.statusOverride || null,
         data.printedAt ? new Date(data.printedAt) : null,
         data.packedAt ? new Date(data.packedAt) : null,
         data.firstScannedAt ? new Date(data.firstScannedAt) : (data.packedAt ? new Date(data.packedAt) : null),
         data.lastScannedAt ? new Date(data.lastScannedAt) : new Date(),
+        data.dispatchCheckedAt ? new Date(data.dispatchCheckedAt) : null,
         Number(data.scanCount || 1),
         data.sku || null,
         data.buyerName || null,
