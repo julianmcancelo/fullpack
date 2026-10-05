@@ -99,6 +99,8 @@ async function getShipments(query = {}) {
         total_amount: o.total_amount,
         shipping_mode: liveShipment.mode || o.shipping.shipping_mode,
         shipping_option: liveShipment.shipping_option || null,
+        lead_time: liveShipment.lead_time || null,
+        estimated_handling_limit: liveShipment.estimated_handling_limit || null,
         status_history: liveShipment.status_history || null,
         // Internal packing & operational metadata
         packing: meta,

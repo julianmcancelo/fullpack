@@ -31,31 +31,48 @@ import {
   Send, 
   Tag,
   AlertOctagon,
-  Navigation
+  Navigation,
+  FileCheck2,
+  FileText,
+  Boxes,
+  UserCheck,
+  ClipboardList,
+  ShieldCheck,
+  X
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
 import { playSuccessBeep, playWarningBeep, playErrorBeep, speakSpanish } from '../utils/audio';
 import { api } from '../services/api';
 
-// Helper: classify shipment by logistic urgency & exact date (Hoy, Mañana, Días Anteriores, En Camino)
+// Helper: classify shipment by logistic urgency & exact date (Hoy, Mañana, Días Anteriores, En Camino, Entregado)
 const getShipmentMeta = (s) => {
   const isFlex = s.logistic_type === 'self_service';
   const isColecta = s.logistic_type === 'cross_docking';
   const isCorreo = s.logistic_type === 'drop_off' || s.logistic_type === 'xd_drop_off' || s.logistic_type === 'default';
 
   const isPacked = Boolean(s.packing?.packed);
+  const isDispatchChecked = Boolean(s.packing?.dispatchChecked);
   const isShipped = s.status === 'shipped';
   const isDelivered = s.status === 'delivered';
+  const isCancelled = s.status === 'cancelled';
 
   let dateCategory = 'today'; // 'today', 'tomorrow', 'past', 'future'
   let formattedDateStr = '';
   let formattedTimeStr = '';
   let dayDifferenceDays = 0;
 
-  if (s.order_date) {
+  // Determine target date: check delivery limit or handling limit first, fallback to order_date
+  const targetDateRaw = 
+    s.shipping_option?.estimated_delivery_limit?.date || 
+    s.shipping_option?.estimated_delivery_time?.date ||
+    s.estimated_handling_limit?.date ||
+    s.lead_time?.estimated_handling_limit?.date ||
+    s.order_date;
+
+  if (targetDateRaw) {
     try {
-      const orderDate = new Date(s.order_date);
+      const targetDate = new Date(targetDateRaw);
       const now = new Date();
       
       // Calculate exact midnight in Argentina timezone (UTC-3)
@@ -64,17 +81,19 @@ const getShipmentMeta = (s) => {
         return new Date(str + 'T00:00:00-03:00').getTime();
       };
 
-      const orderMidnight = getMidnightTs(orderDate);
+      const targetMidnight = getMidnightTs(targetDate);
       const todayMidnight = getMidnightTs(now);
       const msPerDay = 24 * 60 * 60 * 1000;
-      dayDifferenceDays = Math.round((orderMidnight - todayMidnight) / msPerDay);
+      dayDifferenceDays = Math.round((targetMidnight - todayMidnight) / msPerDay);
 
-      formattedDateStr = orderDate.toLocaleDateString('es-AR', {
+      // Order creation timestamp format
+      const orderDateObj = s.order_date ? new Date(s.order_date) : targetDate;
+      formattedDateStr = orderDateObj.toLocaleDateString('es-AR', {
         day: '2-digit',
         month: '2-digit',
         timeZone: 'America/Argentina/Buenos_Aires',
       });
-      formattedTimeStr = orderDate.toLocaleTimeString('es-AR', {
+      formattedTimeStr = orderDateObj.toLocaleTimeString('es-AR', {
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'America/Argentina/Buenos_Aires',
@@ -101,8 +120,11 @@ const getShipmentMeta = (s) => {
   // 4: Mañana (Pending) - Next-day cutoff
   // 5: Empaquetados listos
   // 6: En camino / Despachados
+  // 7: Entregados
   let priority = 3;
-  if (isShipped || isDelivered) {
+  if (isDelivered) {
+    priority = 7;
+  } else if (isShipped) {
     priority = 6;
   } else if (isPacked) {
     priority = 5;
@@ -120,12 +142,12 @@ const getShipmentMeta = (s) => {
   let dateBadgeText = '📅 Despachar Hoy';
   let dateBadgeClass = 'bg-brand/20 border-brand/40 text-brand-ink dark:text-brand';
 
-  if (isShipped) {
-    dateBadgeText = '🚚 En Camino';
-    dateBadgeClass = 'bg-blue-500/20 border-blue-400/40 text-blue-700 dark:text-blue-300 font-bold';
-  } else if (isDelivered) {
+  if (isDelivered) {
     dateBadgeText = '✅ Entregado';
     dateBadgeClass = 'bg-emerald-500/20 border-emerald-400/40 text-emerald-700 dark:text-emerald-300 font-bold';
+  } else if (isShipped) {
+    dateBadgeText = '🚚 En Camino';
+    dateBadgeClass = 'bg-blue-500/20 border-blue-400/40 text-blue-700 dark:text-blue-300 font-bold';
   } else if (dateCategory === 'past') {
     dateBadgeText = `⚠️ Día Anterior (${formattedDateStr || 'Previo'})`;
     dateBadgeClass = 'bg-amber-500/20 border-amber-500/50 text-amber-800 dark:text-amber-300 font-black';
@@ -145,12 +167,14 @@ const getShipmentMeta = (s) => {
     isCorreo,
     isShipped,
     isDelivered,
+    isCancelled,
     dateCategory,
     dayDifferenceDays,
     formattedDateStr,
     formattedTimeStr,
     fullDateTime: formattedDateStr ? `${formattedDateStr} ${formattedTimeStr} hs` : '',
     isPacked,
+    isDispatchChecked,
     priority,
     dateBadgeText,
     dateBadgeClass,
@@ -159,13 +183,20 @@ const getShipmentMeta = (s) => {
 };
 
 export default function MobileTerminal({ connection }) {
-  const [activeTab, setActiveTab] = useState('shipments'); // 'shipments', 'scanner', 'history'
+  // Navigation Tabs: 'shipments' (Etapa 1: Empaque), 'dispatch' (Etapa 2: Control de Despacho), 'scanner', 'history'
+  const [activeTab, setActiveTab] = useState('shipments');
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [autoPackOnScan, setAutoPackOnScan] = useState(true);
+  
+  // Scanner configuration
+  const [scannerMode, setScannerMode] = useState('pack'); // 'pack' (Etapa 1) or 'dispatch' (Etapa 2)
+  const [scannerCarrierFilter, setScannerCarrierFilter] = useState('all'); // 'all', 'self_service', 'cross_docking', 'drop_off'
+  
+  // Scanned result state
   const [lastScanned, setLastScanned] = useState(null);
   const [cameraError, setCameraError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -175,9 +206,14 @@ export default function MobileTerminal({ connection }) {
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
-  // Filter States: 'all_active', 'today', 'flex', 'past', 'tomorrow', 'shipped', 'all'
+  // Filter States: 'all_active', 'flex', 'today', 'past', 'tomorrow', 'shipped', 'all'
   const [dateFilter, setDateFilter] = useState('all_active');
   const [statusFilter, setStatusFilter] = useState('pending'); // 'pending', 'packed', 'all'
+  
+  // Dispatch Stage states
+  const [dispatchCarrierFilter, setDispatchCarrierFilter] = useState('all'); // 'all', 'self_service', 'cross_docking', 'drop_off'
+  const [manifestModalOpen, setManifestModalOpen] = useState(false);
+  const [driverInfo, setDriverInfo] = useState({ name: '', plate: '', dni: '', notes: '' });
 
   const html5QrCodeRef = useRef(null);
   const lastScannedCodeRef = useRef('');
@@ -283,7 +319,7 @@ export default function MobileTerminal({ connection }) {
     const clean = rawCode.trim();
 
     const now = Date.now();
-    if (clean === lastScannedCodeRef.current && (now - lastScannedTimeRef.current) < 3000) {
+    if (clean === lastScannedCodeRef.current && (now - lastScannedTimeRef.current) < 2500) {
       return;
     }
     lastScannedCodeRef.current = clean;
@@ -293,43 +329,92 @@ export default function MobileTerminal({ connection }) {
     setIsProcessingScan(true);
 
     try {
-      const res = await api.scanShipment(clean, autoPackOnScan);
+      const targetMode = scannerMode;
+      const targetCarrier = scannerCarrierFilter;
+      const res = await api.scanShipment(clean, autoPackOnScan, targetMode, targetCarrier);
 
       if (res.found && res.shipment) {
-        if (res.alreadyPacked) {
-          if (soundEnabled) playWarningBeep();
-          if (voiceEnabled) speakSpanish(`Atención, paquete ya leído previamente`);
-          if (navigator.vibrate) navigator.vibrate([180, 100, 180]);
-
-          const packedTimeStr = res.firstScannedAt 
-            ? new Date(res.firstScannedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-            : 'anteriormente';
+        // Handle CARRIER MISMATCH in Dispatch mode
+        if (res.carrierMismatch) {
+          if (soundEnabled) playErrorBeep();
+          if (voiceEnabled) speakSpanish(`Alerta de error. Paquete de ${res.actualCarrier}. No cargar al chofer de ${res.expectedCarrier}.`);
+          if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
 
           setLastScanned({
-            status: 'ALREADY_PACKED',
+            status: 'CARRIER_MISMATCH',
             shipment: res.shipment,
-            scanCount: res.scanCount || 2,
-            firstScannedAtStr: packedTimeStr,
-            message: `¡ATENCIÓN! Este paquete ya había sido empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
+            expectedCarrier: res.expectedCarrier,
+            actualCarrier: res.actualCarrier,
+            message: res.message || `🚨 ¡ERROR! Este paquete es de ${res.actualCarrier}, NO pertenece al transporte ${res.expectedCarrier}.`,
             timestamp: new Date().toLocaleTimeString('es-AR'),
           });
+        } else if (targetMode === 'dispatch') {
+          // DISPATCH CONTROL MODE SUCCESS
+          if (res.alreadyDispatchChecked) {
+            if (soundEnabled) playWarningBeep();
+            if (voiceEnabled) speakSpanish(`Paquete ya verificado para este transporte`);
+            if (navigator.vibrate) navigator.vibrate([150, 80, 150]);
+
+            setLastScanned({
+              status: 'ALREADY_DISPATCHED',
+              shipment: res.shipment,
+              message: `⚠️ Este paquete ya había sido verificado para la salida del chofer.`,
+              timestamp: new Date().toLocaleTimeString('es-AR'),
+            });
+          } else {
+            if (soundEnabled) playSuccessBeep();
+            if (voiceEnabled) speakSpanish(`Paquete verificado para chofer`);
+            if (navigator.vibrate) navigator.vibrate([100, 50, 150]);
+            confetti({ particleCount: 45, spread: 70, origin: { y: 0.65 } });
+
+            setShipments(prev =>
+              prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
+            );
+
+            setLastScanned({
+              status: 'DISPATCH_VERIFIED',
+              shipment: res.shipment,
+              message: `🚚 ¡Paquete verificado con éxito para salida al transporte!`,
+              timestamp: new Date().toLocaleTimeString('es-AR'),
+            });
+          }
         } else {
-          if (soundEnabled) playSuccessBeep();
-          if (voiceEnabled) speakSpanish(`Paquete verificado con éxito`);
-          if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
-          confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
+          // PACKING MODE (ETAPA 1)
+          if (res.alreadyPacked) {
+            if (soundEnabled) playWarningBeep();
+            if (voiceEnabled) speakSpanish(`Atención, paquete ya leído previamente`);
+            if (navigator.vibrate) navigator.vibrate([180, 100, 180]);
 
-          setShipments(prev =>
-            prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
-          );
+            const packedTimeStr = res.firstScannedAt 
+              ? new Date(res.firstScannedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+              : 'anteriormente';
 
-          setLastScanned({
-            status: 'NEWLY_PACKED',
-            shipment: res.shipment,
-            scanCount: 1,
-            message: `¡Paquete verificado y empaquetado con éxito!`,
-            timestamp: new Date().toLocaleTimeString('es-AR'),
-          });
+            setLastScanned({
+              status: 'ALREADY_PACKED',
+              shipment: res.shipment,
+              scanCount: res.scanCount || 2,
+              firstScannedAtStr: packedTimeStr,
+              message: `¡ATENCIÓN! Este paquete ya había sido empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
+              timestamp: new Date().toLocaleTimeString('es-AR'),
+            });
+          } else {
+            if (soundEnabled) playSuccessBeep();
+            if (voiceEnabled) speakSpanish(`Empaquetado y listo`);
+            if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
+            confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
+
+            setShipments(prev =>
+              prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
+            );
+
+            setLastScanned({
+              status: 'NEWLY_PACKED',
+              shipment: res.shipment,
+              scanCount: 1,
+              message: `¡Paquete verificado y empaquetado con éxito!`,
+              timestamp: new Date().toLocaleTimeString('es-AR'),
+            });
+          }
         }
       } else {
         if (soundEnabled) playErrorBeep();
@@ -355,7 +440,7 @@ export default function MobileTerminal({ connection }) {
     } finally {
       setTimeout(() => {
         setIsProcessingScan(false);
-      }, 1000);
+      }, 800);
     }
   };
 
@@ -371,6 +456,7 @@ export default function MobileTerminal({ connection }) {
       await api.updateShipmentPacking(shipmentId, {
         packed: false,
         qualityChecked: false,
+        dispatchChecked: false,
       });
 
       setShipments(prev =>
@@ -382,6 +468,7 @@ export default function MobileTerminal({ connection }) {
                   ...(s.packing || {}),
                   packed: false,
                   qualityChecked: false,
+                  dispatchChecked: false,
                 },
               }
             : s
@@ -435,6 +522,36 @@ export default function MobileTerminal({ connection }) {
     }
   };
 
+  const handleToggleDispatchCheck = async (shipmentId, currentCheckedState) => {
+    const nextState = !currentCheckedState;
+    try {
+      await api.updateShipmentPacking(shipmentId, {
+        dispatchChecked: nextState,
+      });
+
+      setShipments(prev =>
+        prev.map(s =>
+          s.id === shipmentId
+            ? {
+                ...s,
+                packing: {
+                  ...(s.packing || {}),
+                  dispatchChecked: nextState,
+                },
+              }
+            : s
+        )
+      );
+
+      if (nextState) {
+        if (soundEnabled) playSuccessBeep();
+        if (voiceEnabled) speakSpanish(`Verificado`);
+      }
+    } catch (err) {
+      alert(`Error al verificar despacho: ${err.message}`);
+    }
+  };
+
   const handleStatusOverride = async (shipmentId, newStatus) => {
     try {
       await api.updateShipmentPacking(shipmentId, {
@@ -460,18 +577,61 @@ export default function MobileTerminal({ connection }) {
         if (soundEnabled) playSuccessBeep();
         if (voiceEnabled) speakSpanish(`Entregado y archivado`);
         confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+      } else if (newStatus === 'shipped') {
+        if (soundEnabled) playSuccessBeep();
+        if (voiceEnabled) speakSpanish(`Marcado en camino`);
       }
     } catch (err) {
       alert(`Error al actualizar estado: ${err.message}`);
     }
   };
 
-  // Enriched & Grouped Metrics Computation
+  // Bulk mark all verified packages as shipped (salida a transporte)
+  const handleBulkMarkShipped = async (targetShipments) => {
+    if (!targetShipments || targetShipments.length === 0) return;
+    const confirmMsg = `¿Confirmar la salida de ${targetShipments.length} paquetes al transporte y marcarlos como "En Camino"?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const ids = targetShipments.map(s => s.id);
+      await api.batchShipmentPacking(ids, {
+        statusOverride: 'shipped',
+        dispatchedAt: new Date().toISOString(),
+      });
+
+      setShipments(prev =>
+        prev.map(s =>
+          ids.includes(s.id)
+            ? {
+                ...s,
+                status: 'shipped',
+                packing: {
+                  ...(s.packing || {}),
+                  statusOverride: 'shipped',
+                },
+              }
+            : s
+        )
+      );
+
+      if (soundEnabled) playSuccessBeep();
+      if (voiceEnabled) speakSpanish(`Despacho confirmado con éxito`);
+      confetti({ particleCount: 70, spread: 90, origin: { y: 0.6 } });
+    } catch (err) {
+      alert(`Error al confirmar despacho masivo: ${err.message}`);
+    }
+  };
+
+  // =========================================================================
+  // METRICS COMPUTATION (Excludes historical delivered orders from active KPI)
+  // =========================================================================
   const {
     enrichedShipments,
-    totalCount,
+    activeShipments,
+    totalActiveCount,
     packedCount,
-    pendingCount,
+    pendingPackCount,
+    dispatchCheckedCount,
     progressPercent,
     flexTotal,
     flexPending,
@@ -482,6 +642,7 @@ export default function MobileTerminal({ connection }) {
     tomorrowTotal,
     tomorrowPending,
     shippedTotal,
+    deliveredTotal,
   } = useMemo(() => {
     let flexTot = 0;
     let flexPend = 0;
@@ -492,43 +653,56 @@ export default function MobileTerminal({ connection }) {
     let tomTot = 0;
     let tomPend = 0;
     let shipTot = 0;
+    let delivTot = 0;
     let packedTot = 0;
+    let dispatchCheckedTot = 0;
 
     const enriched = shipments.map(s => {
       const meta = getShipmentMeta(s);
-      if (meta.isPacked) packedTot++;
-      if (meta.isShipped) shipTot++;
+      
+      if (meta.isDelivered) {
+        delivTot++;
+      } else if (meta.isShipped) {
+        shipTot++;
+      } else if (!meta.isCancelled) {
+        // Active dispatch queue (Ready to ship / pending)
+        if (meta.isPacked) packedTot++;
+        if (meta.isDispatchChecked) dispatchCheckedTot++;
 
-      if (meta.isFlex) {
-        flexTot++;
-        if (!meta.isPacked && !meta.isShipped) flexPend++;
-      }
+        if (meta.isFlex) {
+          flexTot++;
+          if (!meta.isPacked) flexPend++;
+        }
 
-      if (meta.dateCategory === 'today') {
-        todTot++;
-        if (!meta.isPacked && !meta.isShipped) todPend++;
-      } else if (meta.dateCategory === 'past') {
-        pastTot++;
-        if (!meta.isPacked && !meta.isShipped) pastPend++;
-      } else if (meta.dateCategory === 'tomorrow') {
-        tomTot++;
-        if (!meta.isPacked && !meta.isShipped) tomPend++;
+        if (meta.dateCategory === 'today') {
+          todTot++;
+          if (!meta.isPacked) todPend++;
+        } else if (meta.dateCategory === 'past') {
+          pastTot++;
+          if (!meta.isPacked) pastPend++;
+        } else if (meta.dateCategory === 'tomorrow') {
+          tomTot++;
+          if (!meta.isPacked) tomPend++;
+        }
       }
 
       return { ...s, meta };
     });
 
-    // Sort: Flex pending first, then past pending, then today pending, then tomorrow pending, then packed
+    // Sort: Flex pending first, then past pending, then today pending, then tomorrow pending, then packed, then shipped, then delivered
     enriched.sort((a, b) => a.meta.priority - b.meta.priority);
 
-    const total = shipments.length;
-    const progress = total > 0 ? Math.round((packedTot / total) * 100) : 0;
+    const activeList = enriched.filter(s => !s.meta.isDelivered && !s.meta.isCancelled && !s.meta.isShipped);
+    const totalActive = activeList.length;
+    const progress = totalActive > 0 ? Math.round((packedTot / totalActive) * 100) : 0;
 
     return {
       enrichedShipments: enriched,
-      totalCount: total,
+      activeShipments: activeList,
+      totalActiveCount: totalActive,
       packedCount: packedTot,
-      pendingCount: total - packedTot,
+      pendingPackCount: Math.max(0, totalActive - packedTot),
+      dispatchCheckedCount: dispatchCheckedTot,
       progressPercent: progress,
       flexTotal: flexTot,
       flexPending: flexPend,
@@ -539,30 +713,31 @@ export default function MobileTerminal({ connection }) {
       tomorrowTotal: tomTot,
       tomorrowPending: tomPend,
       shippedTotal: shipTot,
+      deliveredTotal: delivTot,
     };
   }, [shipments]);
 
-  // Filtered List calculation
+  // Filtered List calculation for Tab 1 (Empaque)
   const displayedShipments = useMemo(() => {
     return enrichedShipments.filter(s => {
       // 1. Status Filter
-      if (statusFilter === 'pending' && (s.meta.isPacked || s.meta.isShipped)) return false;
-      if (statusFilter === 'packed' && !s.meta.isPacked) return false;
+      if (statusFilter === 'pending' && (s.meta.isPacked || s.meta.isShipped || s.meta.isDelivered)) return false;
+      if (statusFilter === 'packed' && (!s.meta.isPacked || s.meta.isShipped || s.meta.isDelivered)) return false;
 
       // 2. Date / Urgency Filter
       if (dateFilter === 'flex') {
-        if (!s.meta.isFlex) return false;
+        if (!s.meta.isFlex || s.meta.isDelivered) return false;
       } else if (dateFilter === 'today') {
-        if (s.meta.dateCategory !== 'today') return false;
+        if (s.meta.dateCategory !== 'today' || s.meta.isDelivered) return false;
       } else if (dateFilter === 'past') {
-        if (s.meta.dateCategory !== 'past') return false;
+        if (s.meta.dateCategory !== 'past' || s.meta.isDelivered) return false;
       } else if (dateFilter === 'tomorrow') {
-        if (s.meta.dateCategory !== 'tomorrow') return false;
+        if (s.meta.dateCategory !== 'tomorrow' || s.meta.isDelivered) return false;
       } else if (dateFilter === 'shipped') {
         if (!s.meta.isShipped) return false;
       } else if (dateFilter === 'all_active') {
-        // Active dispatch queue (Today + Past backlog + Tomorrow)
-        if (s.meta.isShipped) return false;
+        // Active dispatch queue only (exclude shipped/delivered)
+        if (s.meta.isShipped || s.meta.isDelivered) return false;
       }
 
       // 3. Search text query
@@ -584,6 +759,24 @@ export default function MobileTerminal({ connection }) {
     });
   }, [enrichedShipments, statusFilter, dateFilter, searchQuery]);
 
+  // Filtered List calculation for Tab 2 (Control de Despacho)
+  const dispatchStageShipments = useMemo(() => {
+    return enrichedShipments.filter(s => {
+      // Must not be already delivered or cancelled
+      if (s.meta.isDelivered || s.meta.isCancelled) return false;
+
+      // Filter by Carrier
+      if (dispatchCarrierFilter === 'self_service' && !s.meta.isFlex) return false;
+      if (dispatchCarrierFilter === 'cross_docking' && !s.meta.isColecta) return false;
+      if (dispatchCarrierFilter === 'drop_off' && !s.meta.isCorreo) return false;
+
+      return true;
+    });
+  }, [enrichedShipments, dispatchCarrierFilter]);
+
+  const dispatchPackedCount = dispatchStageShipments.filter(s => s.meta.isPacked).length;
+  const dispatchVerifiedCount = dispatchStageShipments.filter(s => s.meta.isDispatchChecked).length;
+
   return (
     <div className="page pb-24">
       <div className="mx-auto w-full max-w-xl select-none space-y-4">
@@ -596,8 +789,8 @@ export default function MobileTerminal({ connection }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="page-title text-lg font-black tracking-tight">Terminal de Empaque</h1>
-                <span className="badge badge-brand text-[10px] uppercase font-extrabold">Depósito</span>
+                <h1 className="page-title text-lg font-black tracking-tight">Centro de Depósito y Despacho</h1>
+                <span className="badge badge-brand text-[10px] uppercase font-extrabold">Almacén</span>
               </div>
               <p className="page-sub flex items-center gap-2 mt-0.5">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
@@ -636,7 +829,7 @@ export default function MobileTerminal({ connection }) {
           </div>
         </div>
 
-        {/* 2. LOGISTICS DASHBOARD & PROGRESS HERO CARD */}
+        {/* 2. REAL PROGRESS HERO CARD */}
         <div className="card card-pad bg-gradient-to-br from-card to-muted/40 border border-line-strong shadow-sm space-y-4">
           
           {/* Progress Bar & Big KPI */}
@@ -644,7 +837,7 @@ export default function MobileTerminal({ connection }) {
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-[11px] font-black uppercase tracking-wider text-ink-subtle">
-                  Progreso de Despacho
+                  Progreso de Despacho Activo
                 </p>
                 {flexPending > 0 && (
                   <span className="badge badge-warning text-[10px] font-black animate-pulse">
@@ -662,7 +855,7 @@ export default function MobileTerminal({ connection }) {
                   {packedCount}
                 </span>
                 <span className="text-sm font-bold text-ink-muted">
-                  / <span className="tabular">{totalCount}</span> paquetes listos
+                  / <span className="tabular">{totalActiveCount}</span> paquetes listos
                 </span>
               </div>
             </div>
@@ -672,7 +865,7 @@ export default function MobileTerminal({ connection }) {
                 <span className="tabular">{progressPercent}%</span>
               </div>
               <p className="text-[10px] font-bold text-ink-subtle mt-1">
-                {pendingCount === 0 ? '🎉 Todo empaquetado' : `Faltan ${pendingCount} paquetes`}
+                {pendingPackCount === 0 ? '🎉 Todo empaquetado' : `Faltan ${pendingPackCount} por armar`}
               </p>
             </div>
           </div>
@@ -695,7 +888,7 @@ export default function MobileTerminal({ connection }) {
                 setActiveTab('shipments');
               }}
               className={`p-2.5 rounded-2xl border text-left transition-all ${
-                dateFilter === 'flex' 
+                dateFilter === 'flex' && activeTab === 'shipments'
                   ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 shadow-xs ring-2 ring-emerald-500/30' 
                   : 'border-line bg-card hover:bg-muted'
               }`}
@@ -721,7 +914,7 @@ export default function MobileTerminal({ connection }) {
                 setActiveTab('shipments');
               }}
               className={`p-2.5 rounded-2xl border text-left transition-all ${
-                dateFilter === 'today' 
+                dateFilter === 'today' && activeTab === 'shipments'
                   ? 'border-brand bg-brand-soft shadow-xs ring-2 ring-brand/30' 
                   : 'border-line bg-card hover:bg-muted'
               }`}
@@ -747,7 +940,7 @@ export default function MobileTerminal({ connection }) {
                 setActiveTab('shipments');
               }}
               className={`p-2.5 rounded-2xl border text-left transition-all ${
-                dateFilter === 'past' 
+                dateFilter === 'past' && activeTab === 'shipments'
                   ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 shadow-xs ring-2 ring-amber-500/30' 
                   : 'border-line bg-card hover:bg-muted'
               }`}
@@ -770,14 +963,33 @@ export default function MobileTerminal({ connection }) {
 
         </div>
 
-        {/* 3. MAIN NAVIGATION TABS */}
-        <div className="segmented grid w-full grid-cols-3 gap-1 p-1 bg-muted rounded-2xl border border-line">
+        {/* 3. WORKFLOW STAGES SELECTOR (2-STAGE PROCESS) */}
+        <div className="grid grid-cols-4 gap-1 p-1 bg-muted rounded-2xl border border-line">
+          
           <button
             onClick={() => setActiveTab('shipments')}
-            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold ${activeTab === 'shipments' ? 'segmented-btn-active bg-card text-ink shadow-xs' : 'text-ink-muted'}`}
+            className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-all ${
+              activeTab === 'shipments' 
+                ? 'bg-card text-ink shadow-xs font-black' 
+                : 'text-ink-muted hover:text-ink font-semibold'
+            }`}
           >
-            <Layers className="h-4 w-4 text-brand" />
-            <span>Lista Envíos <span className="tabular font-black">({pendingCount})</span></span>
+            <PackageCheck className="h-4 w-4 text-emerald-500 mb-0.5" />
+            <span className="text-[11px] leading-none">1. Empaque</span>
+            <span className="text-[9px] text-ink-subtle mt-0.5 tabular font-bold">({pendingPackCount} pend.)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('dispatch')}
+            className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-all ${
+              activeTab === 'dispatch' 
+                ? 'bg-card text-ink shadow-xs font-black' 
+                : 'text-ink-muted hover:text-ink font-semibold'
+            }`}
+          >
+            <Truck className="h-4 w-4 text-blue-500 mb-0.5" />
+            <span className="text-[11px] leading-none">2. Despacho</span>
+            <span className="text-[9px] text-ink-subtle mt-0.5 tabular font-bold">({packedCount} listos)</span>
           </button>
 
           <button
@@ -785,23 +997,34 @@ export default function MobileTerminal({ connection }) {
               setActiveTab('scanner');
               if (!scanning) startCamera();
             }}
-            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold ${activeTab === 'scanner' ? 'segmented-btn-active bg-card text-ink shadow-xs' : 'text-ink-muted'}`}
+            className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-all ${
+              activeTab === 'scanner' 
+                ? 'bg-card text-ink shadow-xs font-black' 
+                : 'text-ink-muted hover:text-ink font-semibold'
+            }`}
           >
-            <QrCode className="h-4 w-4 text-emerald-500" />
-            <span>Escanear Lector</span>
+            <QrCode className="h-4 w-4 text-brand mb-0.5" />
+            <span className="text-[11px] leading-none">Lector QR</span>
+            <span className="text-[9px] text-ink-subtle mt-0.5 font-bold">Cámara</span>
           </button>
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold ${activeTab === 'history' ? 'segmented-btn-active bg-card text-ink shadow-xs' : 'text-ink-muted'}`}
+            className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-all ${
+              activeTab === 'history' 
+                ? 'bg-card text-ink shadow-xs font-black' 
+                : 'text-ink-muted hover:text-ink font-semibold'
+            }`}
           >
-            <History className="h-4 w-4 text-purple-500" />
-            <span>Historial ({scanLogs.length})</span>
+            <History className="h-4 w-4 text-purple-500 mb-0.5" />
+            <span className="text-[11px] leading-none">Auditoría</span>
+            <span className="text-[9px] text-ink-subtle mt-0.5 tabular font-bold">({scanLogs.length})</span>
           </button>
+
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: LISTA DE ENVÍOS (HOY / MAÑANA / PREVIOS / EN CAMINO) */}
+        {/* ETAPA 1: LISTA DE EMPAQUE (PREPARACIÓN Y ARMADO DE PAQUETES) */}
         {/* ========================================================================= */}
         {activeTab === 'shipments' && (
           <div className="space-y-3 animate-in fade-in-50 duration-200">
@@ -820,7 +1043,7 @@ export default function MobileTerminal({ connection }) {
                 <Flame className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
                 <span>Despacho Activo</span>
                 <span className="badge badge-neutral text-[10px] tabular">
-                  {todayTotal + pastTotal + tomorrowTotal}
+                  {totalActiveCount}
                 </span>
               </button>
 
@@ -892,7 +1115,7 @@ export default function MobileTerminal({ connection }) {
                     : 'bg-card border border-line text-ink-muted hover:bg-muted'
                 }`}
               >
-                <span>Todos ({totalCount})</span>
+                <span>Todos ({shipments.length})</span>
               </button>
             </div>
 
@@ -909,7 +1132,7 @@ export default function MobileTerminal({ connection }) {
                         : 'bg-muted text-ink-muted hover:bg-muted/80'
                     }`}
                   >
-                    ⏳ Pendientes ({pendingCount})
+                    ⏳ Pendientes ({pendingPackCount})
                   </button>
 
                   <button
@@ -983,7 +1206,7 @@ export default function MobileTerminal({ connection }) {
                         meta.isShipped
                           ? 'border-blue-300 dark:border-blue-800/60 bg-blue-50/10 dark:bg-blue-950/20'
                           : isPacked
-                          ? 'border-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/20 opacity-80 hover:opacity-100'
+                          ? 'border-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/20 opacity-85 hover:opacity-100'
                           : meta.isFlex && meta.dateCategory === 'today'
                           ? 'border-amber-400 bg-amber-500/5 dark:bg-amber-950/20 shadow-md ring-1 ring-amber-400/30'
                           : meta.dateCategory === 'past'
@@ -1077,7 +1300,7 @@ export default function MobileTerminal({ connection }) {
                         </div>
                       </div>
 
-                      {/* Ordered Items with BIG VISUAL QUANTITY PILL */}
+                      {/* Ordered Items with BIG HIGH-CONTRAST QUANTITY PILL */}
                       <div className="space-y-2 pt-2.5">
                         {itemsList.map((it, idx) => (
                           <div 
@@ -1199,7 +1422,192 @@ export default function MobileTerminal({ connection }) {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: ESCÁNER CON CÁMARA O PISTOLA */}
+        {/* ETAPA 2: CONTROL DE DESPACHO / SALIDA A TRANSPORTE (HANDOVER) */}
+        {/* ========================================================================= */}
+        {activeTab === 'dispatch' && (
+          <div className="space-y-4 animate-in fade-in-50 duration-200">
+            
+            {/* Header & Carrier Selector */}
+            <div className="card card-pad p-4 space-y-3 bg-gradient-to-br from-card to-blue-50/20 dark:to-blue-950/20 border border-blue-200 dark:border-blue-900/60">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display font-black text-sm text-ink flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-blue-500" />
+                    <span>Control de Salida a Transporte</span>
+                  </h2>
+                  <p className="text-xs text-ink-muted mt-0.5">
+                    Verificá y escaneá cada caja antes de subirla al vehículo del chofer.
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <span className="badge badge-info text-xs font-black">
+                    {dispatchVerifiedCount} / {dispatchStageShipments.length} verificados
+                  </span>
+                </div>
+              </div>
+
+              {/* Carrier Selection Pills */}
+              <div className="grid grid-cols-4 gap-1 pt-1">
+                <button
+                  onClick={() => setDispatchCarrierFilter('all')}
+                  className={`py-2 px-1 text-center rounded-xl text-xs font-black transition ${
+                    dispatchCarrierFilter === 'all' 
+                      ? 'bg-ink text-bg shadow-xs' 
+                      : 'bg-muted text-ink-muted hover:bg-muted/80'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => setDispatchCarrierFilter('self_service')}
+                  className={`py-2 px-1 text-center rounded-xl text-xs font-black transition ${
+                    dispatchCarrierFilter === 'self_service' 
+                      ? 'bg-amber-400 text-slate-950 shadow-xs' 
+                      : 'bg-muted text-ink-muted hover:bg-muted/80'
+                  }`}
+                >
+                  ⚡ Flex
+                </button>
+                <button
+                  onClick={() => setDispatchCarrierFilter('cross_docking')}
+                  className={`py-2 px-1 text-center rounded-xl text-xs font-black transition ${
+                    dispatchCarrierFilter === 'cross_docking' 
+                      ? 'bg-blue-600 text-white shadow-xs' 
+                      : 'bg-muted text-ink-muted hover:bg-muted/80'
+                  }`}
+                >
+                  🚛 Colecta
+                </button>
+                <button
+                  onClick={() => setDispatchCarrierFilter('drop_off')}
+                  className={`py-2 px-1 text-center rounded-xl text-xs font-black transition ${
+                    dispatchCarrierFilter === 'drop_off' 
+                      ? 'bg-purple-600 text-white shadow-xs' 
+                      : 'bg-muted text-ink-muted hover:bg-muted/80'
+                  }`}
+                >
+                  📮 Correo
+                </button>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-line/60">
+                <button
+                  onClick={() => {
+                    setScannerMode('dispatch');
+                    setScannerCarrierFilter(dispatchCarrierFilter);
+                    setActiveTab('scanner');
+                    if (!scanning) startCamera();
+                  }}
+                  className="btn btn-primary flex-1 text-xs font-black py-2.5 flex items-center justify-center gap-1.5 shadow-xs"
+                >
+                  <QrCode className="h-4 w-4" />
+                  <span>Escanear Carga ({dispatchCarrierFilter === 'self_service' ? 'FLEX' : dispatchCarrierFilter === 'cross_docking' ? 'COLECTA' : 'TRANSPORTE'})</span>
+                </button>
+
+                <button
+                  onClick={() => setManifestModalOpen(true)}
+                  className="btn btn-outline text-xs font-bold py-2.5 px-3 flex items-center gap-1.5"
+                  title="Ver y descargar manifiesto de entrega para chofer"
+                >
+                  <FileText className="h-4 w-4 text-ink-subtle" />
+                  <span>Manifiesto</span>
+                </button>
+
+                <button
+                  onClick={() => handleBulkMarkShipped(dispatchStageShipments.filter(s => s.meta.isDispatchChecked || s.meta.isPacked))}
+                  className="btn btn-success text-white text-xs font-black py-2.5 px-3 flex items-center gap-1.5 shadow-xs"
+                  title="Marcar todos los paquetes verificados como 'En Camino'"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Confirmar Salida</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List of Shipments in Dispatch Queue */}
+            <div className="space-y-2.5">
+              {dispatchStageShipments.length > 0 ? (
+                dispatchStageShipments.map((s) => {
+                  const meta = s.meta;
+                  const isChecked = meta.isDispatchChecked;
+                  const isPacked = meta.isPacked;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`card p-3.5 border-2 transition-all flex items-center justify-between gap-3 ${
+                        isChecked
+                          ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/20'
+                          : isPacked
+                          ? 'border-line bg-card'
+                          : 'border-amber-400/50 bg-amber-50/10'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-black text-xs text-ink">
+                            Orden #{s.order_id}
+                          </span>
+                          <span className="text-[10px] font-mono text-ink-subtle">
+                            (#{s.id})
+                          </span>
+                          {meta.isFlex ? (
+                            <span className="badge badge-warning text-[9px] font-black">FLEX</span>
+                          ) : meta.isColecta ? (
+                            <span className="badge badge-info text-[9px] font-black">COLECTA</span>
+                          ) : (
+                            <span className="badge badge-neutral text-[9px] font-black">CORREO</span>
+                          )}
+                        </div>
+
+                        <p className="text-xs font-semibold text-ink-muted truncate mt-0.5">
+                          {s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname || 'Cliente'}
+                          {s.receiver_address?.city?.name && ` • ${s.receiver_address.city.name}`}
+                        </p>
+
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-[10px] font-bold ${isPacked ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {isPacked ? '✅ Empacado' : '⏳ Falta Empacar'}
+                          </span>
+                          {isChecked && (
+                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                              • 🚚 Verificado p/ Chofer
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleDispatchCheck(s.id, isChecked)}
+                          className={`btn btn-sm px-3 py-2 text-xs font-extrabold flex items-center gap-1.5 ${
+                            isChecked
+                              ? 'btn-success text-white shadow-xs'
+                              : 'btn-outline border-line hover:border-emerald-500'
+                          }`}
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>{isChecked ? 'Verificado' : 'Chequear'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="card p-10 text-center text-ink-muted space-y-2">
+                  <Truck className="h-8 w-8 mx-auto text-ink-subtle opacity-50" />
+                  <p className="text-xs font-bold text-ink">No hay despachos para este transporte</p>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB: ESCÁNER CON CÁMARA O PISTOLA */}
         {/* ========================================================================= */}
         {activeTab === 'scanner' && (
           <div className="space-y-4 animate-in fade-in-50 duration-200">
@@ -1209,7 +1617,7 @@ export default function MobileTerminal({ connection }) {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-ink">
                   <Camera className="h-4 w-4 text-brand" />
-                  <span>Lector de Etiquetas y QR</span>
+                  <span>Lector Óptico de Etiquetas QR</span>
                 </span>
 
                 <span className={`badge ${scanning ? 'badge-success' : 'badge-neutral'}`}>
@@ -1217,6 +1625,45 @@ export default function MobileTerminal({ connection }) {
                   {scanning ? 'Escaneando en vivo' : 'Cámara en pausa'}
                 </span>
               </div>
+
+              {/* Mode Switcher inside Scanner: Empaque vs Despacho */}
+              <div className="p-1 bg-muted rounded-xl border border-line grid grid-cols-2 gap-1 text-xs font-bold">
+                <button
+                  onClick={() => setScannerMode('pack')}
+                  className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
+                    scannerMode === 'pack' ? 'bg-card text-ink shadow-xs font-black' : 'text-ink-muted'
+                  }`}
+                >
+                  <PackageCheck className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Modo 1: Empaque</span>
+                </button>
+                <button
+                  onClick={() => setScannerMode('dispatch')}
+                  className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
+                    scannerMode === 'dispatch' ? 'bg-card text-ink shadow-xs font-black' : 'text-ink-muted'
+                  }`}
+                >
+                  <Truck className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Modo 2: Despacho Chofer</span>
+                </button>
+              </div>
+
+              {/* Carrier mismatch guard filter when in dispatch mode */}
+              {scannerMode === 'dispatch' && (
+                <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-blue-50/40 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-xs">
+                  <span className="font-bold text-blue-900 dark:text-blue-200">Transporte a cargar:</span>
+                  <select
+                    value={scannerCarrierFilter}
+                    onChange={(e) => setScannerCarrierFilter(e.target.value)}
+                    className="select select-sm py-0.5 px-2 text-xs font-extrabold"
+                  >
+                    <option value="all">🌐 Todos los transportes</option>
+                    <option value="self_service">⚡ Chofer Flex</option>
+                    <option value="cross_docking">🚛 Camión Colecta</option>
+                    <option value="drop_off">📮 Correo / Puntos</option>
+                  </select>
+                </div>
+              )}
 
               {/* Visor de cámara */}
               <div className={`relative overflow-hidden rounded-2xl border transition-all duration-300 ${scanning ? 'min-h-[260px] border-line bg-ink/90' : 'flex min-h-[140px] items-center justify-center border-dashed border-line-strong bg-muted'}`}>
@@ -1226,15 +1673,15 @@ export default function MobileTerminal({ connection }) {
                   <div className="p-4 text-center">
                     <QrCode className="mx-auto mb-2 h-10 w-10 text-ink-subtle" />
                     <p className="text-sm font-bold text-ink">Cámara en espera</p>
-                    <p className="text-[11px] text-ink-subtle">Tocá "Abrir Cámara" para enfocar etiquetas</p>
+                    <p className="text-[11px] text-ink-subtle">Tocá "Iniciar Escaneo" para enfocar etiquetas</p>
                   </div>
                 )}
 
                 {scanning && (
                   <div className="pointer-events-none absolute left-2 right-2 top-2 flex items-center justify-between">
-                    <span className="badge badge-solid gap-1.5 backdrop-blur bg-black/70 text-white border-0">
+                    <span className="badge badge-solid gap-1.5 backdrop-blur bg-black/70 text-white border-0 text-[10px]">
                       <span className="h-2 w-2 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
-                      Lector Óptico Activo
+                      {scannerMode === 'dispatch' ? 'Lector de Despacho Chofer' : 'Lector de Empaque'}
                     </span>
                   </div>
                 )}
@@ -1250,19 +1697,21 @@ export default function MobileTerminal({ connection }) {
               </button>
 
               {/* Toggle de empaque automático */}
-              <div className="flex items-center justify-between text-xs pt-1">
-                <label className="flex cursor-pointer items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={autoPackOnScan}
-                    onChange={(e) => setAutoPackOnScan(e.target.checked)}
-                    className="check h-4 w-4"
-                  />
-                  <span className="font-bold text-ink-muted">
-                    Marcar como "Empaquetado" al detectar código
-                  </span>
-                </label>
-              </div>
+              {scannerMode === 'pack' && (
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex cursor-pointer items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={autoPackOnScan}
+                      onChange={(e) => setAutoPackOnScan(e.target.checked)}
+                      className="check h-4 w-4"
+                    />
+                    <span className="font-bold text-ink-muted">
+                      Marcar como "Empaquetado y Listo" al detectar código
+                    </span>
+                  </label>
+                </div>
+              )}
 
               {cameraError && (
                 <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-3.5 text-xs text-warning">
@@ -1294,21 +1743,28 @@ export default function MobileTerminal({ connection }) {
             {lastScanned && (
               <div 
                 className={`p-4 rounded-3xl border shadow-xl animate-in zoom-in-95 space-y-3 ${
-                  lastScanned.status === 'NEWLY_PACKED'
+                  lastScanned.status === 'CARRIER_MISMATCH'
+                    ? 'bg-rose-600 text-white border-rose-700 ring-4 ring-rose-500/50 animate-bounce'
+                    : lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED'
                     ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-400/40'
-                    : lastScanned.status === 'ALREADY_PACKED'
+                    : lastScanned.status === 'ALREADY_PACKED' || lastScanned.status === 'ALREADY_DISPATCHED'
                     ? 'bg-amber-500/15 dark:bg-amber-950/50 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 ring-2 ring-amber-400/40'
                     : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
                 }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-2.5">
-                    {lastScanned.status === 'NEWLY_PACKED' && (
+                    {lastScanned.status === 'CARRIER_MISMATCH' && (
+                      <div className="p-2.5 bg-white text-rose-600 rounded-2xl shadow-md">
+                        <AlertOctagon className="w-6 h-6" />
+                      </div>
+                    )}
+                    {(lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED') && (
                       <div className="p-2.5 bg-emerald-500 text-white rounded-2xl shadow-md">
                         <CheckCircle2 className="w-6 h-6" />
                       </div>
                     )}
-                    {lastScanned.status === 'ALREADY_PACKED' && (
+                    {(lastScanned.status === 'ALREADY_PACKED' || lastScanned.status === 'ALREADY_DISPATCHED') && (
                       <div className="p-2.5 bg-amber-500 text-slate-950 rounded-2xl shadow-md animate-pulse">
                         <AlertTriangle className="w-6 h-6" />
                       </div>
@@ -1320,13 +1776,16 @@ export default function MobileTerminal({ connection }) {
                     )}
 
                     <div>
-                      <h3 className="font-extrabold text-sm text-ink">
+                      <h3 className={`font-extrabold text-sm ${lastScanned.status === 'CARRIER_MISMATCH' ? 'text-white' : 'text-ink'}`}>
+                        {lastScanned.status === 'CARRIER_MISMATCH' && '🚨 ¡ERROR CRÍTICO DE TRANSPORTE!'}
                         {lastScanned.status === 'NEWLY_PACKED' && '✅ ¡Nuevo Paquete Empaquetado!'}
+                        {lastScanned.status === 'DISPATCH_VERIFIED' && '🚚 ¡Paquete Verificado para Chofer!'}
                         {lastScanned.status === 'ALREADY_PACKED' && '⚠️ ¡ATENCIÓN: PAQUETE YA LEÍDO!'}
+                        {lastScanned.status === 'ALREADY_DISPATCHED' && '⚠️ ¡PAQUETE YA VERIFICADO P/ DESPACHO!'}
                         {lastScanned.status === 'NOT_FOUND' && '❌ Código No Encontrado'}
                         {lastScanned.status === 'UNPACKED' && '↩️ Paquete Desmarcado'}
                       </h3>
-                      <p className="text-[11px] text-ink-muted flex items-center space-x-1 mt-0.5">
+                      <p className={`text-[11px] flex items-center space-x-1 mt-0.5 ${lastScanned.status === 'CARRIER_MISMATCH' ? 'text-white/90' : 'text-ink-muted'}`}>
                         <Clock className="w-3 h-3 inline" />
                         <span>{lastScanned.timestamp}</span>
                         {lastScanned.scanCount > 1 && (
@@ -1339,25 +1798,30 @@ export default function MobileTerminal({ connection }) {
                   </div>
 
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-black shadow-xs ${
-                    lastScanned.status === 'NEWLY_PACKED'
+                    lastScanned.status === 'CARRIER_MISMATCH'
+                      ? 'bg-white text-rose-600'
+                      : lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED'
                       ? 'bg-emerald-500 text-white'
-                      : lastScanned.status === 'ALREADY_PACKED'
+                      : lastScanned.status === 'ALREADY_PACKED' || lastScanned.status === 'ALREADY_DISPATCHED'
                       ? 'bg-amber-500 text-slate-950'
                       : 'bg-rose-500 text-white'
                   }`}>
+                    {lastScanned.status === 'CARRIER_MISMATCH' && 'MISMATCH'}
                     {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
+                    {lastScanned.status === 'DISPATCH_VERIFIED' && 'CARGA OK'}
                     {lastScanned.status === 'ALREADY_PACKED' && 'DUPLICADO'}
+                    {lastScanned.status === 'ALREADY_DISPATCHED' && 'YA VERIFICADO'}
                     {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
                     {lastScanned.status === 'UNPACKED' && 'PENDIENTE'}
                   </span>
                 </div>
 
-                <p className="text-xs font-bold text-ink">
+                <p className={`text-xs font-bold ${lastScanned.status === 'CARRIER_MISMATCH' ? 'text-white' : 'text-ink'}`}>
                   {lastScanned.message}
                 </p>
 
                 {lastScanned.shipment && (
-                  <div className="bg-card p-3.5 rounded-2xl border border-line space-y-3">
+                  <div className="bg-card p-3.5 rounded-2xl border border-line space-y-3 text-ink">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-ink-muted">Envío #{lastScanned.shipment.id}</span>
                       <span className="font-black text-ink">Orden #{lastScanned.shipment.order_id}</span>
@@ -1413,7 +1877,7 @@ export default function MobileTerminal({ connection }) {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: AUDITORÍA DE ESCANEOS */}
+        {/* TAB: AUDITORÍA DE ESCANEOS */}
         {/* ========================================================================= */}
         {activeTab === 'history' && (
           <div className="space-y-3 animate-in fade-in-50 duration-200">
@@ -1440,10 +1904,12 @@ export default function MobileTerminal({ connection }) {
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <div className={`p-1.5 rounded-xl shrink-0 ${
-                        log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED'
+                        log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED' || log.action === 'DISPATCH_VERIFIED'
                           ? 'bg-emerald-500 text-white'
-                          : log.action === 'DUPLICATE_SCAN'
+                          : log.action === 'DUPLICATE_SCAN' || log.action === 'DISPATCH_DUPLICATE'
                           ? 'bg-amber-500 text-slate-950'
+                          : log.action === 'DISPATCH_CARRIER_MISMATCH'
+                          ? 'bg-rose-500 text-white'
                           : 'bg-muted text-ink-muted'
                       }`}>
                         <QrCode className="w-4 h-4" />
@@ -1458,9 +1924,19 @@ export default function MobileTerminal({ connection }) {
                               EMPACADO
                             </span>
                           )}
-                          {log.action === 'DUPLICATE_SCAN' && (
+                          {log.action === 'DISPATCH_VERIFIED' && (
+                            <span className="badge badge-info text-[9px] font-black">
+                              DESPACHO OK
+                            </span>
+                          )}
+                          {(log.action === 'DUPLICATE_SCAN' || log.action === 'DISPATCH_DUPLICATE') && (
                             <span className="badge badge-warning text-[9px] font-black">
                               DUPLICADO (#{log.details?.scanCount || 2})
+                            </span>
+                          )}
+                          {log.action === 'DISPATCH_CARRIER_MISMATCH' && (
+                            <span className="badge badge-danger text-[9px] font-black">
+                              ERROR TRANSPORTE
                             </span>
                           )}
                         </div>
@@ -1494,6 +1970,144 @@ export default function MobileTerminal({ connection }) {
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: MANIFIESTO DE ENTREGA Y REMITO PARA CHOFER */}
+      {/* ========================================================================= */}
+      {manifestModalOpen && (
+        <div className="modal-backdrop z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-in fade-in-50">
+          <div className="modal-box w-full max-w-2xl bg-card border border-line shadow-2xl rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div>
+                <h3 className="font-display font-black text-base text-ink flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-brand" />
+                  <span>Manifiesto de Despacho y Entrega a Chofer</span>
+                </h3>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Remito oficial para firma del transporte y constancia de salida de depósito.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setManifestModalOpen(false)}
+                className="btn btn-icon btn-outline h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Transport & Driver metadata inputs */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-muted/60 p-3 rounded-2xl border border-line text-xs">
+              <div>
+                <label className="font-bold text-ink-subtle block text-[10px] uppercase">Transporte / Servicio</label>
+                <p className="font-black text-ink mt-0.5">
+                  {dispatchCarrierFilter === 'self_service' ? 'MERCADO ENVÍOS FLEX' : dispatchCarrierFilter === 'cross_docking' ? 'MERCADO ENVÍOS COLECTA' : 'CORREO / GENERAL'}
+                </p>
+              </div>
+              <div>
+                <label className="font-bold text-ink-subtle block text-[10px] uppercase">Fecha y Hora</label>
+                <p className="font-black text-ink mt-0.5">{new Date().toLocaleDateString('es-AR')} - {currentTime}</p>
+              </div>
+              <div>
+                <label className="font-bold text-ink-subtle block text-[10px] uppercase">Total Paquetes</label>
+                <p className="font-black text-emerald-600 dark:text-emerald-400 mt-0.5 text-sm">{dispatchStageShipments.length} bultos</p>
+              </div>
+
+              <div className="col-span-2 sm:col-span-3 grid grid-cols-2 gap-2 pt-2 border-t border-line/60">
+                <input
+                  type="text"
+                  placeholder="Nombre y Apellido del Chofer..."
+                  value={driverInfo.name}
+                  onChange={(e) => setDriverInfo({ ...driverInfo, name: e.target.value })}
+                  className="input text-xs py-1.5 h-8 bg-card"
+                />
+                <input
+                  type="text"
+                  placeholder="DNI / Patente del vehículo..."
+                  value={driverInfo.plate}
+                  onChange={(e) => setDriverInfo({ ...driverInfo, plate: e.target.value })}
+                  className="input text-xs py-1.5 h-8 bg-card"
+                />
+              </div>
+            </div>
+
+            {/* Packages Table */}
+            <div className="border border-line rounded-2xl overflow-hidden">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted border-b border-line text-[10px] uppercase text-ink-subtle font-black">
+                    <th className="p-2">#</th>
+                    <th className="p-2">Orden / Envío</th>
+                    <th className="p-2">Comprador y Ciudad</th>
+                    <th className="p-2 text-center">Unidades</th>
+                    <th className="p-2 text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {dispatchStageShipments.map((s, idx) => (
+                    <tr key={s.id} className="hover:bg-muted/40">
+                      <td className="p-2 font-bold text-ink-muted">{idx + 1}</td>
+                      <td className="p-2">
+                        <span className="font-black text-ink block">#{s.order_id}</span>
+                        <span className="text-[10px] font-mono text-ink-subtle">Envío #{s.id}</span>
+                      </td>
+                      <td className="p-2">
+                        <span className="font-bold text-ink block">{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</span>
+                        <span className="text-[10px] text-ink-muted">{s.receiver_address?.city?.name || 'CABA / GBA'}</span>
+                      </td>
+                      <td className="p-2 text-center font-black">
+                        {(s.items || []).reduce((acc, it) => acc + (it.quantity || 1), 0)}
+                      </td>
+                      <td className="p-2 text-center">
+                        {s.meta.isDispatchChecked ? (
+                          <span className="badge badge-success text-[9px] font-black">VERIFICADO</span>
+                        ) : (
+                          <span className="badge badge-neutral text-[9px] font-black">PENDIENTE</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Signatures Footer */}
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-line text-center text-xs">
+              <div className="p-4 rounded-2xl border border-dashed border-line space-y-6">
+                <p className="text-[10px] font-black text-ink-subtle uppercase">Firma y Aclaración del Chofer</p>
+                <div className="h-10 border-b border-line-strong"></div>
+                <p className="text-[10px] text-ink-muted">{driverInfo.name || 'Firma chofer'} {driverInfo.plate ? `(Pat: ${driverInfo.plate})` : ''}</p>
+              </div>
+
+              <div className="p-4 rounded-2xl border border-dashed border-line space-y-6">
+                <p className="text-[10px] font-black text-ink-subtle uppercase">Despachado por (Depósito)</p>
+                <div className="h-10 border-b border-line-strong"></div>
+                <p className="text-[10px] text-ink-muted">@GRANA3DOK • Depósito Central</p>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => window.print()}
+                className="btn btn-primary text-xs font-black py-2.5 px-4 flex items-center gap-1.5"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Imprimir Manifiesto</span>
+              </button>
+              <button
+                onClick={() => setManifestModalOpen(false)}
+                className="btn btn-outline text-xs font-bold py-2.5 px-4"
+              >
+                Cerrar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -32,10 +32,10 @@ router.get('/scan-logs', (req, res) => {
   }
 });
 
-// POST /api/shipments/scan (Scan barcode/QR on mobile to pack & verify with duplicate alerts)
+// POST /api/shipments/scan (Scan barcode/QR on mobile to pack or dispatch-verify)
 router.post('/scan', async (req, res) => {
   try {
-    const { rawCode, autoPack = true } = req.body;
+    const { rawCode, autoPack = true, scanMode = 'pack', carrierFilter = 'all' } = req.body;
     if (!rawCode || typeof rawCode !== 'string') {
       return res.status(400).json({ error: 'Código de barras o QR no provisto.' });
     }
@@ -79,9 +79,80 @@ router.post('/scan', async (req, res) => {
 
     if (matched) {
       const prevPacking = matched.packing || {};
+      const nowIso = new Date().toISOString();
+      const firstItem = (matched.items && matched.items[0]?.item) || {};
+      const buyerName = matched.buyer?.first_name 
+        ? `${matched.buyer.first_name} ${matched.buyer.last_name || ''}`.trim()
+        : (matched.buyer?.nickname || 'Comprador');
+      const loggedCode = String(matched.id) || candidateId;
+
+      // -------------------------------------------------------------
+      // MODE: CONTROL DE DESPACHO / SALIDA A TRANSPORTE
+      // -------------------------------------------------------------
+      if (scanMode === 'dispatch') {
+        const isCarrierMatch = carrierFilter === 'all' || 
+          (carrierFilter === 'self_service' && matched.logistic_type === 'self_service') ||
+          (carrierFilter === 'cross_docking' && matched.logistic_type === 'cross_docking') ||
+          (carrierFilter === 'drop_off' && (matched.logistic_type === 'drop_off' || matched.logistic_type === 'xd_drop_off' || matched.logistic_type === 'default'));
+
+        if (!isCarrierMatch) {
+          const expectedName = carrierFilter === 'self_service' ? 'FLEX' : carrierFilter === 'cross_docking' ? 'COLECTA' : 'CORREO';
+          const actualName = matched.logistic_type === 'self_service' ? 'FLEX' : matched.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO';
+
+          await addScanLog(loggedCode, String(matched.id), 'DISPATCH_CARRIER_MISMATCH', {
+            title: firstItem.title || 'Producto Mercado Libre',
+            buyer: buyerName,
+            status: matched.status,
+            expected: expectedName,
+            actual: actualName,
+          });
+
+          return res.json({
+            success: true,
+            found: true,
+            carrierMismatch: true,
+            expectedCarrier: expectedName,
+            actualCarrier: actualName,
+            shipment: matched,
+            message: `🚨 ¡ALERTA DE ERROR! Este paquete es de ${actualName}, pero estás despachando ${expectedName}. ¡NO entregar al chofer!`,
+          });
+        }
+
+        const wasAlreadyDispatchChecked = Boolean(prevPacking.dispatchChecked);
+        const updatedPacking = updatePackingMetadata(String(matched.id), {
+          dispatchChecked: true,
+          dispatchCheckedAt: nowIso,
+          lastScannedAt: nowIso,
+        });
+
+        await addScanLog(loggedCode, String(matched.id), wasAlreadyDispatchChecked ? 'DISPATCH_DUPLICATE' : 'DISPATCH_VERIFIED', {
+          title: firstItem.title || 'Producto Mercado Libre',
+          buyer: buyerName,
+          status: matched.status,
+          dispatchChecked: true,
+        });
+
+        return res.json({
+          success: true,
+          found: true,
+          scanMode: 'dispatch',
+          carrierMismatch: false,
+          alreadyDispatchChecked: wasAlreadyDispatchChecked,
+          shipment: {
+            ...matched,
+            packing: updatedPacking,
+          },
+          message: wasAlreadyDispatchChecked
+            ? `⚠️ Paquete #${matched.id} ya había sido verificado para despacho.`
+            : `🚚 ¡Paquete #${matched.id} verificado para salida a transporte!`,
+        });
+      }
+
+      // -------------------------------------------------------------
+      // MODE: EMPAQUE Y PREPARACIÓN (DEFAULT)
+      // -------------------------------------------------------------
       const wasAlreadyPacked = Boolean(prevPacking.packed);
       const newScanCount = (Number(prevPacking.scanCount) || 0) + 1;
-      const nowIso = new Date().toISOString();
       const firstScannedAt = prevPacking.firstScannedAt || prevPacking.packedAt || nowIso;
 
       let updatedPacking = {
@@ -101,7 +172,6 @@ router.post('/scan', async (req, res) => {
           scanCount: newScanCount,
         });
       } else {
-        // Just update scan count and timestamps
         updatedPacking = updatePackingMetadata(String(matched.id), {
           scanCount: newScanCount,
           lastScannedAt: nowIso,
@@ -109,13 +179,7 @@ router.post('/scan', async (req, res) => {
         });
       }
 
-      const firstItem = (matched.items && matched.items[0]?.item) || {};
-      const buyerName = matched.buyer?.first_name 
-        ? `${matched.buyer.first_name} ${matched.buyer.last_name || ''}`.trim()
-        : (matched.buyer?.nickname || 'Comprador');
-
       const actionType = wasAlreadyPacked ? 'DUPLICATE_SCAN' : 'FIRST_PACK_VERIFIED';
-      const loggedCode = String(matched.id) || candidateId;
 
       await addScanLog(loggedCode, String(matched.id), actionType, {
         title: firstItem.title || 'Producto Mercado Libre',
@@ -128,6 +192,7 @@ router.post('/scan', async (req, res) => {
       return res.json({
         success: true,
         found: true,
+        scanMode: 'pack',
         alreadyPacked: wasAlreadyPacked,
         scanCount: newScanCount,
         firstScannedAt,
