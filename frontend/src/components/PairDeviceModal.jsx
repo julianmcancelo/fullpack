@@ -158,7 +158,7 @@ export default function PairDeviceModal({ isOpen, onClose }) {
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
-  /* Render the QR payload into a data URL. */
+  /* Render the QR payload as SVG (no canvas: immune to blocked 2D contexts). */
   useEffect(() => {
     if (!pairing?.qrPayload) {
       setQrDataUrl('');
@@ -167,21 +167,22 @@ export default function PairDeviceModal({ isOpen, onClose }) {
 
     let active = true;
     setQrError(null);
-    QRCode.toDataURL(pairing.qrPayload, {
-      width: 512,
+    QRCode.toString(pairing.qrPayload, {
+      type: 'svg',
       margin: 1,
       /* black/white keywords: el QR necesita contraste máximo en el papel/pantalla,
          no es color de UI, así que no usa tokens del sistema. */
-      color: { dark: 'black', light: 'white' },
+      color: { dark: '#000000', light: '#ffffff' },
     })
-      .then((url) => {
+      .then((svg) => {
         if (!active) return;
-        setQrDataUrl(url);
+        setQrDataUrl(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!active) return;
         setQrDataUrl('');
-        setQrError('No pudimos dibujar el código QR. Escribí el código manual en la app.');
+        const detail = err?.message ? ` (${err.message})` : '';
+        setQrError(`No pudimos dibujar el código QR${detail}. Escribí el código manual en la app.`);
       });
 
     return () => {
@@ -400,6 +401,17 @@ export default function PairDeviceModal({ isOpen, onClose }) {
                     <span className="text-[10px] font-bold leading-relaxed text-ink-subtle">
                       {qrError || 'Generando código QR…'}
                     </span>
+                    {qrError && (
+                      <button
+                        type="button"
+                        onClick={createPairing}
+                        disabled={creating}
+                        className="btn btn-outline btn-xs mt-1"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${creating ? 'animate-spin' : ''}`} />
+                        <span>Reintentar</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
