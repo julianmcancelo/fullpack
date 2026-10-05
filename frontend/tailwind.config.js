@@ -42,6 +42,7 @@ export default {
         card: token('--card'),
         raised: token('--raised'),
         muted: token('--muted'),
+        field: token('--field'),
         line: {
           DEFAULT: token('--line'),
           strong: token('--line-strong'),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { ShoppingBag, X, ExternalLink, Sparkles, DollarSign } from 'lucide-react';
 
 export default function NewSaleNotification({ sale, onClose, onViewOrders }) {

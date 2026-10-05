@@ -336,177 +336,186 @@ export default function MobileTerminal({ connection }) {
   return (
     <div className="page pb-24">
       <div className="mx-auto w-full max-w-lg select-none space-y-4">
-      
-      {/* Encabezado de la terminal */}
-      <div className="page-head">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink shadow-glow">
-            <Smartphone className="h-5 w-5" />
+
+        {/* Encabezado de la terminal */}
+        <div className="page-head">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink shadow-glow">
+              <Smartphone className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="page-title">Terminal Móvil de Empaque</h1>
+              <p className="page-sub flex items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
+                <span>Lector en depósito @GRANA3DOK</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="page-title">Terminal Móvil de Empaque</h1>
-            <p className="page-sub flex items-center gap-2">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
-              <span>Lector en depósito @GRANA3DOK</span>
-            </p>
+
+          {/* Controles de sonido y voz */}
+          <div className="toolbar">
+            <button
+              onClick={() => setVoiceEnabled(!voiceEnabled)}
+              className={`btn btn-icon ${voiceEnabled ? 'btn-soft' : 'btn-outline'}`}
+              title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
+            >
+              {voiceEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            </button>
+
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={`btn btn-icon ${soundEnabled ? 'btn-soft' : 'btn-outline'}`}
+              title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
+            >
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
-        {/* Controles de sonido y voz */}
-        <div className="toolbar">
+        {/* Progreso de empaque */}
+        <div className="card card-pad space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle">Paquetes empaquetados</p>
+              <p className="mt-1.5 font-display text-3xl font-extrabold leading-none text-ink">
+                <span className="tabular">{packedCount}</span>
+                <span className="ml-1 text-sm font-bold text-ink-muted">
+                  / <span className="tabular">{shipments.length}</span> paquetes
+                </span>
+              </p>
+            </div>
+            <span className="badge badge-brand">
+              <span className="tabular">{progressPercent}%</span> Completado
+            </span>
+          </div>
+
+          <div className="progress">
+            <div className="progress-bar" style={{ width: `${progressPercent}%` }} />
+          </div>
+        </div>
+
+        {/* Selector de pestañas */}
+        <div className="segmented grid w-full grid-cols-3 gap-1">
           <button
-            onClick={() => setVoiceEnabled(!voiceEnabled)}
-            className={`btn btn-icon ${voiceEnabled ? 'btn-soft' : 'btn-outline'}`}
-            title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
+            onClick={() => setActiveTab('scanner')}
+            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'scanner' ? 'segmented-btn-active' : ''}`}
           >
-            {voiceEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <QrCode className="h-4 w-4" />
+            <span>Escanear</span>
           </button>
 
           <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`btn btn-icon ${soundEnabled ? 'btn-soft' : 'btn-outline'}`}
-            title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
+            onClick={() => setActiveTab('shipments')}
+            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'shipments' ? 'segmented-btn-active' : ''}`}
           >
-            {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            <Layers className="h-4 w-4" />
+            <span>Envíos <span className="tabular">({pendingCount})</span></span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'history' ? 'segmented-btn-active' : ''}`}
+          >
+            <History className="h-4 w-4" />
+            <span>Historial</span>
           </button>
         </div>
-      </div>
 
-        {/* Packing Progress */}
-      {/* Progreso de empaque */}
-      <div className="card card-pad space-y-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle">Paquetes empaquetados</p>
-            <p className="mt-1.5 font-display text-3xl font-extrabold leading-none text-ink">
-              <span className="tabular">{packedCount}</span>
-              <span className="ml-1 text-sm font-bold text-ink-muted">
-                / <span className="tabular">{shipments.length}</span> paquetes
-              </span>
-            </p>
-          </div>
-          <span className="badge badge-brand">
-            <span className="tabular">{progressPercent}%</span> Completado
-          </span>
-        </div>
+        {/* TAB 1: SCANNER */}
+        {activeTab === 'scanner' && (
+          <div className="space-y-4">
+            {/* Lector de cámara */}
+            <div className="card space-y-3 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-ink">
+                  <Camera className="h-4 w-4 text-ink-subtle" />
+                  <span>Cámara de Celular</span>
+                </span>
 
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${progressPercent}%` }} />
-        </div>
-      </div>
+                <span className={`badge ${scanning ? 'badge-success' : 'badge-neutral'}`}>
+                  <span className={`h-2 w-2 rounded-full ${scanning ? 'bg-success animate-pulse-ring' : 'bg-ink-subtle'}`} aria-hidden="true" />
+                  {scanning ? 'Leyendo' : 'En espera'}
+                </span>
+              </div>
 
-      {/* Selector de pestañas */}
-      <div className="segmented grid w-full grid-cols-3 gap-1">
-        <button
-          onClick={() => setActiveTab('scanner')}
-          className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'scanner' ? 'segmented-btn-active' : ''}`}
-        >
-          <QrCode className="h-4 w-4" />
-          <span>Escanear</span>
-        </button>
+              {/* Visor de cámara */}
+              <div className={`relative overflow-hidden rounded-2xl border transition-all duration-300 ${scanning ? 'min-h-[260px] border-line bg-ink/90' : 'flex min-h-[140px] items-center justify-center border-dashed border-line-strong bg-muted'}`}>
+                <div id="mobile-camera-viewfinder" className="mx-auto w-full max-w-sm"></div>
 
-        <button
-          onClick={() => setActiveTab('shipments')}
-          className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'shipments' ? 'segmented-btn-active' : ''}`}
-        >
-          <Layers className="h-4 w-4" />
-          <span>Envíos <span className="tabular">({pendingCount})</span></span>
-        </button>
+                {!scanning && (
+                  <div className="p-4 text-center">
+                    <QrCode className="mx-auto mb-2 h-10 w-10 text-ink-subtle" />
+                    <p className="text-sm font-bold text-ink">Cámara en espera</p>
+                    <p className="text-[11px] text-ink-subtle">Tocá "Abrir Cámara" para enfocar etiquetas</p>
+                  </div>
+                )}
 
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'history' ? 'segmented-btn-active' : ''}`}
-        >
-          <History className="h-4 w-4" />
-          <span>Historial</span>
-        </button>
-      </div>
+                {scanning && (
+                  <div className="pointer-events-none absolute left-2 right-2 top-2 flex items-center justify-between">
+                    <span className="badge badge-solid gap-1.5 backdrop-blur">
+                      <span className="h-2 w-2 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
+                      Lector QR / Barras Activo
+                    </span>
+                  </div>
+                )}
+              </div>
 
-      {/* TAB 1: SCANNER */}
-      {activeTab === 'scanner' && (
-        <div className="space-y-3.5">
-          {/* Camera Viewfinder Box */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
-                <Camera className="w-4 h-4 text-yellow-500" />
-                <span>Cámara de Celular</span>
-              </span>
-
+              {/* Acción principal: encender o apagar el lector */}
               <button
                 onClick={scanning ? stopCamera : startCamera}
-                className={`px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center space-x-1.5 ${
-                  scanning 
-                    ? 'bg-rose-500 text-white shadow-sm' 
-                    : 'bg-yellow-400 hover:bg-yellow-500 text-slate-950 shadow-md font-bold'
-                }`}
+                className={`btn btn-lg btn-block py-5 text-base ${scanning ? 'btn-danger-soft' : 'btn-primary'}`}
               >
-                <Camera className="w-4 h-4" />
+                <Camera className="h-6 w-6" />
                 <span>{scanning ? 'Apagar Cámara' : 'Abrir Cámara'}</span>
               </button>
-            </div>
 
-            {/* Viewfinder Canvas */}
-            <div className={`relative rounded-2xl overflow-hidden bg-slate-950 transition-all ${scanning ? 'min-h-[260px] border-2 border-yellow-400 shadow-inner' : 'min-h-[140px] flex items-center justify-center border border-dashed border-slate-300 dark:border-slate-800'}`}>
-              <div id="mobile-camera-viewfinder" className="w-full max-w-sm mx-auto"></div>
-              
-              {!scanning && (
-                <div className="text-center p-4">
-                  <QrCode className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-50" />
-                  <p className="text-xs text-slate-400 font-bold">Cámara en espera</p>
-                  <p className="text-[11px] text-slate-500">Tocá "Abrir Cámara" para enfocar etiquetas</p>
-                </div>
-              )}
-
-              {scanning && (
-                <div className="absolute top-2 left-2 right-2 flex justify-between items-center pointer-events-none">
-                  <span className="px-2 py-0.5 rounded-full bg-slate-950/80 text-[10px] font-bold text-yellow-300 border border-yellow-400/40">
-                    🟢 Lector QR / Barras Activo
+              {/* Empaquetado automático al leer */}
+              <div className="flex items-center justify-between text-xs">
+                <label className="flex cursor-pointer items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={autoPackOnScan}
+                    onChange={(e) => setAutoPackOnScan(e.target.checked)}
+                    className="check h-5 w-5"
+                  />
+                  <span className="font-bold text-ink-muted">
+                    Marcar "Empaquetado" automáticamente al leer
                   </span>
+                </label>
+              </div>
+
+              {cameraError && (
+                <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-3.5 text-xs text-warning">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <span className="font-semibold leading-relaxed">{cameraError}</span>
                 </div>
               )}
             </div>
 
-            {/* Auto-pack switch */}
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoPackOnScan}
-                  onChange={(e) => setAutoPackOnScan(e.target.checked)}
-                  className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 cursor-pointer accent-yellow-500"
-                />
-                <span className="font-bold text-slate-700 dark:text-slate-300">
-                  Marcar "Empaquetado" automáticamente al leer
-                </span>
-              </label>
-            </div>
+            {/* Entrada manual (pistola láser / teclado) */}
+            <form onSubmit={handleManualSubmit} className="card space-y-3 border-dashed border-line-strong p-4">
+              <p className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wider text-ink-subtle">
+                <QrCode className="h-4 w-4" />
+                <span>Ingreso manual del código</span>
+              </p>
 
-            {cameraError && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-2xl flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>{cameraError}</span>
-              </div>
-            )}
-          </div>
+              <input
+                type="text"
+                placeholder="O ingresá el código de envío / SKU..."
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                className="input py-4 text-center font-mono text-lg tracking-widest"
+              />
 
-          {/* Manual Input (Pistola láser / Teclado) */}
-          <form onSubmit={handleManualSubmit} className="flex gap-2">
-            <input
-              type="text"
-              placeholder="O ingresá el código de envío / SKU..."
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400"
-            />
-            <button
-              type="submit"
-              disabled={!manualCode.trim() || isProcessingScan}
-              className="px-4 py-2.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 rounded-2xl text-xs font-black hover:bg-slate-800 transition disabled:opacity-50"
-            >
-              Verificar
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={!manualCode.trim() || isProcessingScan}
+                className="btn btn-accent btn-lg btn-block py-4"
+              >
+                <Check className="h-5 w-5" />
+                <span>Verificar</span>
+              </button>
+            </form>
 
           {/* DYNAMIC SCANNED RESULT FEEDBACK CARD */}
           {lastScanned && (
@@ -861,5 +870,6 @@ export default function MobileTerminal({ connection }) {
       </div>
 
     </div>
+  </div>
   );
 }
