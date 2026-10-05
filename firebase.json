@@ -1,0 +1,16 @@
+{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "ML Pro Manager",
+        "supportEmail": "jcancelo.dev@gmail.com",
+        "authorizedRedirectUris": [
+          "https://grana3d-50f06.firebaseapp.com/__/auth/handler",
+          "https://ml-manager-pro-jade.vercel.app/__/auth/handler",
+          "https://ml-manager-pro-jade.vercel.app"
+        ]
+      }
+    }
+  }
+}
