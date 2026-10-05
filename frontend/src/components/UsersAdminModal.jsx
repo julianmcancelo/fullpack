@@ -45,7 +45,7 @@ export default function UsersAdminModal({ isOpen, onClose }) {
       setError(null);
       setSuccessMsg(null);
 
-      await api.approveUser(adminEmail, userId, newStatus);
+      await api.approveUser(userId, newStatus);
       setSuccessMsg(
         `Usuario ${newStatus === 'active' ? 'aprobado y activado' : 'actualizado'} con éxito.`,
       );

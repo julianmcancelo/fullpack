@@ -7,12 +7,21 @@ const API_BASE = import.meta.env.VITE_API_BASE ||
 
 export async function fetchApi(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  // Sesión SaaS real: el backend sabe quién llama (Fase 1 multi-usuario).
+  try {
+    const token = localStorage.getItem('ml_saas_token');
+    if (token && !headers.Authorization) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  } catch {}
+  const { headers: _ignored, ...rest } = options;
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
+    headers,
+    ...rest,
   });
 
   const contentType = response.headers.get('content-type');
@@ -50,11 +59,13 @@ export const api = {
       body: JSON.stringify({ email, code }),
     }),
   getUsersList: () => fetchApi('/users/list'),
-  approveUser: (adminEmail, userId, status) =>
+  approveUser: (userId, status) =>
     fetchApi('/users/approve', {
       method: 'POST',
-      body: JSON.stringify({ adminEmail, userId, status }),
+      body: JSON.stringify({ userId, status }),
     }),
+  getMe: () => fetchApi('/users/me'),
+  logoutSession: () => fetchApi('/users/logout', { method: 'POST' }),
 
   // Mercado Libre Connection status & Auth
   getStatus: () => fetchApi('/auth/status'),

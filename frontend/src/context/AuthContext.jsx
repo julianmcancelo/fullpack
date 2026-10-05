@@ -25,6 +25,21 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // Revalida la sesión guardada contra el backend al abrir la app:
+  // si el token venció o fue revocado, se cierra la sesión local.
+  useEffect(() => {
+    if (!sessionToken) return;
+    api.getMe()
+      .then((res) => {
+        if (res?.user) setCurrentUser(res.user);
+      })
+      .catch(() => {
+        setCurrentUser(null);
+        setSessionToken(null);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sync with Firebase Auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
@@ -97,6 +112,9 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    try {
+      await api.logoutSession();
+    } catch {}
     try {
       await logoutFirebase();
     } catch {}

@@ -41,6 +41,7 @@ const defaultData = {
   loginTokens: [],
   pairingSessions: [],
   devices: [],
+  sessions: [],
 };
 
 // In-memory cache for ultra-fast response
@@ -107,6 +108,7 @@ function readDb() {
       loginTokens: parsed.loginTokens || [],
       pairingSessions: parsed.pairingSessions || [],
       devices: parsed.devices || [],
+      sessions: parsed.sessions || [],
     };
     return inMemoryCache;
   } catch (err) {
@@ -434,6 +436,64 @@ async function verifyLoginToken(email, codeOrToken) {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// SaaS web sessions (Phase 1 multi-user): opaque Bearer tokens.
+// Neon is the source of truth; local JSON is the offline fallback.
+// ---------------------------------------------------------------------------
+async function createSession(email, daysValid = 30) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  try {
+    const neonSession = await neon.createSessionInNeon(cleanEmail, daysValid);
+    if (neonSession) return neonSession;
+  } catch (e) {
+    console.warn('Neon createSession fallback:', e.message);
+  }
+  const crypto = require('crypto');
+  const db = readDb();
+  if (!db.sessions) db.sessions = [];
+  const session = {
+    email: cleanEmail,
+    token: crypto.randomBytes(32).toString('hex'),
+    expiresAt: new Date(Date.now() + daysValid * 24 * 3600 * 1000).toISOString(),
+    createdAt: new Date().toISOString(),
+  };
+  db.sessions.push(session);
+  if (db.sessions.length > 500) db.sessions = db.sessions.slice(-500);
+  writeDb(db);
+  return session;
+}
+
+async function getSessionByToken(token) {
+  const clean = String(token || '').trim();
+  if (!clean) return null;
+  try {
+    const neonSession = await neon.getSessionFromNeon(clean);
+    if (neonSession) return neonSession;
+  } catch (e) {
+    console.warn('Neon getSession fallback:', e.message);
+  }
+  const db = readDb();
+  const found = (db.sessions || []).find(
+    (s) => s.token === clean && new Date(s.expiresAt).getTime() > Date.now()
+  );
+  return found || null;
+}
+
+async function deleteSession(token) {
+  const clean = String(token || '').trim();
+  try {
+    await neon.deleteSessionFromNeon(clean);
+  } catch (e) {
+    console.warn('Neon deleteSession fallback:', e.message);
+  }
+  const db = readDb();
+  if (db.sessions) {
+    db.sessions = db.sessions.filter((s) => s.token !== clean);
+    writeDb(db);
+  }
+  return true;
+}
+
 async function getDatabaseStatus() {
   const neonActive = await neon.isNeonConnected();
   const connStr = neon.getConnectionString();
@@ -636,6 +696,9 @@ module.exports = {
   createLoginToken,
   verifyLoginToken,
   getDatabaseStatus,
+  createSession,
+  getSessionByToken,
+  deleteSession,
   createPairingSession,
   getPairingSession,
   claimPairingSession,

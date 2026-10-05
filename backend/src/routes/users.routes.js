@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const store = require('../db/store');
+const { requireSession, requireAdmin } = require('../middleware/session');
 
 // POST /api/users/google-login
 // Handles Google OAuth sign-in / verification
@@ -51,8 +52,9 @@ router.post('/google-login', async (req, res) => {
       });
     }
 
-    // Generate session token
-    const sessionToken = crypto.randomBytes(32).toString('hex');
+    // Generate session token (persisted: validated on every request)
+    const session = await store.createSession(cleanEmail);
+    const sessionToken = session.token;
 
     res.json({
       success: true,
@@ -152,7 +154,9 @@ router.post('/verify-code', async (req, res) => {
       });
     }
 
-    const sessionToken = crypto.randomBytes(32).toString('hex');
+    // Real persisted session (validated on every request)
+    const session = await store.createSession(cleanEmail);
+    const sessionToken = session.token;
     res.json({
       success: true,
       user,
@@ -165,8 +169,21 @@ router.post('/verify-code', async (req, res) => {
   }
 });
 
+// GET /api/users/me (who am I, from a valid session)
+router.get('/me', requireSession, async (req, res) => {
+  res.json({ success: true, user: req.user });
+});
+
+// POST /api/users/logout (revoke current session)
+router.post('/logout', requireSession, async (req, res) => {
+  try {
+    await store.deleteSession(req.session.token);
+  } catch {}
+  res.json({ success: true, message: 'Sesión cerrada.' });
+});
+
 // GET /api/users/list (Admin only - List all platform users and pending approvals)
-router.get('/list', async (req, res) => {
+router.get('/list', requireSession, requireAdmin, async (req, res) => {
   try {
     const users = await store.getAllUsers();
     res.json({ success: true, users });
@@ -176,12 +193,9 @@ router.get('/list', async (req, res) => {
 });
 
 // POST /api/users/approve (Admin only - Approve or reject pending user)
-router.post('/approve', async (req, res) => {
+router.post('/approve', requireSession, requireAdmin, async (req, res) => {
   try {
-    const { adminEmail, userId, status } = req.body;
-    if (!store.isAdminEmail(adminEmail)) {
-      return res.status(403).json({ error: 'Solo la cuenta administradora puede autorizar cuentas.' });
-    }
+    const { userId, status } = req.body;
 
     if (!userId || !status) {
       return res.status(400).json({ error: 'userId y status (active, pending, rejected) son obligatorios.' });

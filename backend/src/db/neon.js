@@ -113,6 +113,17 @@ async function initNeonDb() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- SaaS web sessions: opaque tokens issued at login, validated on every
+        -- authenticated request (Phase 1 multi-user: the backend knows who calls).
+        CREATE TABLE IF NOT EXISTS ml_sessions (
+          token VARCHAR(128) PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS ml_sessions_email_idx ON ml_sessions (email);
+
         -- Mobile device pairing: the web app creates a session and renders it as
         -- a QR code; the phone claims it and receives a long-lived device token.
         CREATE TABLE IF NOT EXISTS ml_pairing_sessions (
@@ -544,6 +555,70 @@ async function verifyLoginTokenInNeon(email, codeOrToken) {
 }
 
 // ---------------------------------------------------------------------------
+// SaaS web sessions (Phase 1 multi-user)
+// ---------------------------------------------------------------------------
+async function createSessionInNeon(email, daysValid = 30) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + daysValid * 24 * 3600 * 1000);
+    await p.query(
+      'INSERT INTO ml_sessions (token, email, expires_at) VALUES ($1, $2, $3)',
+      [String(email).trim().toLowerCase(), token, expiresAt]
+    );
+    return { email: String(email).trim().toLowerCase(), token, expiresAt };
+  } catch (e) {
+    console.warn('Neon createSession error:', e.message);
+    return null;
+  }
+}
+
+async function getSessionFromNeon(token) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      'SELECT * FROM ml_sessions WHERE token = $1 AND expires_at > CURRENT_TIMESTAMP',
+      [String(token || '').trim()]
+    );
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return { email: r.email, token: r.token, expiresAt: r.expires_at };
+  } catch (e) {
+    console.warn('Neon getSession error:', e.message);
+    return null;
+  }
+}
+
+async function deleteSessionFromNeon(token) {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await p.query('DELETE FROM ml_sessions WHERE token = $1', [String(token || '').trim()]);
+    return true;
+  } catch (e) {
+    console.warn('Neon deleteSession error:', e.message);
+    return false;
+  }
+}
+
+async function purgeExpiredSessionsInNeon() {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await initNeonDb();
+    await p.query('DELETE FROM ml_sessions WHERE expires_at <= CURRENT_TIMESTAMP');
+  } catch (e) {
+    /* best effort */
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Mobile pairing sessions & device tokens
 // ---------------------------------------------------------------------------
 function mapPairingRow(row) {
@@ -756,6 +831,10 @@ module.exports = {
   updateUserStatusInNeon,
   createLoginTokenInNeon,
   verifyLoginTokenInNeon,
+  createSessionInNeon,
+  getSessionFromNeon,
+  deleteSessionFromNeon,
+  purgeExpiredSessionsInNeon,
   createPairingSessionInNeon,
   getPairingSessionFromNeon,
   claimPairingSessionInNeon,
