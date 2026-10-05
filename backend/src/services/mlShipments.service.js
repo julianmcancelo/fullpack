@@ -104,8 +104,16 @@ async function getShipments(query = {}, options = {}) {
   }
 
   // Reutiliza el paginado de órdenes (ML acepta máx. 50 por llamada).
+  // Solo se pasan filtros de ORDEN: los de envío (status, logistic_type,
+  // printed, packed) se aplican después sobre la lista construida.
   const { getOrders } = require('./mlOrders.service');
-  const ordersData = await getOrders(query);
+  const ordersData = await getOrders({
+    limit: query.limit,
+    offset: query.offset,
+    q: query.q,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+  });
   const orders = ordersData.results || [];
 
   const shipmentsList = await buildShipmentsFromOrders(orders, token, options);

@@ -24,7 +24,10 @@ async function getOrders(query = {}) {
     sort: 'date_desc',
   };
 
-  if (query.status && query.status !== 'all') {
+  // order.status solo acepta estados de ORDEN de ML: cualquier otro valor
+  // (p.ej. un estado de envío) se ignora en vez de romper la consulta.
+  const ORDER_STATUSES = ['paid', 'cancelled'];
+  if (query.status && query.status !== 'all' && ORDER_STATUSES.includes(query.status)) {
     baseParams['order.status'] = query.status;
   }
   if (query.q) {
@@ -41,10 +44,16 @@ async function getOrders(query = {}) {
   let firstPaging = null;
   for (let offset = startOffset; allResults.length < wanted; offset += ML_PAGE_SIZE) {
     const need = Math.min(ML_PAGE_SIZE, wanted - allResults.length);
-    const searchRes = await axios.get(`${ML_API_BASE}/orders/search`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { ...baseParams, limit: need, offset },
-    });
+    let searchRes;
+    try {
+      searchRes = await axios.get(`${ML_API_BASE}/orders/search`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { ...baseParams, limit: need, offset },
+      });
+    } catch (err) {
+      const detail = err.response?.data?.message || err.response?.data?.error || err.message;
+      throw new Error(`Mercado Libre rechazó la consulta de ventas: ${detail}`);
+    }
     const page = searchRes.data.results || [];
     if (!firstPaging) firstPaging = searchRes.data.paging;
     if (page.length === 0) break;
