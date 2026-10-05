@@ -330,10 +330,9 @@ private fun matchesFilter(shipment: Shipment, filter: ShipmentsFilter): Boolean 
     ShipmentsFilter.ALL -> true
     ShipmentsFilter.UNPACKED -> shipment.packing?.packed != true
     ShipmentsFilter.PACKED -> shipment.packing?.packed == true
-    ShipmentsFilter.IN_TRANSIT -> {
-        val status = shipment.status ?: ""
-        status == "shipped" || status == "in_transit"
-    }
+    // En tránsito = `shipped`, igual que el mapeo único (`statusTone`/`statusLabel`):
+    // ningún otro estado cuenta como tránsito.
+    ShipmentsFilter.IN_TRANSIT -> shipment.status == "shipped"
 }
 
 private fun matchesQuery(shipment: Shipment, query: String): Boolean {

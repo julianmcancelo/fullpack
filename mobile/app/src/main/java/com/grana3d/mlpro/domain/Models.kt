@@ -108,6 +108,8 @@ data class Shipment(
     val quantity: Number? = null,
     val totalAmount: Number? = null,
     val orderDate: String? = null,
+    /** `true` cuando el estado fue fijado a mano desde la web. */
+    val manualStatus: Boolean = false,
     val packing: PackingState? = null,
 ) {
     /** `ready_to_ship` y sin empaquetar: lo que el operario tiene que preparar. */
@@ -272,3 +274,52 @@ sealed interface UpdateCheck {
     /** No se pudo consultar (sin red, repo privado o límite de GitHub). */
     data class Unavailable(val message: String) : UpdateCheck
 }
+
+// ---------------------------------------------------------------------------
+// Preguntas y novedades
+// ---------------------------------------------------------------------------
+
+/**
+ * Pregunta de un comprador, lista para responder desde el celular.
+ * [id] nunca es vacío cuando viene del backend; el resto es nullable porque ML omite
+ * datos con frecuencia y el repositorio nunca inventa valores.
+ */
+data class Question(
+    val id: String = "",
+    val title: String? = null,
+    val text: String = "",
+    val buyer: String? = null,
+    val itemId: String? = null,
+    val itemTitle: String? = null,
+    val dateCreated: String? = null,
+    val status: String? = null,
+)
+
+/** Venta nueva detectada por el polling de novedades. */
+data class UpdateOrder(
+    val id: String = "",
+    val totalAmount: Number? = null,
+    val itemTitle: String? = null,
+    val itemThumbnail: String? = null,
+    val buyerNickname: String? = null,
+    val dateCreated: String? = null,
+)
+
+/** Pregunta nueva detectada por el polling de novedades. */
+data class UpdateQuestion(
+    val id: String = "",
+    val itemTitle: String? = null,
+    val text: String? = null,
+    val fromNickname: String? = null,
+    val dateCreated: String? = null,
+)
+
+/**
+ * Novedades desde el último cursor (`GET /mobile/updates?since=`).
+ * Listas vacías = sin novedades (o cursor inicial).
+ */
+data class MobileUpdates(
+    val newOrders: List<UpdateOrder> = emptyList(),
+    val newQuestions: List<UpdateQuestion> = emptyList(),
+    val serverTime: String? = null,
+)

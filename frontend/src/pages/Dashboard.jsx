@@ -149,7 +149,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               <DollarSign className="h-5 w-5" />
             </div>
           </div>
-          <p className="kpi-value tabular">{formatMoney(summary.totalSalesAmount)}</p>
+          <p className="kpi-value tabular break-words">{formatMoney(summary.totalSalesAmount)}</p>
           <div className="kpi-foot">
             <span className="inline-flex items-center gap-1 font-bold text-success">
               <TrendingUp className="h-3.5 w-3.5" />
@@ -169,7 +169,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               <CreditCard className="h-5 w-5" />
             </div>
           </div>
-          <p className="kpi-value tabular">{formatMoney(averageTicket)}</p>
+          <p className="kpi-value tabular break-words">{formatMoney(averageTicket)}</p>
           <div className="kpi-foot">
             <span className="inline-flex items-center gap-1 font-bold text-accent">
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -189,7 +189,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               <Boxes className="h-5 w-5" />
             </div>
           </div>
-          <p className="kpi-value tabular">
+          <p className="kpi-value tabular break-words">
             {summary.totalItemsCount || summary.activeItemsCount + summary.pausedItemsCount}
           </p>
           <div className="kpi-foot">
@@ -211,7 +211,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               <Truck className="h-5 w-5" />
             </div>
           </div>
-          <p className="kpi-value tabular">{summary.pendingShipmentsCount}</p>
+          <p className="kpi-value tabular break-words">{summary.pendingShipmentsCount}</p>
           <div className="kpi-foot">
             <span className="inline-flex items-center gap-1 font-bold text-warning">
               <Clock className="h-3.5 w-3.5" />
@@ -233,7 +233,9 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               <BarChart3 className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="card-title">Facturación Semanal & Volumen de Pedidos</h2>
+              <h2 className="card-title">
+                <span className="min-w-0">Facturación Semanal & Volumen de Pedidos</span>
+              </h2>
               <p className="card-sub">Evolución de ingresos y órdenes cobradas</p>
             </div>
           </div>
@@ -304,7 +306,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
           <div className="card-head">
             <h2 className="card-title">
               <Truck className="h-4 w-4 shrink-0 text-warning" />
-              <span>Envíos por Despachar</span>
+              <span className="min-w-0">Envíos por Despachar</span>
             </h2>
             <button
               onClick={() => onNavigate('shipments')}
@@ -374,7 +376,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
           <div className="card-head">
             <h2 className="card-title">
               <AlertTriangle className="h-4 w-4 shrink-0 text-danger" />
-              <span>Alerta de Stock Crítico</span>
+              <span className="min-w-0">Alerta de Stock Crítico</span>
             </h2>
             <button
               onClick={() => onNavigate('stock')}
@@ -446,7 +448,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
         <div className="card-head">
           <h2 className="card-title">
             <ShoppingCart className="h-4 w-4 shrink-0 text-success" />
-            <span>Últimas ventas</span>
+            <span className="min-w-0">Últimas ventas</span>
           </h2>
           <button
             onClick={() => onNavigate('orders')}

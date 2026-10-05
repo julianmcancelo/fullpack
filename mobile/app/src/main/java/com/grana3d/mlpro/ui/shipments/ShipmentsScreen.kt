@@ -266,6 +266,17 @@ private fun ShipmentListCard(
                         dot = true,
                     )
                 }
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MlStatusPill(
+                        text = shipment.statusLabel(),
+                        tone = shipment.statusTone(),
+                        dot = true,
+                    )
+                    if (shipment.manualStatus) {
+                        MlBadge(text = "Manual", tone = MlTone.Neutral)
+                    }
+                }
                 if (printed || dispatchChecked) {
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

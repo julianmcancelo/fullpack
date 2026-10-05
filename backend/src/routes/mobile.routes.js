@@ -3,6 +3,8 @@ const router = express.Router();
 const store = require('../db/store');
 const { requireDevice } = require('../middleware/device');
 const { getShipments, getShipmentLabel } = require('../services/mlShipments.service');
+const { getOrders } = require('../services/mlOrders.service');
+const { getReceivedQuestions } = require('../services/mlQuestions.service');
 const { getOverview } = require('../services/overview.service');
 const { checkConnectionStatus } = require('../services/mlAuth.service');
 
@@ -57,6 +59,8 @@ function compactShipment(s) {
     quantity: Number(firstItem.quantity || 1),
     totalAmount: Number(s.total_amount || 0),
     orderDate: s.order_date || null,
+    // Override manual de estado (si existe, el status ya viene derivado de él).
+    manualStatus: Boolean(packing.statusOverride),
     packing: {
       printed: Boolean(packing.printed),
       packed: Boolean(packing.packed),
@@ -214,6 +218,91 @@ router.get('/bootstrap', async (req, res) => {
       recentLogs: [],
     });
   }
+});
+
+// GET /api/mobile/updates?since=ISO8601  (novedades para push/in-app: ventas + preguntas)
+// Sin `since` (primera sincronización) se devuelven arrays vacíos con
+// `isInitial:true` y `serverTime` para que el cliente guarde el cursor sin
+// mostrar novedades viejas como nuevas. Cada fuente tiene su try/catch para
+// que una caída no tumbe la otra; `counts` siempre está presente.
+router.get('/updates', async (req, res) => {
+  const serverTime = new Date().toISOString();
+  const sinceRaw = req.query.since ? String(req.query.since) : '';
+  const sinceDate = sinceRaw ? new Date(sinceRaw) : null;
+  const hasSince = Boolean(sinceDate && !Number.isNaN(sinceDate.getTime()));
+
+  if (!hasSince) {
+    return res.json({
+      success: true,
+      isInitial: true,
+      serverTime,
+      newOrders: [],
+      newQuestions: [],
+      counts: { orders: 0, questions: 0 },
+    });
+  }
+
+  const sinceMs = sinceDate.getTime();
+  let newOrders = [];
+  let newQuestions = [];
+  const errors = { orders: null, questions: null };
+
+  try {
+    const data = await getOrders({ limit: 20 });
+    const paid = (data.results || []).filter((o) => o.status === 'paid');
+    newOrders = paid
+      .filter((o) => {
+        const t = new Date(o.date_created || 0).getTime();
+        return !Number.isNaN(t) && t > sinceMs;
+      })
+      .map((o) => {
+        const firstItem = (o.order_items && o.order_items[0] && o.order_items[0].item) || {};
+        return {
+          id: String(o.id),
+          totalAmount: Number(o.total_amount || 0),
+          itemTitle: firstItem.title || 'Venta de Mercado Libre',
+          itemThumbnail: firstItem.thumbnail || '',
+          buyerNickname: (o.buyer && o.buyer.nickname) || '',
+          dateCreated: o.date_created || null,
+        };
+      });
+  } catch (err) {
+    errors.orders = err.message || 'No se pudieron obtener las ventas';
+    newOrders = [];
+  }
+
+  try {
+    const data = await getReceivedQuestions('UNANSWERED');
+    const list = data.questions || [];
+    const withDate = list.filter((q) => q.date_created);
+    const source = withDate.length > 0 ? withDate : list.slice(0, 5);
+    newQuestions = source
+      .filter((q) => {
+        if (!q.date_created) return true;
+        const t = new Date(q.date_created).getTime();
+        return !Number.isNaN(t) && t > sinceMs;
+      })
+      .map((q) => ({
+        id: String(q.id),
+        itemId: q.item_id ? String(q.item_id) : '',
+        itemTitle: (q.item && q.item.title) || (q.item_id ? `Publicación #${q.item_id}` : 'Publicación'),
+        text: q.text || '',
+        fromNickname: (q.from && q.from.nickname) || '',
+        dateCreated: q.date_created || null,
+      }));
+  } catch (err) {
+    errors.questions = err.message || 'No se pudieron obtener las preguntas';
+    newQuestions = [];
+  }
+
+  res.json({
+    success: true,
+    serverTime,
+    newOrders,
+    newQuestions,
+    counts: { orders: newOrders.length, questions: newQuestions.length },
+    errors,
+  });
 });
 
 // GET /api/mobile/label/:id?format=pdf|zpl  (streams the Mercado Libre label)

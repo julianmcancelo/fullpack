@@ -4,14 +4,18 @@ import com.grana3d.mlpro.core.ApiResult
 import com.grana3d.mlpro.core.Constants
 import com.grana3d.mlpro.core.normalizeApiBase
 import com.grana3d.mlpro.data.remote.dto.ApiErrorDto
+import com.grana3d.mlpro.data.remote.dto.AnswerRequest
+import com.grana3d.mlpro.data.remote.dto.AnswerResponse
 import com.grana3d.mlpro.data.remote.dto.BootstrapResponse
 import com.grana3d.mlpro.data.remote.dto.GitHubReleaseDto
 import com.grana3d.mlpro.data.remote.dto.MeResponse
+import com.grana3d.mlpro.data.remote.dto.MobileUpdatesDto
 import com.grana3d.mlpro.data.remote.dto.PackingUpdateRequest
 import com.grana3d.mlpro.data.remote.dto.PackingUpdateResponse
 import com.grana3d.mlpro.data.remote.dto.PairClaimRequest
 import com.grana3d.mlpro.data.remote.dto.PairClaimResponse
 import com.grana3d.mlpro.data.remote.dto.QueueResponse
+import com.grana3d.mlpro.data.remote.dto.QuestionsResponse
 import com.grana3d.mlpro.data.remote.dto.ScanResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -134,6 +138,62 @@ class MlProApi(private val client: OkHttpClient, private val json: Json) {
             body = "\u007B\u007D".toJsonBody(),
             map = { Unit },
         )
+
+    // -----------------------------------------------------------------------
+    // Preguntas y novedades
+    // -----------------------------------------------------------------------
+
+    /**
+     * Preguntas recibidas (`GET /questions?status=UNANSWERED`).
+     * Se manda `X-Device-Token` como en el resto de las rutas de la app.
+     */
+    suspend fun listQuestions(
+        apiBase: String,
+        token: String,
+        status: String = Constants.QUESTIONS_STATUS_UNANSWERED,
+    ): ApiResult<QuestionsResponse> {
+        val url = route(apiBase, Constants.PATH_QUESTIONS) + "?status=${encode(status)}"
+        return get(
+            url = url,
+            token = token,
+            map = { element -> json.decodeFromJsonElement(QuestionsResponse.serializer(), element) },
+        )
+    }
+
+    /** Responde una pregunta (`POST /questions/{id}/answer` con `{text}`). */
+    suspend fun answerQuestion(
+        apiBase: String,
+        token: String,
+        questionId: String,
+        text: String,
+    ): ApiResult<AnswerResponse> {
+        val payload = json.encodeToString(AnswerRequest.serializer(), AnswerRequest(text = text))
+        return post(
+            url = route(apiBase, "${Constants.PATH_QUESTIONS}/${encode(questionId)}/answer"),
+            token = token,
+            body = payload.toJsonBody(),
+            map = { element -> json.decodeFromJsonElement(AnswerResponse.serializer(), element) },
+        )
+    }
+
+    /**
+     * Novedades desde el cursor (`GET /mobile/updates?since=ISO`).
+     * Si [since] es null se pide sin cursor (el backend devuelve todo lo reciente y el
+     * repositorio decide qué notificar).
+     */
+    suspend fun mobileUpdates(
+        apiBase: String,
+        token: String,
+        since: String?,
+    ): ApiResult<MobileUpdatesDto> {
+        val base = route(apiBase, Constants.PATH_MOBILE_UPDATES)
+        val url = if (since.isNullOrBlank()) base else "$base?since=${encode(since)}"
+        return get(
+            url = url,
+            token = token,
+            map = { element -> json.decodeFromJsonElement(MobileUpdatesDto.serializer(), element) },
+        )
+    }
 
     /**
      * Último GitHub Release publicado (`Ajustes → Buscar actualizaciones`).

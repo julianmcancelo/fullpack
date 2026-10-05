@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- La terminal avisa cada resultado de escaneo con vibración (util/Vibrate.kt). -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Avisos del sistema por ventas/preguntas nuevas (util/Notifications.kt, API 33+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- La app funciona sin cámara: el escáner degrada con un mensaje claro. -->
     <uses-feature
@@ -31,6 +33,7 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.MlPro"
             android:windowSoftInputMode="adjustResize">

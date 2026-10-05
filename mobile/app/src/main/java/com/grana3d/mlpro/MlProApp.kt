@@ -2,6 +2,7 @@ package com.grana3d.mlpro
 
 import android.app.Application
 import com.grana3d.mlpro.core.AppContainer
+import com.grana3d.mlpro.util.Notifications
 
 /**
  * Aplicación de ML Pro Suite.
@@ -19,6 +20,7 @@ class MlProApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         instance = this
+        Notifications.ensureChannels(this)
     }
 
     companion object {

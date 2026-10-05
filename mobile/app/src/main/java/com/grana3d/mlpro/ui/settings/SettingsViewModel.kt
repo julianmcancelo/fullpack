@@ -91,6 +91,9 @@ class SettingsViewModel(
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
+    /** El auto-chequeo de actualizaciones se dispara una sola vez por vida del VM. */
+    private var autoUpdateCheckDone: Boolean = false
+
     init {
         viewModelScope.launch {
             repository.sessionState.collect { session ->
@@ -129,6 +132,15 @@ class SettingsViewModel(
                 is ApiResult.Err -> _state.update {
                     it.copy(isLoading = false, error = result.message)
                 }
+            }
+            // Además del botón manual: al abrir Ajustes se busca actualización una vez,
+            // sin pisar una búsqueda en curso ni un resultado ya mostrado.
+            if (!autoUpdateCheckDone &&
+                _state.value.updateResult == null &&
+                !_state.value.isCheckingUpdates
+            ) {
+                autoUpdateCheckDone = true
+                checkForUpdates()
             }
         }
     }

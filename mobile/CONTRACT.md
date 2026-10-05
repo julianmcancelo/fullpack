@@ -79,6 +79,7 @@ mobile/
     core/Formatters.kt
     util/Beep.kt
     util/Vibrate.kt
+    util/Notifications.kt
     data/local/SessionStore.kt
     data/remote/dto/Dtos.kt
     data/remote/MlProApi.kt
@@ -90,8 +91,9 @@ mobile/
     ui/pairing/{PairingScreen,PairingViewModel}.kt
     ui/camera/QrScannerView.kt
     ui/home/{HomeScreen,HomeViewModel}.kt
+    ui/questions/{QuestionsScreen,QuestionsViewModel}.kt
     ui/terminal/{TerminalScreen,TerminalViewModel}.kt
-    ui/shipments/{ShipmentsScreen,ShipmentsViewModel,ShipmentDetailScreen}.kt
+    ui/shipments/{ShipmentsScreen,ShipmentsViewModel,ShipmentDetailScreen,ShipmentStatus}.kt
     ui/settings/{SettingsScreen,SettingsViewModel}.kt
 ```
 
@@ -116,12 +118,48 @@ Errores de `claim`: `404 invalid_code`, `409 already_claimed`, `410 expired_code
 | --- | --- | --- | --- |
 | GET | `/mobile/bootstrap` | — | `{success, serverTime, user, device, connection, summary, queue[], lowStock[], recentLogs[], errors}` |
 | GET | `/mobile/queue` | — | `{success, total, readyToShip, packed, queue[], serverTime}` |
+| GET | `/mobile/updates?since=ISO8601` | header `X-Device-Token` | `{success, serverTime, newOrders[], newQuestions[], counts:{orders, questions}}` (sin `since`: arrays vacíos + `isInitial:true` para guardar cursor) |
 | POST | `/shipments/scan` | `{rawCode, autoPack:true, scanMode:"pack"\|"dispatch", carrierFilter:"all"}` | ver abajo |
 | PUT | `/shipments/{id}/packing` | `{printed?, packed?, qualityChecked?, dispatchChecked?, note?, statusOverride?}` | `{success, packing}` |
 | GET | `/mobile/label/{id}?format=pdf\|zpl` | header `X-Device-Token` | binario PDF |
 | POST | `/mobile/unlink` | header `X-Device-Token` | `{success, message}` |
+| GET | `/questions?status=UNANSWERED` | header `X-Device-Token` | `{questions[], total, unanswered_count}` |
+| POST | `/questions/{id}/answer` | `{text}`, header `X-Device-Token` | `{success, result}` |
+| GET | `/mobile/updates?since=ISO` | header `X-Device-Token` | `{success, serverTime, since, newOrders[], newQuestions[]}` |
 
 Todas las rutas `/mobile/*` exigen `X-Device-Token`; sin él devuelven `401 device_not_linked`.
+Las rutas `/questions/*` también reciben `X-Device-Token` (la app lo manda siempre).
+
+`GET /questions` responde con las preguntas enriquecidas del backend (forma real de
+Mercado Libre + `item` adjunto):
+```json
+{ "questions": [
+    { "id": 123, "text": "¿Tenés stock?", "status": "UNANSWERED",
+      "date_created": "2026-05-01T12:00:00.000Z", "item_id": "MLA123",
+      "from": { "id": 456 }, "item": { "id": "MLA123", "title": "Producto" } } ],
+  "total": 1, "unanswered_count": 1 }
+```
+
+`POST /questions/{id}/answer` con `{text}` responde `{success:true, result:{...}}`;
+si el texto está vacío el backend devuelve `400 {error:"El texto de la respuesta…"}`.
+
+`GET /mobile/updates?since=2026-05-01T12:00:00.000Z` responde sólo lo creado después
+del cursor (fechas ISO 8601, claves camelCase como el resto de `/mobile/*`).
+Sin `since` (primera sincronización) devuelve arrays vacíos con `isInitial:true` para
+que el cliente guarde el cursor sin notificar nada viejo:
+```json
+{ "success": true, "serverTime": "2026-05-01T12:00:30.000Z",
+  "newOrders": [
+    { "id": "2000012345678901", "totalAmount": 15000, "itemTitle": "Producto",
+      "itemThumbnail": "https://...", "buyerNickname": "juanp",
+      "dateCreated": "2026-05-01T12:00:10.000Z" } ],
+  "newQuestions": [
+    { "id": "123", "itemId": "MLA123", "itemTitle": "Producto", "text": "¿Tenés stock?",
+      "fromNickname": "juanp", "dateCreated": "2026-05-01T12:00:20.000Z" } ],
+  "counts": { "orders": 1, "questions": 1 } }
+```
+La app tolera las claves extra (`counts`, `errors`, `isInitial`, `itemId` en preguntas)
+gracias a `ignoreUnknownKeys`; el `itemId` de `newQuestions` se ignora en esta fase.
 
 ### JSON de apoyo
 
@@ -151,6 +189,18 @@ Todas las rutas `/mobile/*` exigen `X-Device-Token`; sin él devuelven `401 devi
 `lowStock[]`: `{id, title, thumbnail, sku, availableQuantity, price, status}`
 
 `recentLogs[]`: `{id, barcode, shipmentId, action, details, createdAt}`
+
+Respuesta de `GET /mobile/updates?since=ISO8601`:
+```json
+{ "success":true, "serverTime":"2026-05-01T12:00:00.000Z",
+  "newOrders":[ { "id":"2000012345678901", "totalAmount":15000,
+    "itemTitle":"Producto", "itemThumbnail":"https://...",
+    "buyerNickname":"juanp", "dateCreated":"2026-05-01T12:00:00.000Z" } ],
+  "newQuestions":[ { "id":"123", "itemId":"MLA1", "itemTitle":"Producto",
+    "text":"¿Tiene stock?", "fromNickname":"comprador1",
+    "dateCreated":"2026-05-01T12:00:00.000Z" } ],
+  "counts":{ "orders":1, "questions":1 } }
+```
 
 Respuesta de `POST /shipments/scan`:
 ```json
@@ -242,7 +292,9 @@ sealed interface ApiResult<out T> {
 `BootstrapResponse`, `QueueResponse`, `MeResponse`, `RawShipmentDto`,
 `RawReceiverAddressDto`, `RawCityDto`, `RawBuyerDto`, `RawOrderItemDto`,
 `RawItemDto`, `ScanResponse`, `PackingUpdateRequest`, `PackingUpdateResponse`,
-`ApiErrorDto`.
+`QuestionDto` (+ `QuestionItemDto`, `QuestionFromDto`), `QuestionsResponse`,
+`AnswerRequest`, `AnswerResponse`, `UpdateOrderDto`, `UpdateQuestionDto`,
+`MobileUpdatesDto`, `ApiErrorDto`.
 Los campos opcionales van con `= null` y valor por defecto; los numéricos que pueden
 llegar como texto usan `@Serializable(with = ...)` o se declaran `JsonElement` y se
 normalizan en el repositorio (elegí una estrategia y documentala).
@@ -263,8 +315,13 @@ data class SessionState(
     val userAvatar: String? = null,
     val deviceName: String? = null,
     val linkedAt: Long? = null,
+    val lastUpdatesAt: Long? = null,
 ) { val isLinked get() = !deviceToken.isNullOrBlank() }
 ```
+`lastUpdatesAt` es el cursor del polling de novedades (epoch ms de la última consulta
+exitosa a `GET /mobile/updates`; `null` = todavía no se consultó). Se escribe con
+`suspend fun setLastUpdatesAt(now: Long)` (clave `last_updates_at`; se borra al
+desvincular como el resto de la sesión, salvo la URL del servidor).
 Persistencia con `preferencesDataStore(name = "mlpro_session")`.
 
 `data/remote/MlProApi.kt`
@@ -277,6 +334,9 @@ class MlProApi(private val client: OkHttpClient, private val json: Json) {
     suspend fun scan(apiBase: String, token: String, rawCode: String, scanMode: String, carrierFilter: String): ApiResult<ScanResponse>
     suspend fun updatePacking(apiBase: String, token: String, shipmentId: String, body: PackingUpdateRequest): ApiResult<PackingUpdateResponse>
     suspend fun unlink(apiBase: String, token: String): ApiResult<Unit>
+    suspend fun listQuestions(apiBase: String, token: String, status: String = "UNANSWERED"): ApiResult<QuestionsResponse>
+    suspend fun answerQuestion(apiBase: String, token: String, questionId: String, text: String): ApiResult<AnswerResponse>
+    suspend fun mobileUpdates(apiBase: String, token: String, since: String?): ApiResult<MobileUpdatesDto>
     fun labelUrl(apiBase: String, token: String, shipmentId: String, format: String = "pdf"): String
 }
 ```
@@ -286,7 +346,11 @@ serialización): `LinkedAccount`, `LinkedDevice`, `ConnectionState`, `PackingSta
 `Shipment` (= QueueItem mapeado), `LowStockItem`, `ScanLogEntry`, `MobileSummary`,
 `ScanOutcome` (`Found(shipment, alreadyPacked, scanCount, message)`,
 `CarrierMismatch(expected, actual, shipment, message)`, `NotFound(code, message)`,
-`Failure(message)`), `ServerConfig`.
+`Failure(message)`), `ServerConfig`, `Question`
+(`id, title?, text, buyer?, itemId?, itemTitle?, dateCreated?, status?`),
+`MobileUpdates(newOrders, newQuestions, serverTime?)` con
+`UpdateOrder(id, totalAmount?, itemTitle?, itemThumbnail?, buyerNickname?, dateCreated?)`
+y `UpdateQuestion(id, itemTitle?, text?, fromNickname?, dateCreated?)`.
 
 `data/repository/MobileRepository.kt`
 ```kotlin
@@ -302,6 +366,10 @@ class MobileRepository(private val api: MlProApi, private val session: SessionSt
     suspend fun saveNote(shipmentId: String, note: String): ApiResult<PackingState>
     suspend fun setApiBase(apiBase: String)
     suspend fun unlink(): ApiResult<Unit>
+    suspend fun listQuestions(status: String = "UNANSWERED"): ApiResult<List<Question>>
+    suspend fun answerQuestion(questionId: String, text: String): ApiResult<Unit>
+    suspend fun checkMobileUpdates(sinceIso: String?): ApiResult<MobileUpdates>
+    suspend fun saveUpdatesCursor(now: Long)
     fun labelUrl(shipmentId: String, format: String = "pdf"): String?
 }
 data class MobileState(
@@ -315,6 +383,33 @@ data class MobileState(
     val errors: List<String> = emptyList(),
 )
 ```
+
+`checkMobileUpdates(null)` es el cursor inicial: no toca la red y devuelve
+`MobileUpdates` con listas vacías (el llamador guarda el cursor sin notificar).
+`answerQuestion` devuelve `Ok(Unit)` si el backend aceptó; el `Err` trae el mensaje
+real del backend.
+
+Notificaciones del sistema (`util/Notifications.kt`, sin FCM en esta fase):
+```kotlin
+object Notifications {
+    const val EXTRA_OPEN_ROUTE: String // "open_route"
+    const val ROUTE_TERMINAL: String    // "terminal"
+    const val ROUTE_QUESTIONS: String  // "questions"
+    fun ensureChannels(context: Context)
+    fun showSale(context: Context, order: UpdateOrder)
+    fun showQuestion(context: Context, q: UpdateQuestion)
+}
+```
+Dos canales (`"Ventas"` importancia alta + sonido, `"Preguntas"` por defecto), icono
+`ic_launcher`, `PendingIntent` a `MainActivity` con `open_route`. El polling de
+novedades corre en primer plano desde `HomeViewModel.load()` (tras bootstrap exitoso,
+cada 30 s): compara contra el cursor ISO de `lastUpdatesAt`, notifica sólo ids no
+vistos (set en memoria del VM, tope 500) y persiste el cursor. La primera vez sólo
+guarda el cursor. Todo silencioso: un `Err` (red, 404) no muestra banners.
+`HomeViewModel` también refresca `unansweredCount: Int?` (conteo real de
+`listQuestions`; `null` = sin dato, la tarjeta no muestra conteo falso).
+`SettingsViewModel.load()` dispara `checkForUpdates()` automáticamente una vez si
+`updateResult == null && !isCheckingUpdates` (además del botón manual).
 
 `core/Formatters.kt`
 ```kotlin
@@ -422,7 +517,8 @@ Contratos de las pantallas que `AppNav` invoca:
 
 ```kotlin
 @Composable fun PairingScreen(onLinked: () -> Unit)
-@Composable fun HomeScreen(onOpenTerminal: () -> Unit, onOpenShipments: () -> Unit, onOpenSettings: () -> Unit)
+@Composable fun HomeScreen(onOpenTerminal: () -> Unit, onOpenShipments: () -> Unit, onOpenSettings: () -> Unit, onOpenQuestions: () -> Unit = {})
+@Composable fun QuestionsScreen(onBack: () -> Unit)
 @Composable fun TerminalScreen(onBack: () -> Unit, onOpenShipments: () -> Unit)
 @Composable fun ShipmentsScreen(onBack: () -> Unit, onOpenDetail: (String) -> Unit)
 @Composable fun ShipmentDetailScreen(shipmentId: String, onBack: () -> Unit)
@@ -430,13 +526,19 @@ Contratos de las pantallas que `AppNav` invoca:
 ```
 
 Rutas de navegación (string): `pairing`, `home`, `terminal`, `shipments`,
-`shipments/{shipmentId}`, `settings`.
+`shipments/{shipmentId}`, `questions`, `settings`.
+`AppNav(onFinish: () -> Unit = {}, startRoute: String = "home")`: `startRoute` es el
+deep-link de las notificaciones (`"terminal"` o `"questions"`); si no es válida o no
+hay sesión, se usa `home` / `pairing`. `MainActivity` (singleTop) lee el extra
+`open_route` en `onCreate` y `onNewIntent` y lo reenvía a `AppNav`. El Home pide el
+permiso `POST_NOTIFICATIONS` (API 33+) con `rememberLauncherForActivityResult`.
 
 Inyección de dependencias manual (sin librerías):
 
 ```kotlin
 // core/AppContainer.kt   (dueño: capa de datos)
 class AppContainer(context: Context) {
+    val appContext: Context // contexto de aplicación (notificaciones del polling)
     val sessionStore: SessionStore
     val api: MlProApi
     val repository: MobileRepository
@@ -470,7 +572,12 @@ responde), y texto de ayuda de 3 pasos. Nunca dejar la cámara prendida en backg
 
 **Home** — saludo con avatar y nombre, chip de conexión, grilla de 4 KPIs
 (`Por despachar`, `Empaquetados`, `En tránsito`, `Ventas cobradas`), accesos grandes a
-"Terminal de empaque" y "Envíos", lista de stock crítico y últimos escaneos.
+"Terminal de empaque", "Envíos" y "Preguntas" (con badge de pendientes sólo si hay
+conteo real), lista de stock crítico y últimos escaneos.
+
+**Preguntas** — lista de sin responder con skeleton/vacío/error+reintento, buscador y
+pull-to-refresh; cada tarjeta muestra comprador, fecha, texto y publicación, con botón
+"Responder" que abre el campo inline y envía (loading; éxito = snackbar + recarga).
 
 **Terminal** (el corazón) — barra superior con contador de progreso
 (`empaquetados / total`) y `LinearProgressIndicator`; botón enorme "Escanear paquete"

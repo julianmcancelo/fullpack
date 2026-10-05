@@ -163,8 +163,10 @@ fun ShipmentDetailScreen(
             item {
                 MlCard {
                     ShipmentDetailDataRow(label = "Pedido", value = shipment.orderId ?: "—")
-                    ShipmentDetailDataRow(label = "Estado", value = shipment.status ?: "—")
-                    ShipmentDetailDataRow(label = "Subestado", value = shipment.substatus ?: "—")
+                    ShipmentDetailStatusRow(shipment = shipment)
+                    shipment.substatus?.takeIf { it.isNotBlank() }?.let { subestado ->
+                        ShipmentDetailDataRow(label = "Subestado", value = subestado)
+                    }
                     ShipmentDetailDataRow(label = "Comprador", value = shipment.buyerName ?: "—")
                     ShipmentDetailDataRow(label = "Usuario ML", value = shipment.buyerNickname ?: "—")
                     ShipmentDetailDataRow(
@@ -331,6 +333,31 @@ private fun ShipmentDetailHeader(shipment: Shipment, packed: Boolean) {
                 fontWeight = FontWeight.ExtraBold,
                 color = colors.ink,
             )
+        }
+    }
+}
+
+@Composable
+private fun ShipmentDetailStatusRow(shipment: Shipment) {
+    val colors = MlTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Estado",
+            fontSize = 13.sp,
+            color = colors.inkMuted,
+            modifier = Modifier.weight(1f),
+        )
+        MlStatusPill(
+            text = shipment.statusLabel(),
+            tone = shipment.statusTone(),
+            dot = true,
+        )
+        if (shipment.manualStatus) {
+            Spacer(Modifier.width(6.dp))
+            MlBadge(text = "Manual", tone = MlTone.Neutral)
         }
     }
 }

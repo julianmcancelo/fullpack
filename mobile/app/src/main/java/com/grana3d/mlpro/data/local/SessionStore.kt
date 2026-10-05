@@ -30,6 +30,12 @@ data class SessionState(
     val userAvatar: String? = null,
     val deviceName: String? = null,
     val linkedAt: Long? = null,
+    /**
+     * Cursor del polling de novedades (epoch ms de la última consulta exitosa a
+     * `GET /mobile/updates`). `null` = todavía no se consultó: la primera vez se guarda
+     * el cursor sin notificar nada.
+     */
+    val lastUpdatesAt: Long? = null,
 ) {
     val isLinked: Boolean get() = !deviceToken.isNullOrBlank()
 }
@@ -57,6 +63,7 @@ class SessionStore(private val context: Context) {
             userAvatar = prefs[KEY_USER_AVATAR]?.takeIf { it.isNotBlank() },
             deviceName = prefs[KEY_DEVICE_NAME]?.takeIf { it.isNotBlank() },
             linkedAt = prefs[KEY_LINKED_AT]?.takeIf { it > 0L },
+            lastUpdatesAt = prefs[KEY_LAST_UPDATES_AT]?.takeIf { it > 0L },
         )
     }
 
@@ -85,6 +92,15 @@ class SessionStore(private val context: Context) {
         runCatching {
             context.mlProDataStore.edit { prefs ->
                 prefs[KEY_API_BASE] = normalizeApiBase(apiBase)
+            }
+        }
+    }
+
+    /** Guarda el cursor del polling de novedades (epoch ms de la última consulta exitosa). */
+    suspend fun setLastUpdatesAt(now: Long) {
+        runCatching {
+            context.mlProDataStore.edit { prefs ->
+                prefs[KEY_LAST_UPDATES_AT] = now
             }
         }
     }
@@ -131,6 +147,7 @@ class SessionStore(private val context: Context) {
         val KEY_USER_AVATAR = stringPreferencesKey("user_avatar")
         val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
         val KEY_LINKED_AT = longPreferencesKey("linked_at")
+        val KEY_LAST_UPDATES_AT = longPreferencesKey("last_updates_at")
 
         val USER_JSON_LENIENT = Json {
             ignoreUnknownKeys = true

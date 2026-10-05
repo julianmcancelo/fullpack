@@ -55,6 +55,7 @@ import com.grana3d.mlpro.data.repository.MobileRepository
 import com.grana3d.mlpro.ui.components.LocalMlBottomInset
 import com.grana3d.mlpro.ui.home.HomeScreen
 import com.grana3d.mlpro.ui.pairing.PairingScreen
+import com.grana3d.mlpro.ui.questions.QuestionsScreen
 import com.grana3d.mlpro.ui.settings.SettingsScreen
 import com.grana3d.mlpro.ui.shipments.ShipmentDetailScreen
 import com.grana3d.mlpro.ui.shipments.ShipmentsScreen
@@ -73,6 +74,16 @@ private const val ROUTE_SHIPMENTS = "shipments"
 private const val ARG_SHIPMENT_ID = "shipmentId"
 private const val ROUTE_SHIPMENT_DETAIL = "shipments/{$ARG_SHIPMENT_ID}"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_QUESTIONS = "questions"
+
+/** Destinos de primer nivel válidos para el deep-link de notificaciones. */
+private val TOP_LEVEL_ROUTES = setOf(
+    ROUTE_HOME,
+    ROUTE_TERMINAL,
+    ROUTE_SHIPMENTS,
+    ROUTE_SETTINGS,
+    ROUTE_QUESTIONS,
+)
 
 /** Alto reservado por la barra inferior (sin contar el inset de navegación). */
 private val BOTTOM_BAR_HEIGHT = 64.dp
@@ -87,9 +98,12 @@ private val BOTTOM_BAR_HEIGHT = 64.dp
  *
  * @param onFinish se llama cuando termina el ciclo de vinculación (desvincular
  *   desde Ajustes); permite a quien hospeda la app cerrar el flujo.
+ * @param startRoute ruta inicial pedida por quien hospeda (deep-link de las
+ *   notificaciones: `"terminal"` o `"questions"`). Si no es válida o no hay sesión,
+ *   se usa `home` / `pairing` como siempre.
  */
 @Composable
-fun AppNav(onFinish: () -> Unit = {}) {
+fun AppNav(onFinish: () -> Unit = {}, startRoute: String = ROUTE_HOME) {
     val rootViewModel: RootViewModel = viewModel(
         factory = mlViewModelFactory { RootViewModel(it.repository) },
     )
@@ -98,15 +112,21 @@ fun AppNav(onFinish: () -> Unit = {}) {
 
     // null mientras DataStore todavía no respondió: mostramos un arranque mínimo
     // para no parpadear entre pairing y home.
-    var startRoute by remember { mutableStateOf<String?>(null) }
+    var resolvedStart by remember { mutableStateOf<String?>(null) }
+    // Deep-link ya consumido: evita renavegar en cada recomposición.
+    var deepLinkConsumed by remember { mutableStateOf<String?>(null) }
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     LaunchedEffect(session?.isLinked) {
         val linked = session?.isLinked ?: return@LaunchedEffect
 
         // Primer destino: sólo se decide una vez.
-        if (startRoute == null) {
-            startRoute = if (linked) ROUTE_HOME else ROUTE_PAIRING
+        if (resolvedStart == null) {
+            resolvedStart = if (linked) {
+                startRoute.takeIf { it in TOP_LEVEL_ROUTES } ?: ROUTE_HOME
+            } else {
+                ROUTE_PAIRING
+            }
             return@LaunchedEffect
         }
 
@@ -121,7 +141,17 @@ fun AppNav(onFinish: () -> Unit = {}) {
         }
     }
 
-    val showBottomBar = startRoute != null && currentRoute != null && currentRoute != ROUTE_PAIRING
+    // Deep-link en caliente (notificación tocada con la app ya abierta): navega una vez.
+    LaunchedEffect(resolvedStart, startRoute) {
+        val ready = resolvedStart ?: return@LaunchedEffect
+        if (ready == ROUTE_PAIRING) return@LaunchedEffect
+        val target = startRoute.takeIf { it in TOP_LEVEL_ROUTES && it != ready } ?: return@LaunchedEffect
+        if (deepLinkConsumed == target) return@LaunchedEffect
+        deepLinkConsumed = target
+        navController.goTopLevel(target)
+    }
+
+    val showBottomBar = resolvedStart != null && currentRoute != null && currentRoute != ROUTE_PAIRING
     val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val reservedBottom = if (showBottomBar) BOTTOM_BAR_HEIGHT + navigationBarsBottom else navigationBarsBottom
 
@@ -131,7 +161,7 @@ fun AppNav(onFinish: () -> Unit = {}) {
                 .fillMaxSize()
                 .background(MlTheme.colors.app),
         ) {
-            val route = startRoute
+            val route = resolvedStart
             if (route == null) {
                 AppSplash()
             } else {
@@ -148,12 +178,18 @@ fun AppNav(onFinish: () -> Unit = {}) {
                             onOpenTerminal = { navController.goTopLevel(ROUTE_TERMINAL) },
                             onOpenShipments = { navController.goTopLevel(ROUTE_SHIPMENTS) },
                             onOpenSettings = { navController.goTopLevel(ROUTE_SETTINGS) },
+                            onOpenQuestions = { navController.goTopLevel(ROUTE_QUESTIONS) },
                         )
                     }
                     composable(ROUTE_TERMINAL) {
                         TerminalScreen(
                             onBack = { navController.popBackStack() },
                             onOpenShipments = { navController.goTopLevel(ROUTE_SHIPMENTS) },
+                        )
+                    }
+                    composable(ROUTE_QUESTIONS) {
+                        QuestionsScreen(
+                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable(ROUTE_SHIPMENTS) {

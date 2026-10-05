@@ -3,6 +3,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
 require('dotenv').config();
+const { version: backendVersion } = require('../package.json');
 
 const authRoutes = require('./routes/auth.routes');
 const itemsRoutes = require('./routes/items.routes');
@@ -45,6 +46,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Mercado Libre Manager API',
+    version: backendVersion,
     timestamp: new Date().toISOString(),
   });
 });

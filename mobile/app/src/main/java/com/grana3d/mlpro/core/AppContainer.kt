@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit
  */
 class AppContainer(context: Context) {
 
-    private val appContext: Context = context.applicationContext
+    /** Contexto de aplicación (para notificaciones del sistema del polling en primer plano). */
+    val appContext: Context = context.applicationContext
 
     /** Persistencia de la sesión (token de dispositivo, URL base, usuario, linkedAt). */
     val sessionStore: SessionStore = SessionStore(appContext)

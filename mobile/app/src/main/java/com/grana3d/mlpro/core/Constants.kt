@@ -16,8 +16,8 @@ object Constants {
     /** Versión de la app (se envía en `POST /pair/claim` como `appVersion`). */
     const val APP_VERSION: String = "1.1.0"
 
-    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+2`). */
-    const val APP_VERSION_CODE: Int = 3
+    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+4`). */
+    const val APP_VERSION_CODE: Int = 4
 
     /** Repo público donde se publican los APK (`Ajustes → Buscar actualizaciones`). */
     const val GITHUB_OWNER: String = "julianmcancelo"
@@ -59,6 +59,9 @@ object Constants {
     /** Sin filtro de transportista. */
     const val CARRIER_FILTER_ALL: String = "all"
 
+    /** Estado de preguntas pendientes en `GET /questions` (tal como lo pide el backend). */
+    const val QUESTIONS_STATUS_UNANSWERED: String = "UNANSWERED"
+
     // ---------------------------------------------------------------------
     // Rutas del backend
     // ---------------------------------------------------------------------
@@ -70,6 +73,8 @@ object Constants {
     const val PATH_MOBILE_UNLINK: String = "/mobile/unlink"
     const val PATH_SHIPMENTS_SCAN: String = "/shipments/scan"
     const val PATH_SHIPMENTS_PACKING: String = "/shipments"
+    const val PATH_QUESTIONS: String = "/questions"
+    const val PATH_MOBILE_UPDATES: String = "/mobile/updates"
 
     /** Header obligatorio en todas las rutas moviles y en la descarga de etiquetas. */
     const val HEADER_DEVICE_TOKEN: String = "X-Device-Token"

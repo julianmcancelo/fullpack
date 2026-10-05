@@ -1,5 +1,10 @@
 package com.grana3d.mlpro.ui.home
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.List
@@ -32,17 +38,20 @@ import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.grana3d.mlpro.core.formatArsCompact
@@ -50,6 +59,8 @@ import com.grana3d.mlpro.core.formatRelative
 import com.grana3d.mlpro.core.mlViewModelFactory
 import com.grana3d.mlpro.domain.LowStockItem
 import com.grana3d.mlpro.domain.ScanLogEntry
+import com.grana3d.mlpro.domain.Shipment
+import com.grana3d.mlpro.ui.components.MlBadge
 import com.grana3d.mlpro.ui.components.MlButton
 import com.grana3d.mlpro.ui.components.MlButtonVariant
 import com.grana3d.mlpro.ui.components.MlCard
@@ -62,20 +73,47 @@ import com.grana3d.mlpro.ui.components.MlSectionHeader
 import com.grana3d.mlpro.ui.components.MlStatusPill
 import com.grana3d.mlpro.ui.components.MlThumbnail
 import com.grana3d.mlpro.ui.components.MlTone
+import com.grana3d.mlpro.ui.shipments.statusLabel
+import com.grana3d.mlpro.ui.shipments.statusTone
 import com.grana3d.mlpro.ui.theme.MlTheme
 
 /**
  * Pantalla de inicio: saludo, estado de la conexión con Mercado Libre, KPIs del
- * día, accesos grandes a Terminal / Envíos, stock crítico y últimos escaneos.
+ * día, accesos grandes a Terminal / Envíos / Preguntas, stock crítico y últimos escaneos.
  */
 @Composable
 fun HomeScreen(
     onOpenTerminal: () -> Unit,
     onOpenShipments: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenQuestions: () -> Unit = {},
 ) {
-    val vm: HomeViewModel = viewModel(factory = mlViewModelFactory { HomeViewModel(it.repository) })
+    val vm: HomeViewModel = viewModel(
+        factory = mlViewModelFactory {
+            HomeViewModel(it.repository, it.appContext)
+        },
+    )
     val state by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // El permiso de notificaciones (API 33+) se pide una vez desde el Home: sin él, los
+    // avisos de ventas/preguntas nuevas no pueden mostrarse.
+    val notificationsPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ -> }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                runCatching {
+                    notificationsPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        }
+    }
 
     MlScaffold(
         title = "ML Pro Suite",
@@ -139,6 +177,48 @@ fun HomeScreen(
                     icon = Icons.Outlined.List,
                     onClick = onOpenShipments,
                 )
+            }
+            item {
+                HomeAccessCard(
+                    title = "Preguntas",
+                    subtitle = when (val pendientes = state.unansweredCount) {
+                        null -> "Respondé las preguntas de tus compradores."
+                        0 -> "Sin preguntas pendientes. ¡Buen trabajo!"
+                        1 -> "Tenés 1 pregunta sin responder."
+                        else -> "Tenés $pendientes preguntas sin responder."
+                    },
+                    callToAction = "Responder preguntas",
+                    icon = Icons.Outlined.ChatBubbleOutline,
+                    badge = state.unansweredCount?.takeIf { it > 0 }?.toString(),
+                    onClick = onOpenQuestions,
+                )
+            }
+
+            item {
+                MlSectionHeader(
+                    title = "Cola de empaque",
+                    subtitle = if (state.queue.isEmpty()) {
+                        "Sin pendientes"
+                    } else {
+                        "${state.queue.size} paquetes por despachar"
+                    },
+                )
+            }
+            if (state.queue.isEmpty()) {
+                item {
+                    MlEmptyState(
+                        icon = Icons.Outlined.CheckCircle,
+                        title = "Cola vacía",
+                        message = "No hay paquetes pendientes de empaque. ¡Buen trabajo!",
+                    )
+                }
+            } else {
+                items(items = state.queue.take(3)) { shipment ->
+                    HomeQueueRow(
+                        shipment = shipment,
+                        onClick = onOpenShipments,
+                    )
+                }
             }
 
             item {
@@ -329,6 +409,7 @@ private fun HomeAccessCard(
     callToAction: String,
     icon: ImageVector,
     onClick: () -> Unit,
+    badge: String? = null,
 ) {
     val colors = MlTheme.colors
     MlCard(onClick = onClick) {
@@ -349,13 +430,24 @@ private fun HomeAccessCard(
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.4).sp,
-                    color = colors.ink,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.4).sp,
+                        color = colors.ink,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (!badge.isNullOrBlank()) {
+                        Spacer(Modifier.width(8.dp))
+                        MlBadge(
+                            text = badge,
+                            tone = MlTone.Danger,
+                            solid = true,
+                        )
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = subtitle,
@@ -370,6 +462,63 @@ private fun HomeAccessCard(
                     letterSpacing = 0.08.em,
                     color = colors.accent,
                 )
+            }
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Outlined.ArrowForward,
+                contentDescription = null,
+                tint = colors.inkSubtle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeQueueRow(shipment: Shipment, onClick: () -> Unit) {
+    val colors = MlTheme.colors
+    MlCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MlThumbnail(url = shipment.itemThumbnail, size = 48.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = shipment.itemTitle ?: "Producto",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = buildString {
+                        append(shipment.buyerName ?: "Comprador")
+                        val city = shipment.city ?: ""
+                        if (city.isNotBlank()) {
+                            append(" · ")
+                            append(city)
+                        }
+                    },
+                    fontSize = 13.sp,
+                    color = colors.inkMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MlBadge(
+                        text = shipment.logisticLabel ?: "CORREO",
+                        tone = MlTone.Info,
+                    )
+                    MlStatusPill(
+                        text = shipment.statusLabel(),
+                        tone = shipment.statusTone(),
+                        dot = true,
+                    )
+                    if (shipment.manualStatus) {
+                        MlBadge(text = "Manual", tone = MlTone.Neutral)
+                    }
+                }
             }
             Spacer(Modifier.width(8.dp))
             Icon(

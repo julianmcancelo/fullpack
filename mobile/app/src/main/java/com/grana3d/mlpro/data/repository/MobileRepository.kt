@@ -17,11 +17,14 @@ import com.grana3d.mlpro.data.remote.dto.PackingUpdateRequest
 import com.grana3d.mlpro.data.remote.dto.PairClaimRequest
 import com.grana3d.mlpro.data.remote.dto.QueueItemDto
 import com.grana3d.mlpro.data.remote.dto.QueueResponse
+import com.grana3d.mlpro.data.remote.dto.QuestionDto
 import com.grana3d.mlpro.data.remote.dto.RawOrderItemDto
 import com.grana3d.mlpro.data.remote.dto.RawShipmentDto
 import com.grana3d.mlpro.data.remote.dto.ScanLogDto
 import com.grana3d.mlpro.data.remote.dto.ScanResponse
 import com.grana3d.mlpro.data.remote.dto.SummaryDto
+import com.grana3d.mlpro.data.remote.dto.UpdateOrderDto
+import com.grana3d.mlpro.data.remote.dto.UpdateQuestionDto
 import com.grana3d.mlpro.data.remote.dto.UserDto
 import com.grana3d.mlpro.data.remote.dto.asDetailsSummary
 import com.grana3d.mlpro.data.remote.dto.asDoubleOrZero
@@ -34,12 +37,16 @@ import com.grana3d.mlpro.domain.LinkedAccount
 import com.grana3d.mlpro.domain.LinkedDevice
 import com.grana3d.mlpro.domain.LowStockItem
 import com.grana3d.mlpro.domain.MobileSummary
+import com.grana3d.mlpro.domain.MobileUpdates
 import com.grana3d.mlpro.domain.PackingState
+import com.grana3d.mlpro.domain.Question
 import com.grana3d.mlpro.domain.ScanLogEntry
 import com.grana3d.mlpro.domain.ScanMode
 import com.grana3d.mlpro.domain.ScanOutcome
 import com.grana3d.mlpro.domain.Shipment
 import com.grana3d.mlpro.domain.UpdateCheck
+import com.grana3d.mlpro.domain.UpdateOrder
+import com.grana3d.mlpro.domain.UpdateQuestion
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -188,6 +195,97 @@ class MobileRepository(
 
     /** Alias de [bootstrap] para que la Terminal refresque contadores sin tocar su loader. */
     suspend fun refreshSummary(): ApiResult<MobileState> = bootstrap()
+
+    // -----------------------------------------------------------------------
+    // Preguntas y novedades
+    // -----------------------------------------------------------------------
+
+    /** Preguntas sin responder (`GET /questions?status=UNANSWERED`). */
+    suspend fun listQuestions(
+        status: String = Constants.QUESTIONS_STATUS_UNANSWERED,
+    ): ApiResult<List<Question>> {
+        val state = firstSession()
+        val token = state.deviceToken
+        if (token.isNullOrBlank()) return noSession()
+
+        return when (val result = api.listQuestions(state.apiBase, token, status)) {
+            is ApiResult.Ok -> ApiResult.Ok(result.value.questions.map { mapQuestion(it) })
+            is ApiResult.Err -> {
+                invalidateIfUnlinked(result)
+                result
+            }
+        }
+    }
+
+    /**
+     * Responde una pregunta (`POST /questions/{id}/answer`).
+     * Devuelve `Ok(Unit)` si el backend la aceptó; si la rechaza, el `Err` trae el
+     * mensaje real del backend.
+     */
+    suspend fun answerQuestion(questionId: String, text: String): ApiResult<Unit> {
+        val id = questionId.trim()
+        if (id.isEmpty()) {
+            return ApiResult.Err("No se indicó qué pregunta responder.", code = "missing_question_id")
+        }
+        if (text.trim().isEmpty()) {
+            return ApiResult.Err("Escribí una respuesta antes de enviarla.", code = "empty_answer")
+        }
+
+        val state = firstSession()
+        val token = state.deviceToken
+        if (token.isNullOrBlank()) return noSession()
+
+        return when (val result = api.answerQuestion(state.apiBase, token, id, text.trim())) {
+            is ApiResult.Ok -> {
+                if (!result.value.success && !result.value.error.isNullOrBlank()) {
+                    ApiResult.Err(message = result.value.error, code = "answer_rejected")
+                } else {
+                    ApiResult.Ok(Unit)
+                }
+            }
+
+            is ApiResult.Err -> {
+                invalidateIfUnlinked(result)
+                result
+            }
+        }
+    }
+
+    /**
+     * Novedades desde el cursor (`GET /mobile/updates?since=`).
+     * Si [sinceIso] es null es el cursor inicial: no se consulta la red y se devuelven
+     * listas vacías (el llamador guarda el cursor sin notificar nada).
+     */
+    suspend fun checkMobileUpdates(sinceIso: String?): ApiResult<MobileUpdates> {
+        if (sinceIso.isNullOrBlank()) return ApiResult.Ok(MobileUpdates())
+
+        val state = firstSession()
+        val token = state.deviceToken
+        if (token.isNullOrBlank()) return noSession()
+
+        return when (val result = api.mobileUpdates(state.apiBase, token, sinceIso)) {
+            is ApiResult.Ok -> {
+                val dto = result.value
+                ApiResult.Ok(
+                    MobileUpdates(
+                        newOrders = dto.newOrders.map { mapUpdateOrder(it) },
+                        newQuestions = dto.newQuestions.map { mapUpdateQuestion(it) },
+                        serverTime = dto.serverTime?.takeIf { it.isNotBlank() },
+                    ),
+                )
+            }
+
+            is ApiResult.Err -> {
+                invalidateIfUnlinked(result)
+                result
+            }
+        }
+    }
+
+    /** Persiste el cursor del polling de novedades tras una consulta exitosa. */
+    suspend fun saveUpdatesCursor(now: Long) {
+        session.setLastUpdatesAt(now)
+    }
 
     // -----------------------------------------------------------------------
     // Escaneo
@@ -508,6 +606,7 @@ class MobileRepository(
         quantity = dto.quantity?.let { if (it is JsonNull) null else it.asIntOrZero().coerceAtLeast(1) },
         totalAmount = dto.totalAmount?.let { if (it is JsonNull) null else it.asDoubleOrZero() },
         orderDate = dto.orderDate?.takeIf { it.isNotBlank() },
+        manualStatus = dto.manualStatus,
         packing = mapPacking(dto.packing),
     )
 
@@ -603,6 +702,49 @@ class MobileRepository(
         action = dto.action?.takeIf { it.isNotBlank() },
         details = dto.details.asDetailsSummary().takeIf { it.isNotBlank() },
         createdAt = dto.createdAt?.takeIf { it.isNotBlank() },
+    )
+
+    /**
+     * Pregunta de ML ya aplanada. El `itemId` puede venir como `item_id` (ML), como
+     * `itemId` o dentro de `item.id`; el título igual (`item.title` manda sobre `title`
+     * suelto); el comprador sale de `buyer` o de `from.nickname`.
+     */
+    private fun mapQuestion(dto: QuestionDto): Question {
+        val id = dto.id.asIdStringOrNull().orEmpty()
+        val itemId = dto.itemId.asIdStringOrNull()
+            ?: dto.item?.id.asIdStringOrNull()
+        val itemTitle = dto.item?.title?.takeIf { it.isNotBlank() }
+            ?: dto.itemTitle?.takeIf { it.isNotBlank() }
+            ?: dto.title?.takeIf { it.isNotBlank() }
+        val buyer = dto.buyer?.takeIf { it.isNotBlank() }
+            ?: dto.from?.nickname?.takeIf { it.isNotBlank() }
+        return Question(
+            id = id,
+            title = dto.title?.takeIf { it.isNotBlank() },
+            text = dto.text.orEmpty(),
+            buyer = buyer,
+            itemId = itemId?.takeIf { it.isNotBlank() },
+            itemTitle = itemTitle,
+            dateCreated = dto.dateCreated?.takeIf { it.isNotBlank() },
+            status = dto.status?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun mapUpdateOrder(dto: UpdateOrderDto): UpdateOrder = UpdateOrder(
+        id = dto.id.asIdStringOrNull().orEmpty(),
+        totalAmount = dto.totalAmount?.let { if (it is JsonNull) null else it.asDoubleOrZero() },
+        itemTitle = dto.itemTitle?.takeIf { it.isNotBlank() },
+        itemThumbnail = dto.itemThumbnail?.takeIf { it.isNotBlank() },
+        buyerNickname = dto.buyerNickname?.takeIf { it.isNotBlank() },
+        dateCreated = dto.dateCreated?.takeIf { it.isNotBlank() },
+    )
+
+    private fun mapUpdateQuestion(dto: UpdateQuestionDto): UpdateQuestion = UpdateQuestion(
+        id = dto.id.asIdStringOrNull().orEmpty(),
+        itemTitle = dto.itemTitle?.takeIf { it.isNotBlank() },
+        text = dto.text?.takeIf { it.isNotBlank() },
+        fromNickname = dto.fromNickname?.takeIf { it.isNotBlank() },
+        dateCreated = dto.dateCreated?.takeIf { it.isNotBlank() },
     )
 
     private fun mapAccount(dto: UserDto): LinkedAccount = LinkedAccount(

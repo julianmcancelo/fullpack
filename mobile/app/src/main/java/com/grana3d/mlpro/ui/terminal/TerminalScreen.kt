@@ -98,6 +98,8 @@ import com.grana3d.mlpro.ui.components.MlStatusPill
 import com.grana3d.mlpro.ui.components.MlTextField
 import com.grana3d.mlpro.ui.components.MlThumbnail
 import com.grana3d.mlpro.ui.components.MlTone
+import com.grana3d.mlpro.ui.shipments.statusLabel
+import com.grana3d.mlpro.ui.shipments.statusTone
 import com.grana3d.mlpro.ui.theme.DarkColors
 import com.grana3d.mlpro.ui.theme.MlTheme
 import com.grana3d.mlpro.util.Beep
@@ -239,8 +241,15 @@ fun TerminalScreen(
 
                 item {
                     MlCard {
+                        val pendientes = state.pendingCount
                         MlButton(
-                            text = if (state.isBusy) "Procesando…" else "Escanear paquete",
+                            text = if (state.isBusy) {
+                                "Procesando…"
+                            } else if (pendientes == 1) {
+                                "Escanear paquete · 1 pendiente"
+                            } else {
+                                "Escanear paquete · $pendientes pendientes"
+                            },
                             onClick = {
                                 if (hasCameraPermission) {
                                     context.vibrateTick()
@@ -255,6 +264,70 @@ fun TerminalScreen(
                             enabled = !state.isBusy,
                             loading = state.isBusy,
                             fillWidth = true,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "MODO DE ESCANEO",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.08.em,
+                            color = MlTheme.colors.inkSubtle,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            MlButton(
+                                text = "Simple",
+                                onClick = {
+                                    if (hasCameraPermission) {
+                                        context.vibrateTick()
+                                        vm.openScanner(false)
+                                    } else {
+                                        vm.setContinuousScan(false)
+                                        permissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                variant = if (state.continuousScan) {
+                                    MlButtonVariant.Outline
+                                } else {
+                                    MlButtonVariant.Primary
+                                },
+                                enabled = !state.isBusy,
+                                fillWidth = true,
+                            )
+                            MlButton(
+                                text = "Ráfaga",
+                                onClick = {
+                                    if (hasCameraPermission) {
+                                        context.vibrateTick()
+                                        vm.openScanner(true)
+                                    } else {
+                                        vm.setContinuousScan(true)
+                                        permissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                variant = if (state.continuousScan) {
+                                    MlButtonVariant.Accent
+                                } else {
+                                    MlButtonVariant.Outline
+                                },
+                                enabled = !state.isBusy,
+                                fillWidth = true,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = if (state.continuousScan) {
+                                "Ráfaga: la cámara queda abierta para leer etiqueta tras etiqueta."
+                            } else {
+                                "Simple: tras cada lectura se muestra el resultado a pantalla completa."
+                            },
+                            fontSize = 12.sp,
+                            color = MlTheme.colors.inkMuted,
                         )
                         Spacer(Modifier.height(12.dp))
                         MlTextField(
@@ -917,6 +990,17 @@ private fun TerminalQueueCard(shipment: Shipment) {
                     )
                     if (printed) {
                         MlBadge(text = "Impreso", tone = MlTone.Neutral)
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MlStatusPill(
+                        text = shipment.statusLabel(),
+                        tone = shipment.statusTone(),
+                        dot = true,
+                    )
+                    if (shipment.manualStatus) {
+                        MlBadge(text = "Manual", tone = MlTone.Neutral)
                     }
                 }
             }

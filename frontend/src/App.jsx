@@ -7,6 +7,7 @@ import MobileBottomNav from './components/MobileBottomNav';
 import BarcodeScannerModal from './components/BarcodeScannerModal';
 import PairDeviceModal from './components/PairDeviceModal';
 import NewSaleNotification from './components/NewSaleNotification';
+import NewQuestionNotification from './components/NewQuestionNotification';
 import Dashboard from './pages/Dashboard';
 import StockManager from './pages/StockManager';
 import OrdersManager from './pages/OrdersManager';
@@ -20,7 +21,7 @@ import UsersAdminModal from './components/UsersAdminModal';
 import LandingGate from './components/LandingGate';
 import { api } from './services/api';
 import { useAuth } from './context/AuthContext';
-import { playCashRegisterSound } from './utils/audio';
+import { playCashRegisterSound, playSuccessBeep } from './utils/audio';
 import { celebrate } from './utils/celebrate';
 
 export default function App() {
@@ -41,6 +42,11 @@ export default function App() {
   const [newSaleAlert, setNewSaleAlert] = useState(null);
   const knownOrderIdsRef = useRef(new Set());
   const initialOrdersLoadedRef = useRef(false);
+  // Real-time new question listener state (mirror of orders)
+  const [newQuestionAlert, setNewQuestionAlert] = useState(null);
+  const [highlightQuestionId, setHighlightQuestionId] = useState(null);
+  const knownQuestionIdsRef = useRef(new Set());
+  const initialQuestionsLoadedRef = useRef(false);
   const lastStatsAtRef = useRef(0);
 
   useEffect(() => {
@@ -165,6 +171,75 @@ export default function App() {
     return () => clearInterval(interval);
   }, [connection?.connected]);
 
+  // Background Polling for New Unanswered Questions (every 30 seconds)
+  useEffect(() => {
+    if (!connection?.connected) return;
+
+    const checkNewQuestions = async () => {
+      try {
+        const res = await api.getQuestions('UNANSWERED');
+        const questions = res.questions || [];
+
+        if (!initialQuestionsLoadedRef.current) {
+          // Initialize known questions set
+          questions.forEach((q) => knownQuestionIdsRef.current.add(String(q.id)));
+          initialQuestionsLoadedRef.current = true;
+          return;
+        }
+
+        // Check for any newly incoming question not in known set
+        const brandNewQuestions = questions.filter(
+          (q) => !knownQuestionIdsRef.current.has(String(q.id))
+        );
+
+        if (brandNewQuestions.length > 0) {
+          const latestQuestion = brandNewQuestions[0];
+
+          // Add all to known set
+          brandNewQuestions.forEach((q) => knownQuestionIdsRef.current.add(String(q.id)));
+
+          // Audible feedback (different tone from sales)
+          playSuccessBeep();
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+          // Show in-app banner
+          setNewQuestionAlert(latestQuestion);
+
+          // Notify the questions feed so it reloads in background
+          window.dispatchEvent(
+            new CustomEvent('ml:new-questions', {
+              detail: { question: latestQuestion },
+            })
+          );
+
+          // Browser Push Notification
+          if (
+            typeof window !== 'undefined' &&
+            'Notification' in window &&
+            Notification.permission === 'granted'
+          ) {
+            const itemTitle =
+              latestQuestion.item?.title ||
+              (latestQuestion.item_id
+                ? `Publicación #${latestQuestion.item_id}`
+                : 'Mercado Libre');
+            new Notification(`Nueva pregunta en ${itemTitle}`, {
+              body: String(latestQuestion.text || 'Te hicieron una pregunta nueva.').slice(0, 140),
+              icon: '/favicon.svg',
+            });
+          }
+        }
+      } catch (e) {
+        // Silent polling error
+      }
+    };
+
+    // Run first check then interval
+    checkNewQuestions();
+    const interval = setInterval(checkNewQuestions, 30000);
+    return () => clearInterval(interval);
+  }, [connection?.connected]);
+
   // Refresh periódico de stats cada 60s solo si hay conexión
   useEffect(() => {
     if (!connection?.connected) return;
@@ -184,6 +259,13 @@ export default function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
+
+  // Jump to the questions tab focusing the new question
+  const handleViewQuestions = (question) => {
+    if (question?.id != null) setHighlightQuestionId(String(question.id));
+    setNewQuestionAlert(null);
+    setActiveTab('questions');
+  };
 
   // If user is not logged in, display the minimalist Landing Gate
   if (!currentUser) {
@@ -213,6 +295,13 @@ export default function App() {
         sale={newSaleAlert}
         onClose={() => setNewSaleAlert(null)}
         onViewOrders={() => setActiveTab('orders')}
+      />
+
+      {/* Live New Question Toast */}
+      <NewQuestionNotification
+        question={newQuestionAlert}
+        onClose={() => setNewQuestionAlert(null)}
+        onViewQuestions={handleViewQuestions}
       />
 
       {/* Universal Command Palette (Ctrl+K) */}
@@ -291,7 +380,9 @@ export default function App() {
 
           {activeTab === 'mobile_terminal' && <MobileTerminal connection={connection} />}
 
-          {activeTab === 'questions' && <QuestionsManager connection={connection} />}
+          {activeTab === 'questions' && (
+            <QuestionsManager connection={connection} highlightId={highlightQuestionId} />
+          )}
 
           {activeTab === 'calculator' && <FeeCalculator />}
 

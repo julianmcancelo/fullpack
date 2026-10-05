@@ -252,6 +252,18 @@ class TerminalViewModel(
         _state.update { it.copy(isScannerOpen = true, error = null) }
     }
 
+    /**
+     * Abre el escáner directamente en el modo pedido (`false` = simple,
+     * `true` = ráfaga). Delega en [setContinuousScan] para que el conteo de la
+     * sesión continua arranque de cero igual que con el selector manual.
+     * Se mantiene [openScanner] sin argumentos para las llamadas existentes
+     * (botón principal, permiso de cámara) que abren en el modo actual.
+     */
+    fun openScanner(continuous: Boolean) {
+        setContinuousScan(continuous)
+        _state.update { it.copy(isScannerOpen = true, error = null) }
+    }
+
     fun closeScanner() {
         _state.update { it.copy(isScannerOpen = false) }
     }

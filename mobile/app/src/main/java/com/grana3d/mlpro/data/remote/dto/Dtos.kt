@@ -144,6 +144,8 @@ data class QueueItemDto(
     val quantity: JsonElement? = null,
     val totalAmount: JsonElement? = null,
     val orderDate: String? = null,
+    /** `true` cuando el estado fue fijado a mano desde la web (override local). */
+    val manualStatus: Boolean = false,
     val packing: PackingDto? = null,
 )
 
@@ -453,3 +455,106 @@ internal fun JsonElement?.asIntOrNull(): Int? {
     val texto = asStringOrNull() ?: return null
     return texto.toIntOrNull() ?: texto.toDoubleOrNull()?.toInt()
 }
+
+// ---------------------------------------------------------------------------
+// Preguntas de Mercado Libre (`GET /questions`, `POST /questions/:id/answer`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ítem enriquecido que el backend adjunta a cada pregunta (`item: {id, title, ...}`).
+ * Si el backend no pudo enriquecer, manda un objeto mínimo `{id, title:"Publicación #..."}`.
+ */
+@Serializable
+data class QuestionItemDto(
+    val id: JsonElement? = null,
+    val title: String? = null,
+    val thumbnail: String? = null,
+    val price: JsonElement? = null,
+)
+
+/** Comprador que hizo la pregunta (`from: {id, nickname?...}` según lo que mande ML). */
+@Serializable
+data class QuestionFromDto(
+    val id: JsonElement? = null,
+    val nickname: String? = null,
+)
+
+/**
+ * Pregunta recibida de Mercado Libre.
+ *
+ * El cable real es snake_case (`item_id`, `date_created`) y el `id` puede llegar como
+ * número, así que esos campos usan [JsonElement]/`@SerialName` y se normalizan en el
+ * repositorio. `title`/`buyer`/`itemTitle` son las formas camelCase que puede mandar el
+ * backend enriquecido; `item`/`from` son los objetos anidados reales de ML.
+ * Todo opcional con default: una pregunta rara nunca rompe la lista entera.
+ */
+@Serializable
+data class QuestionDto(
+    val id: JsonElement? = null,
+    val title: String? = null,
+    val text: String? = null,
+    val buyer: String? = null,
+    @SerialName("item_id") val itemId: JsonElement? = null,
+    val itemTitle: String? = null,
+    @SerialName("date_created") val dateCreated: String? = null,
+    val status: String? = null,
+    val item: QuestionItemDto? = null,
+    val from: QuestionFromDto? = null,
+)
+
+@Serializable
+data class QuestionsResponse(
+    val questions: List<QuestionDto> = emptyList(),
+    val total: Int = 0,
+    @SerialName("unanswered_count") val unansweredCount: Int = 0,
+)
+
+@Serializable
+data class AnswerRequest(
+    val text: String,
+)
+
+@Serializable
+data class AnswerResponse(
+    val success: Boolean = false,
+    val result: JsonElement? = null,
+    val message: String? = null,
+    val error: String? = null,
+)
+
+// ---------------------------------------------------------------------------
+// Novedades (`GET /mobile/updates?since=`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Venta nueva tal como la define el contrato móvil (claves camelCase, como el resto de
+ * las rutas de novedades). El backend filtra por fecha de creación mayor a `since` (ISO 8601).
+ */
+@Serializable
+data class UpdateOrderDto(
+    val id: JsonElement? = null,
+    val totalAmount: JsonElement? = null,
+    val itemTitle: String? = null,
+    val itemThumbnail: String? = null,
+    val buyerNickname: String? = null,
+    val dateCreated: String? = null,
+)
+
+/** Pregunta nueva tal como la define el contrato móvil (ver [UpdateOrderDto]). */
+@Serializable
+data class UpdateQuestionDto(
+    val id: JsonElement? = null,
+    val itemTitle: String? = null,
+    val text: String? = null,
+    val fromNickname: String? = null,
+    val dateCreated: String? = null,
+)
+
+@Serializable
+data class MobileUpdatesDto(
+    val success: Boolean = false,
+    val serverTime: String? = null,
+    val since: String? = null,
+    val newOrders: List<UpdateOrderDto> = emptyList(),
+    val newQuestions: List<UpdateQuestionDto> = emptyList(),
+)

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 
-export default function QuestionsManager({ connection }) {
+export default function QuestionsManager({ connection, highlightId }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('UNANSWERED'); // UNANSWERED, ALL
@@ -20,22 +20,44 @@ export default function QuestionsManager({ connection }) {
   const [sendingId, setSendingId] = useState(null);
   const [feedback, setFeedback] = useState(null);
 
-  const loadQuestions = async () => {
+  const isHighlighted = (q) => highlightId != null && String(q.id) === String(highlightId);
+
+  const loadQuestions = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.getQuestions(statusFilter);
       setQuestions(res.questions || []);
     } catch (err) {
       console.error('Error al cargar preguntas:', err);
-      setFeedback({ type: 'error', text: err.message });
+      if (!silent) setFeedback({ type: 'error', text: err.message });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadQuestions();
   }, [statusFilter]);
+
+  // Recarga en segundo plano cuando el polling global detecta preguntas nuevas
+  useEffect(() => {
+    const onNewQuestions = () => loadQuestions(true);
+    window.addEventListener('ml:new-questions', onNewQuestions);
+    return () => window.removeEventListener('ml:new-questions', onNewQuestions);
+  }, [statusFilter]);
+
+  // Lleva la pregunta destacada a la vista y enfoca su caja de respuesta
+  useEffect(() => {
+    if (!highlightId || loading) return undefined;
+    const card = document.getElementById(`pregunta-${highlightId}`);
+    if (!card) return undefined;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const timer = setTimeout(() => {
+      const box = document.getElementById(`respuesta-${highlightId}`);
+      if (box) box.focus({ preventScroll: true });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [highlightId, loading, questions]);
 
   const handleSendAnswer = async (questionId) => {
     const text = answerDrafts[questionId];
@@ -200,12 +222,18 @@ export default function QuestionsManager({ connection }) {
             const isUnanswered = q.status === 'UNANSWERED';
             const draft = answerDrafts[q.id] || '';
             const isSending = sendingId === q.id;
+            const highlighted = isHighlighted(q);
 
             return (
               <div
                 key={q.id}
-                className={`card card-hover overflow-hidden ${
-                  isUnanswered ? 'border-warning/40' : ''
+                id={`pregunta-${q.id}`}
+                className={`card card-hover scroll-mt-24 overflow-hidden ${
+                  highlighted
+                    ? 'border-brand/60 ring-2 ring-brand/25'
+                    : isUnanswered
+                      ? 'border-warning/40'
+                      : ''
                 }`}
               >
                 {/* Product Context Banner */}
@@ -271,7 +299,9 @@ export default function QuestionsManager({ connection }) {
                       <div className="field">
                         <label className="label">Tu Respuesta</label>
                         <textarea
+                          id={`respuesta-${q.id}`}
                           rows={2}
+                          autoFocus={highlighted}
                           placeholder="Escribe tu respuesta aquí para responderle en Mercado Libre..."
                           value={draft}
                           onChange={(e) =>
