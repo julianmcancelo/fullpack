@@ -28,7 +28,7 @@ import {
   Send,
   Boxes
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { celebrate } from '../utils/celebrate';
 import { api } from '../services/api';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
@@ -193,7 +193,7 @@ export default function ShipmentsManager({ connection }) {
       );
 
       if (nextVal && field === 'packed') {
-        confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+        celebrate({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
       }
     } catch (err) {
       console.error('Error updating checklist:', err);
@@ -241,7 +241,7 @@ export default function ShipmentsManager({ connection }) {
       );
 
       if (newStatus === 'delivered') {
-        confetti({ particleCount: 40, spread: 60, origin: { y: 0.8 } });
+        celebrate({ particleCount: 40, spread: 60, origin: { y: 0.8 } });
       }
     } catch (err) {
       console.error('Error updating shipment status override:', err);
@@ -269,7 +269,7 @@ export default function ShipmentsManager({ connection }) {
         packed: true,
         qualityChecked: true,
       });
-      confetti({ particleCount: 50, spread: 70, origin: { y: 0.7 } });
+      celebrate({ particleCount: 50, spread: 70, origin: { y: 0.7 } });
       loadShipments();
     } catch (err) {
       console.error('Error in bulk packing:', err);
@@ -945,7 +945,7 @@ export default function ShipmentsManager({ connection }) {
               </div>
 
               <div className="table-wrap">
-                <table className="w-full border-collapse text-left text-xs">
+                <table className="w-full min-w-[560px] border-collapse text-left text-xs">
                   <thead>
                     <tr>
                       <th className="th">Orden #</th>

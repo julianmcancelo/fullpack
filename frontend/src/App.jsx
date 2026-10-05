@@ -21,7 +21,7 @@ import LandingGate from './components/LandingGate';
 import { api } from './services/api';
 import { useAuth } from './context/AuthContext';
 import { playCashRegisterSound } from './utils/audio';
-import confetti from 'canvas-confetti';
+import { celebrate } from './utils/celebrate';
 
 export default function App() {
   const { currentUser, isAdmin } = useAuth();
@@ -126,7 +126,7 @@ export default function App() {
           // Trigger celebratory sale feedback
           playCashRegisterSound();
           if (navigator.vibrate) navigator.vibrate([150, 100, 200, 100, 300]);
-          confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+          celebrate({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
 
           // Show in-app banner
           setNewSaleAlert(latestOrder);

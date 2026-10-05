@@ -30,6 +30,8 @@ data class SettingsUiState(
     val sessionName: String? = null,
     val sessionEmail: String? = null,
     val sessionAvatar: String? = null,
+    /** Hora del servidor del último `bootstrap`: indica cuán frescos están los datos. */
+    val serverTime: String? = null,
 ) {
     val displayName: String
         get() = account?.name?.takeIf { it.isNotBlank() }
@@ -68,6 +70,10 @@ data class SettingsUiState(
 
     val deviceLastSeen: String?
         get() = device?.lastSeenAt
+
+    /** Texto de frescura: fecha legible de la última sincronización con el servidor. */
+    val lastSyncLabel: String
+        get() = serverTime?.takeIf { it.isNotBlank() } ?: ""
 }
 
 /**
@@ -111,6 +117,7 @@ class SettingsViewModel(
                             account = data.account,
                             device = data.device,
                             connection = data.connection,
+                            serverTime = data.serverTime,
                         )
                     }
                 }

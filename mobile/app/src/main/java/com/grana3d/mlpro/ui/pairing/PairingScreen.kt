@@ -1,5 +1,12 @@
 package com.grana3d.mlpro.ui.pairing
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.NoPhotography
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +60,7 @@ import com.grana3d.mlpro.ui.components.MlButton
 import com.grana3d.mlpro.ui.components.MlButtonVariant
 import com.grana3d.mlpro.ui.components.MlCard
 import com.grana3d.mlpro.ui.components.MlDivider
+import com.grana3d.mlpro.ui.components.MlEmptyState
 import com.grana3d.mlpro.ui.components.MlErrorBanner
 import com.grana3d.mlpro.ui.components.MlTextField
 import com.grana3d.mlpro.ui.components.MlTone
@@ -73,6 +82,23 @@ fun PairingScreen(onLinked: () -> Unit) {
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted -> hasCameraPermission = granted }
+
+    fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null),
+        )
+        runCatching { context.startActivity(intent) }
+    }
 
     LaunchedEffect(state.linked) {
         if (state.linked) {
@@ -164,7 +190,7 @@ fun PairingScreen(onLinked: () -> Unit) {
                             color = MlTheme.colors.ink,
                         )
                         Spacer(Modifier.width(MlTheme.spacing.sm))
-                        MlBadge(text = "Mobile", tone = MlTone.Brand)
+                        MlBadge(text = "Móvil", tone = MlTone.Brand)
                     }
                     Text(
                         text = "Escaneá el QR de la web para vincular tu cuenta",
@@ -179,6 +205,32 @@ fun PairingScreen(onLinked: () -> Unit) {
                     message = message,
                     onDismiss = viewModel::dismissError,
                 )
+            }
+
+            if (!hasCameraPermission && !state.connecting) {
+                MlCard {
+                    MlEmptyState(
+                        icon = Icons.Outlined.NoPhotography,
+                        title = "Permiso de cámara denegado",
+                        message = "Para escanear el QR necesitamos la cámara. Podés habilitarla acá o vincular con el código a mano.",
+                        action = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(MlTheme.spacing.sm),
+                            ) {
+                                MlButton(
+                                    text = "Permitir cámara",
+                                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                                    variant = MlButtonVariant.Primary,
+                                )
+                                MlButton(
+                                    text = "Abrir ajustes",
+                                    onClick = { openAppSettings() },
+                                    variant = MlButtonVariant.Outline,
+                                )
+                            }
+                        },
+                    )
+                }
             }
 
             state.notice?.let { message ->
@@ -201,7 +253,7 @@ fun PairingScreen(onLinked: () -> Unit) {
                             modifier = Modifier.weight(1f),
                         )
                         MlButton(
-                            text = "Ok",
+                            text = "Entendido",
                             onClick = viewModel::dismissNotice,
                             variant = MlButtonVariant.Ghost,
                         )

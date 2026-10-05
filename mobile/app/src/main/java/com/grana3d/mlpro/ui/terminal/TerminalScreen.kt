@@ -38,8 +38,12 @@ import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -272,8 +276,8 @@ fun TerminalScreen(
 
                 val card = state.scanCard
                 if (card != null) {
-                    item {
-                        TerminalScanCard(
+                    item(key = "scan-card") {
+                        DismissibleScanCard(
                             card = card,
                             isBusy = state.isBusy,
                             onOpenLabel = openLabel,
@@ -514,6 +518,54 @@ private fun TerminalModeSelector(
                 )
             }
         }
+    }
+}
+
+/**
+ * Resultado de escaneo descartable con una mano: se cierra con el botón visible
+ * "Cerrar resultado" o deslizando la tarjeta hacia cualquier costado.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DismissibleScanCard(
+    card: ScanCardUi,
+    isBusy: Boolean,
+    onOpenLabel: (String) -> Unit,
+    onMarkPacked: (String) -> Unit,
+    onUnmarkPacked: (String) -> Unit,
+    onVerifyDispatch: (String) -> Unit,
+    onOpenNote: (Shipment) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val swipeState = rememberSwipeToDismissBoxState()
+
+    // Cada tarjeta nueva vuelve a su posición: el estado de swipe no se hereda.
+    LaunchedEffect(card) {
+        swipeState.reset()
+    }
+    // El gesto confirma el descarte: avisa al ViewModel una sola vez.
+    LaunchedEffect(swipeState.currentValue) {
+        if (swipeState.currentValue != SwipeToDismissBoxValue.Settled) {
+            onDismiss()
+        }
+    }
+
+    SwipeToDismissBox(
+        state = swipeState,
+        backgroundContent = {},
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = true,
+    ) {
+        TerminalScanCard(
+            card = card,
+            isBusy = isBusy,
+            onOpenLabel = onOpenLabel,
+            onMarkPacked = onMarkPacked,
+            onUnmarkPacked = onUnmarkPacked,
+            onVerifyDispatch = onVerifyDispatch,
+            onOpenNote = onOpenNote,
+            onDismiss = onDismiss,
+        )
     }
 }
 

@@ -3,7 +3,7 @@ import { Key, ArrowRight, ShieldAlert } from 'lucide-react';
 
 export default function ConnectionBanner({ onGoToSettings }) {
   return (
-    <div className="card mb-6 border-warning/30 bg-warning-soft">
+    <div className="card print-hide mb-6 border-warning/30 bg-warning-soft">
       <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-start gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-warning/30 bg-warning/10 text-warning">

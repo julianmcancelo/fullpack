@@ -90,7 +90,7 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
           className="group w-full rounded-2xl border border-accent/30 bg-accent-soft p-3.5 text-left transition-all duration-200 ease-spring hover:border-accent/60 hover:shadow-glow-accent"
         >
           <span className="flex items-center gap-2 text-xs font-extrabold text-accent">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-accent-ink">
               <Smartphone className="h-4 w-4" />
             </span>
             <span>Vincular celular</span>

@@ -59,6 +59,8 @@ data class MobileState(
     val lowStock: List<LowStockItem>,
     val recentLogs: List<ScanLogEntry>,
     val errors: List<String> = emptyList(),
+    /** Hora del servidor (`serverTime` de `bootstrap`): indica cuán frescos están los datos. */
+    val serverTime: String? = null,
 )
 
 /**
@@ -153,6 +155,7 @@ class MobileRepository(
                         lowStock = response.lowStock.map { mapLowStock(it) },
                         recentLogs = response.recentLogs.map { mapScanLog(it) },
                         errors = collectErrors(response),
+                        serverTime = response.serverTime?.takeIf { it.isNotBlank() },
                     ),
                 )
             }

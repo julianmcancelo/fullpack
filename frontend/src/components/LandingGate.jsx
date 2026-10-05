@@ -23,8 +23,8 @@ export default function LandingGate({ onOpenLogin, onOpenRequestAccess }) {
         aria-hidden="true"
         className="surface-grid pointer-events-none absolute inset-0 opacity-70"
         style={{
-          maskImage: 'radial-gradient(88% 62% at 50% 0%, #000 8%, transparent 74%)',
-          WebkitMaskImage: 'radial-gradient(88% 62% at 50% 0%, #000 8%, transparent 74%)',
+          maskImage: 'radial-gradient(88% 62% at 50% 0%, black 8%, transparent 74%)',
+          WebkitMaskImage: 'radial-gradient(88% 62% at 50% 0%, black 8%, transparent 74%)',
         }}
       />
       <div

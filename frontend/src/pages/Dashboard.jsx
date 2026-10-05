@@ -13,7 +13,8 @@ import {
   Sparkles,
   BarChart3,
   CreditCard,
-  CheckCircle2
+  CheckCircle2,
+  ShoppingCart
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -86,6 +87,19 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
     total: Number(d.total) || 0,
     ordenes: Number(d.ordenes) || 0,
   }));
+
+  // Widget "Últimas ventas": ya viene del backend en stats.recentOrders.
+  const recentOrders = Array.isArray(stats?.recentOrders) ? stats.recentOrders : [];
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
   // Errores parciales no bloqueantes (catálogo / ventas / envíos)
   const staleSources = [
@@ -236,15 +250,15 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               <AreaChart data={salesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#FFD600" stopOpacity={0.45} />
-                    <stop offset="55%" stopColor="#FFD600" stopOpacity={0.14} />
-                    <stop offset="100%" stopColor="#F0B800" stopOpacity={0} />
+                    <stop offset="0%" stopColor="rgb(var(--brand))" stopOpacity={0.45} />
+                    <stop offset="55%" stopColor="rgb(var(--brand))" stopOpacity={0.14} />
+                    <stop offset="100%" stopColor="rgb(var(--brand-strong))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.28)" vertical={false} />
-                <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={6} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--line-strong) / 0.6)" vertical={false} />
+                <XAxis dataKey="day" stroke="rgb(var(--ink-subtle))" fontSize={12} tickLine={false} axisLine={false} dy={6} />
                 <YAxis
-                  stroke="#94a3b8"
+                  stroke="rgb(var(--ink-subtle))"
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
@@ -252,21 +266,21 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
                 />
                 <Tooltip
                   formatter={(val) => [formatMoney(val), 'Facturado']}
-                  cursor={{ stroke: 'rgba(148,163,184,0.45)', strokeDasharray: '4 4' }}
+                  cursor={{ stroke: 'rgb(var(--ink-subtle) / 0.5)', strokeDasharray: '4 4' }}
                   contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid rgba(148,163,184,0.25)',
+                    backgroundColor: 'rgb(var(--raised))',
+                    border: '1px solid rgb(var(--line-strong) / 0.6)',
                     borderRadius: '14px',
                     padding: '10px 12px',
-                    color: '#fff',
+                    color: 'rgb(var(--ink))',
                     fontSize: '12px',
                     fontWeight: 'bold',
-                    boxShadow: '0 18px 40px -18px rgba(2,6,23,0.85)',
+                    boxShadow: '0 18px 40px -18px rgb(var(--shadow-color) / 0.45)',
                   }}
-                  labelStyle={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700', marginBottom: '2px' }}
-                  itemStyle={{ color: '#FFD600' }}
+                  labelStyle={{ color: 'rgb(var(--ink-subtle))', fontSize: '11px', fontWeight: '700', marginBottom: '2px' }}
+                  itemStyle={{ color: 'rgb(var(--brand-strong))' }}
                 />
-                <Area type="monotone" dataKey="total" stroke="#FFD600" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
+                <Area type="monotone" dataKey="total" stroke="rgb(var(--brand-strong))" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -425,6 +439,63 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
           </div>
         </div>
 
+      </div>
+
+      {/* Widget: últimas ventas (full-width, debajo de la grilla de 2 columnas) */}
+      <div className="card">
+        <div className="card-head">
+          <h2 className="card-title">
+            <ShoppingCart className="h-4 w-4 shrink-0 text-success" />
+            <span>Últimas ventas</span>
+          </h2>
+          <button
+            onClick={() => onNavigate('orders')}
+            className="btn btn-ghost btn-xs text-accent"
+          >
+            <span>Ver todas</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="card-body space-y-3">
+          {recentOrders.length > 0 ? (
+            recentOrders.map((order) => {
+              const firstItem = order.order_items?.[0]?.item;
+              const title = firstItem?.title || `Orden #${order.id}`;
+              const buyer = order.buyer?.first_name
+                ? `${order.buyer.first_name} ${order.buyer.last_name || ''}`.trim()
+                : order.buyer?.nickname || 'Comprador';
+              return (
+                <button
+                  key={order.id}
+                  type="button"
+                  onClick={() => onNavigate('orders')}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-muted/60 p-3.5 text-left transition duration-200 ease-spring hover:border-line-strong hover:bg-muted"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-ink">{title}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-muted">
+                      <span className="truncate">{buyer}</span>
+                      <span aria-hidden="true">•</span>
+                      <span className="tabular shrink-0">{formatTime(order.date_created)}</span>
+                    </p>
+                  </div>
+                  <span className="tabular shrink-0 text-sm font-extrabold text-ink">
+                    {formatMoney(order.total_amount)}
+                  </span>
+                </button>
+              );
+            })
+          ) : (
+            <div className="empty">
+              <div className="empty-icon">
+                <ShoppingCart className="h-6 w-6" />
+              </div>
+              <p className="empty-title">Sin ventas recientes</p>
+              <p className="empty-text">Cuando se concreten ventas, acá verás las últimas con su monto, comprador y hora.</p>
+            </div>
+          )}
+        </div>
       </div>
 
     </div>

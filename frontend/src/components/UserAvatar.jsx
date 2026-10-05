@@ -9,11 +9,19 @@ function hashHue(str) {
   return hash % 360;
 }
 
+const AVATAR_TONES = [
+  'border-brand/40 bg-brand-soft text-brand-soft-ink',
+  'border-success/25 bg-success-soft text-success',
+  'border-accent/25 bg-accent-soft text-accent',
+  'border-warning/25 bg-warning-soft text-warning',
+  'border-danger/25 bg-danger-soft text-danger',
+];
+
 export default function UserAvatar({ avatar, name, email, size = 40, className = '' }) {
   const hasAvatar = typeof avatar === 'string' && avatar.trim() !== '';
   const source = (name || '').trim() || (email || '').trim();
   const initial = source ? source.charAt(0).toUpperCase() : '?';
-  const hue = hashHue(email || name || '?');
+  const tone = AVATAR_TONES[hashHue(email || name || '?') % AVATAR_TONES.length];
   const dimension = Number(size) || 40;
 
   if (hasAvatar) {
@@ -34,7 +42,7 @@ export default function UserAvatar({ avatar, name, email, size = 40, className =
   return (
     <span
       aria-hidden="true"
-      className={className}
+      className={`${tone} border ${className}`}
       style={{
         width: dimension,
         height: dimension,
@@ -44,8 +52,6 @@ export default function UserAvatar({ avatar, name, email, size = 40, className =
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: hasRoundedClass ? undefined : '9999px',
-        backgroundColor: `hsl(${hue}, 45%, 32%)`,
-        color: '#fff',
         fontWeight: 800,
         fontSize: Math.max(12, Math.round(dimension * 0.42)),
         lineHeight: 1,

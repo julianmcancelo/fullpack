@@ -164,7 +164,7 @@ export default function Navbar({
                   name={currentUser.name}
                   email={currentUser.email}
                   size={28}
-                  className="h-7 w-7 rounded-full border border-brand/40 bg-brand p-0.5"
+                  className="h-7 w-7 rounded-full border border-brand/40 p-0.5"
                 />
                 <span className="hidden max-w-[130px] items-center gap-1.5 lg:flex">
                   <span className="truncate text-xs font-bold text-ink">

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExitToApp
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
@@ -40,11 +41,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.grana3d.mlpro.core.Constants
 import com.grana3d.mlpro.core.formatDateTime
+import com.grana3d.mlpro.core.formatRelative
 import com.grana3d.mlpro.core.mlViewModelFactory
 import com.grana3d.mlpro.ui.components.MlBadge
 import com.grana3d.mlpro.ui.components.MlButton
 import com.grana3d.mlpro.ui.components.MlButtonVariant
 import com.grana3d.mlpro.ui.components.MlCard
+import com.grana3d.mlpro.ui.components.MlEmptyState
 import com.grana3d.mlpro.ui.components.MlErrorBanner
 import com.grana3d.mlpro.ui.components.MlLoadingList
 import com.grana3d.mlpro.ui.components.MlScaffold
@@ -153,6 +156,24 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                         message = state.error ?: "No pudimos cargar la configuración.",
                         onRetry = vm::load,
                         onDismiss = vm::dismissError,
+                    )
+                }
+            }
+
+            if (!state.isLinked && state.account == null && !state.isLoading) {
+                item {
+                    MlEmptyState(
+                        icon = Icons.Outlined.Info,
+                        title = "Sin cuenta vinculada",
+                        message = "Todavía no hay un dispositivo asociado a tu cuenta. Vinculá el celular con el QR de la web para ver los datos acá.",
+                        action = {
+                            MlButton(
+                                text = "Reintentar",
+                                onClick = vm::load,
+                                variant = MlButtonVariant.Outline,
+                                icon = Icons.Outlined.Refresh,
+                            )
+                        },
                     )
                 }
             }
@@ -266,6 +287,14 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                         fontSize = 12.sp,
                         color = colors.inkSubtle,
                     )
+                    Spacer(Modifier.height(10.dp))
+                    val lastSync = state.lastSyncLabel
+                    if (lastSync.isNotBlank()) {
+                        SettingsRow(label = "Última sincronización", value = formatDateTime(lastSync))
+                        SettingsRow(label = "Frescura de los datos", value = formatRelative(lastSync))
+                    } else {
+                        SettingsRow(label = "Última sincronización", value = "Todavía sin sincronizar")
+                    }
                 }
             }
 

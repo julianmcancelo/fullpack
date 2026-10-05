@@ -2279,7 +2279,7 @@ export default function MobileTerminal({ connection }) {
 
               <div className="text-right">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-ink-subtle block">Logística</span>
-                <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-black mt-0.5 ${activeChecklistShipment.meta?.isFlex ? 'bg-amber-400 text-slate-950' : 'bg-brand/20 text-brand-ink'}`}>
+                <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-black mt-0.5 ${activeChecklistShipment.meta?.isFlex ? 'bg-amber-400 text-slate-950' : 'bg-brand/20 text-brand-ink dark:text-brand'}`}>
                   {activeChecklistShipment.meta?.logisticLabel || 'MERCADO ENVÍOS'}
                 </span>
               </div>

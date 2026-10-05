@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import confetti from 'canvas-confetti';
+import { celebrate } from '../utils/celebrate';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -170,7 +170,9 @@ export default function PairDeviceModal({ isOpen, onClose }) {
     QRCode.toDataURL(pairing.qrPayload, {
       width: 512,
       margin: 1,
-      color: { dark: '#0C1322', light: '#FFFFFF' },
+      /* black/white keywords: el QR necesita contraste máximo en el papel/pantalla,
+         no es color de UI, así que no usa tokens del sistema. */
+      color: { dark: 'black', light: 'white' },
     })
       .then((url) => {
         if (!active) return;
@@ -255,7 +257,7 @@ export default function PairDeviceModal({ isOpen, onClose }) {
     celebratedRef.current = true;
 
     try {
-      confetti({ particleCount: 120, spread: 90, startVelocity: 42, origin: { y: 0.6 } });
+      celebrate({ particleCount: 120, spread: 90, startVelocity: 42, origin: { y: 0.6 } });
     } catch {
       /* Decorative only. */
     }

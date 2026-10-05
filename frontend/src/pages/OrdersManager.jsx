@@ -19,6 +19,9 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 
+// Tamaño de página de órdenes (ventana canónica del dashboard) para "Cargar más".
+const ORDERS_PAGE_SIZE = 100;
+
 export default function OrdersManager({ connection }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,12 +30,39 @@ export default function OrdersManager({ connection }) {
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [error, setError] = useState(null);
   const [lastSync, setLastSync] = useState(null);
+  // Paginación "Cargar más": el backend acepta `params.offset` y devuelve `total`.
+  const [totalOrders, setTotalOrders] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastBatchSize, setLastBatchSize] = useState(ORDERS_PAGE_SIZE);
 
   // Refs para que el intervalo background lea filtros/búsqueda vigentes
   const searchRef = useRef(search);
   const statusFilterRef = useRef(statusFilter);
   searchRef.current = search;
   statusFilterRef.current = statusFilter;
+
+  // Construye los params igual que siempre (lógica de datos intacta);
+  // solo suma `offset` cuando se pagina con "Cargar más".
+  const buildOrderParams = (offset = 0, overrideParams = null) => {
+    if (overrideParams && Object.keys(overrideParams).length > 0) {
+      return {
+        limit: ORDERS_PAGE_SIZE,
+        ...overrideParams,
+        ...(offset > 0 ? { offset } : {}),
+      };
+    }
+    const params = { limit: ORDERS_PAGE_SIZE };
+    if (statusFilterRef.current !== 'all') {
+      params.status = statusFilterRef.current;
+    }
+    if (searchRef.current) {
+      params.q = searchRef.current;
+    }
+    if (offset > 0) {
+      params.offset = offset;
+    }
+    return params;
+  };
 
   const loadOrders = async (isBackground = false, overrideParams = null) => {
     try {
@@ -41,20 +71,14 @@ export default function OrdersManager({ connection }) {
         setError(null);
       }
       // Ventana canónica de órdenes (100): la misma del resumen del dashboard.
-      const params = { limit: 100, ...(overrideParams || {}) };
-      const status = statusFilterRef.current;
-      const q = searchRef.current;
-      if (Object.keys(params).length === 0) {
-        if (status !== 'all') {
-          params.status = status;
-        }
-        if (q) {
-          params.q = q;
-        }
-      }
+      const params = buildOrderParams(0, overrideParams);
 
       const res = await api.getOrders(params);
+      // El auto-refresh de 15s (más foco, visibilidad y evento ml:new-orders)
+      // siempre recarga desde offset 0: resetea la lista y la paginación.
       setOrders(res.results || []);
+      setTotalOrders(typeof res.total === 'number' ? res.total : null);
+      setLastBatchSize((res.results || []).length);
       setLastSync(new Date().toISOString());
     } catch (err) {
       console.error('Error al cargar órdenes:', err);
@@ -63,6 +87,33 @@ export default function OrdersManager({ connection }) {
       if (!isBackground) setLoading(false);
     }
   };
+
+  // Anexa la siguiente página (offset = lo ya listado) sin resetear la lista.
+  const handleLoadMore = async () => {
+    if (loading || loadingMore) return;
+    if (totalOrders != null && orders.length >= totalOrders) return;
+    try {
+      setLoadingMore(true);
+      const res = await api.getOrders(buildOrderParams(orders.length));
+      const batch = res.results || [];
+      setOrders((prev) => [...prev, ...batch]);
+      setTotalOrders(typeof res.total === 'number' ? res.total : null);
+      setLastBatchSize(batch.length);
+      setLastSync(new Date().toISOString());
+    } catch (err) {
+      console.error('Error al cargar más órdenes:', err);
+      setError(err.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Se oculta cuando ya se listó el total o la última página trajo menos que el límite.
+  const hasMoreOrders =
+    orders.length > 0 &&
+    (totalOrders != null
+      ? orders.length < totalOrders
+      : lastBatchSize >= ORDERS_PAGE_SIZE);
 
   useEffect(() => {
     loadOrders(false);
@@ -367,7 +418,7 @@ export default function OrdersManager({ connection }) {
                         </div>
                       </div>
 
-                      <div className="modal-body">
+                      <div className="modal-body overflow-x-auto">
 
                         {/* Productos de la orden */}
                         <div className="rounded-xl border border-line bg-muted/50 p-4">
@@ -495,6 +546,25 @@ export default function OrdersManager({ connection }) {
               <p className="empty-title">Sin ventas para mostrar</p>
               <p className="empty-text">No se encontraron ventas con los filtros aplicados.</p>
             </div>
+          </div>
+        )}
+
+        {/* Paginación: anexa la siguiente página con offset */}
+        {hasMoreOrders && (
+          <div className="flex flex-col items-center gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="btn btn-outline btn-sm"
+            >
+              <ChevronDown className={`h-4 w-4 ${loadingMore ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <span>
+                {loadingMore
+                  ? 'Cargando más ventas…'
+                  : `Cargar más ventas (${orders.length}${totalOrders != null ? ` de ${totalOrders}` : ''})`}
+              </span>
+            </button>
           </div>
         )}
       </div>
