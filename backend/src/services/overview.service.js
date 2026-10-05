@@ -71,13 +71,14 @@ function buildSalesByDay(paidOrders) {
 
 // Resumen canónico compartido por /stats/dashboard y /mobile/bootstrap.
 // Dinero y unidades: SOLO órdenes pagadas (las canceladas no son ventas).
-async function getOverview() {
+// `ctx.email` selecciona la cuenta de ML (Fase 2 multi-usuario).
+async function getOverview(ctx = {}) {
   const settings = getSettings();
   const threshold = settings.lowStockThreshold || 5;
 
   const [itemsData, ordersData] = await Promise.all([
-    getItems({ limit: ITEMS_WINDOW }).catch((err) => ({ results: [], total: 0, error: err.message })),
-    getOrders({ limit: ORDERS_WINDOW }).catch((err) => ({ results: [], total: 0, error: err.message })),
+    getItems({ limit: ITEMS_WINDOW }, ctx).catch((err) => ({ results: [], total: 0, error: err.message })),
+    getOrders({ limit: ORDERS_WINDOW }, ctx).catch((err) => ({ results: [], total: 0, error: err.message })),
   ]);
 
   const items = itemsData.results || [];
@@ -87,7 +88,7 @@ async function getOverview() {
   let shipments = [];
   let shipmentsError = null;
   try {
-    const token = await getValidAccessToken();
+    const token = await getValidAccessToken(ctx.email);
     shipments = await buildShipmentsFromOrders(orders.slice(0, SHIPMENTS_WINDOW), token, {});
   } catch (err) {
     shipmentsError = err.message;

@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { getAuth } = require('../db/store');
+const { getAuth, getAuthAsync } = require('../db/store');
 const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
@@ -9,9 +9,9 @@ const ML_API_BASE = 'https://api.mercadolibre.com';
 const ML_PAGE_SIZE = 50;
 const ML_MAX_RESULTS = 200;
 
-async function getOrders(query = {}) {
-  const token = await getValidAccessToken();
-  const auth = getAuth();
+async function getOrders(query = {}, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
+  const auth = ctx.email ? await getAuthAsync(ctx.email) : getAuth();
   if (!token || !auth.userId) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -88,8 +88,8 @@ async function getOrders(query = {}) {
   };
 }
 
-async function getOrderById(orderId) {
-  const token = await getValidAccessToken();
+async function getOrderById(orderId, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }

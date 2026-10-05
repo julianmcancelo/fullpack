@@ -124,6 +124,16 @@ async function initNeonDb() {
 
         CREATE INDEX IF NOT EXISTS ml_sessions_email_idx ON ml_sessions (email);
 
+        -- Phase 2 multi-user: ML credentials are keyed by user email instead of
+        -- a single global row. Legacy single-account row is adopted in code.
+        DO $$ BEGIN
+          BEGIN
+            ALTER TABLE ml_auth ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+        END $$;
+        CREATE UNIQUE INDEX IF NOT EXISTS ml_auth_email_uidx ON ml_auth (email);
+
         -- Mobile device pairing: the web app creates a session and renders it as
         -- a QR code; the phone claims it and receives a long-lived device token.
         CREATE TABLE IF NOT EXISTS ml_pairing_sessions (
@@ -195,39 +205,58 @@ async function isNeonConnected() {
   }
 }
 
-// Auth operations in Neon
-async function getAuthFromNeon() {
+// Auth operations in Neon (Phase 2: keyed by user email)
+function mapAuthRow(row) {
+  if (!row) return null;
+  return {
+    email: row.email || '',
+    accessToken: row.access_token || '',
+    refreshToken: row.refresh_token || '',
+    expiresAt: row.expires_at ? Number(row.expires_at) : null,
+    userId: row.user_id ? Number(row.user_id) : '',
+    nickname: row.nickname || '',
+    siteId: row.site_id || 'MLA',
+    permalink: row.permalink || '',
+  };
+}
+
+async function getAuthFromNeon(email) {
   const p = getPool();
   if (!p) return null;
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return null;
   try {
     await initNeonDb();
-    const res = await p.query('SELECT * FROM ml_auth WHERE id = $1', ['default']);
-    if (res.rows.length === 0) return null;
-    const row = res.rows[0];
-    return {
-      accessToken: row.access_token || '',
-      refreshToken: row.refresh_token || '',
-      expiresAt: row.expires_at ? Number(row.expires_at) : null,
-      userId: row.user_id ? Number(row.user_id) : '',
-      nickname: row.nickname || '',
-      siteId: row.site_id || 'MLA',
-      permalink: row.permalink || '',
-    };
+    const res = await p.query('SELECT * FROM ml_auth WHERE email = $1', [cleanEmail]);
+    if (res.rows.length > 0) return mapAuthRow(res.rows[0]);
+    // One-time adoption: the legacy single-account row belongs to the admin.
+    const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    if (adminEmail && cleanEmail === adminEmail) {
+      const legacy = await p.query('SELECT * FROM ml_auth WHERE id = $1', ['default']);
+      if (legacy.rows.length > 0) {
+        const adopted = mapAuthRow(legacy.rows[0]);
+        await saveAuthToNeon(cleanEmail, adopted);
+        return { ...adopted, email: cleanEmail };
+      }
+    }
+    return null;
   } catch (e) {
     console.warn('Neon getAuth error:', e.message);
     return null;
   }
 }
 
-async function saveAuthToNeon(auth) {
+async function saveAuthToNeon(email, auth) {
   const p = getPool();
   if (!p) return;
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return;
   try {
     await initNeonDb();
     await p.query(
-      `INSERT INTO ml_auth (id, access_token, refresh_token, expires_at, user_id, nickname, site_id, permalink, updated_at)
-       VALUES ('default', $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-       ON CONFLICT (id) DO UPDATE SET
+      `INSERT INTO ml_auth (id, email, access_token, refresh_token, expires_at, user_id, nickname, site_id, permalink, updated_at)
+       VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+       ON CONFLICT (email) DO UPDATE SET
          access_token = EXCLUDED.access_token,
          refresh_token = EXCLUDED.refresh_token,
          expires_at = EXCLUDED.expires_at,
@@ -237,6 +266,7 @@ async function saveAuthToNeon(auth) {
          permalink = EXCLUDED.permalink,
          updated_at = CURRENT_TIMESTAMP`,
       [
+        cleanEmail,
         auth.accessToken || '',
         auth.refreshToken || '',
         auth.expiresAt || null,
@@ -607,6 +637,19 @@ async function deleteSessionFromNeon(token) {
   }
 }
 
+async function clearAuthInNeon(email) {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await p.query('DELETE FROM ml_auth WHERE email = $1', [String(email || '').trim().toLowerCase()]);
+    return true;
+  } catch (e) {
+    console.warn('Neon clearAuth error:', e.message);
+    return false;
+  }
+}
+
 async function purgeExpiredSessionsInNeon() {
   const p = getPool();
   if (!p) return;
@@ -834,6 +877,7 @@ module.exports = {
   createSessionInNeon,
   getSessionFromNeon,
   deleteSessionFromNeon,
+  clearAuthInNeon,
   purgeExpiredSessionsInNeon,
   createPairingSessionInNeon,
   getPairingSessionFromNeon,

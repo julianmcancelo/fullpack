@@ -7,6 +7,7 @@ const { getOrders } = require('../services/mlOrders.service');
 const { getReceivedQuestions } = require('../services/mlQuestions.service');
 const { getOverview } = require('../services/overview.service');
 const { checkConnectionStatus } = require('../services/mlAuth.service');
+const { resolveMlEmail } = require('../middleware/mlContext');
 
 /**
  * Mobile API. Everything here requires a paired device (`X-Device-Token`).
@@ -14,6 +15,9 @@ const { checkConnectionStatus } = require('../services/mlAuth.service');
  */
 
 router.use(requireDevice);
+
+// Cuenta de ML del dispositivo vinculado (Fase 2 multi-usuario).
+const mlCtx = (req) => ({ email: resolveMlEmail(req) });
 
 const LOGISTIC_LABELS = {
   self_service: 'FLEX',
@@ -81,7 +85,7 @@ function sortByOldestFirst(a, b) {
 // GET /api/mobile/me
 router.get('/me', async (req, res) => {
   try {
-    const connection = await checkConnectionStatus().catch(() => ({ connected: false }));
+    const connection = await checkConnectionStatus(resolveMlEmail(req)).catch(() => ({ connected: false }));
     res.json({
       success: true,
       user: req.mobileUser,
@@ -114,7 +118,7 @@ router.get('/queue', async (req, res) => {
       req.query.includePacked === 'true' ||
       req.query.includePacked === true;
 
-    const data = await getShipments({ limit: parsedLimit });
+    const data = await getShipments({ limit: parsedLimit }, {}, mlCtx(req));
     const all = (data.results || []).map(compactShipment);
 
     let queue;
@@ -164,8 +168,8 @@ router.get('/bootstrap', async (req, res) => {
     const threshold = settings.lowStockThreshold || 5;
 
     const [connection, data] = await Promise.all([
-      checkConnectionStatus().catch(() => ({ connected: false })),
-      getOverview().catch((e) => null),
+      checkConnectionStatus(resolveMlEmail(req)).catch(() => ({ connected: false })),
+      getOverview(mlCtx(req)).catch((e) => null),
     ]);
 
     if (!data) throw new Error('No se pudo sincronizar con Mercado Libre.');
@@ -248,7 +252,7 @@ router.get('/updates', async (req, res) => {
   const errors = { orders: null, questions: null };
 
   try {
-    const data = await getOrders({ limit: 20 });
+    const data = await getOrders({ limit: 20 }, mlCtx(req));
     const paid = (data.results || []).filter((o) => o.status === 'paid');
     newOrders = paid
       .filter((o) => {
@@ -272,7 +276,7 @@ router.get('/updates', async (req, res) => {
   }
 
   try {
-    const data = await getReceivedQuestions('UNANSWERED');
+    const data = await getReceivedQuestions('UNANSWERED', mlCtx(req));
     const list = data.questions || [];
     const withDate = list.filter((q) => q.date_created);
     const source = withDate.length > 0 ? withDate : list.slice(0, 5);
@@ -309,7 +313,7 @@ router.get('/updates', async (req, res) => {
 router.get('/label/:id', async (req, res) => {
   try {
     const format = req.query.format === 'zpl' ? 'zpl' : 'pdf';
-    const label = await getShipmentLabel(req.params.id, format);
+    const label = await getShipmentLabel(req.params.id, format, mlCtx(req));
     res.setHeader('Content-Type', label.contentType);
     res.setHeader(
       'Content-Disposition',

@@ -8,6 +8,12 @@ const {
   updatePackingMetadata,
 } = require('../services/mlShipments.service');
 const { addScanLog, getScanLogs, updatePackingMetadataAsync } = require('../db/store');
+const { optionalSession } = require('../middleware/session');
+const { resolveMlEmail } = require('../middleware/mlContext');
+
+// Resuelve la cuenta de ML del llamante (sesión web o dispositivo móvil).
+router.use(optionalSession);
+const mlCtx = (req) => ({ email: resolveMlEmail(req) });
 
 // ---------------------------------------------------------------------------
 // Lectura de etiquetas
@@ -125,7 +131,7 @@ function buscarEnvio(shipments, candidatos) {
 // GET /api/shipments
 router.get('/', async (req, res) => {
   try {
-    const data = await getShipments(req.query);
+    const data = await getShipments(req.query, {}, mlCtx(req));
     res.json({ ...data, serverTime: data.serverTime || new Date().toISOString() });
   } catch (err) {
     res.json({
@@ -162,7 +168,7 @@ router.post('/scan', async (req, res) => {
 
     // Envíos recientes para matchear (sin estados en vivo: rápido y liviano).
     // Si hay match, se enriquece SOLO ese envío con su estado oficial.
-    const shipmentsData = await getShipments({ limit: 60 }, { skipLive: true });
+    const shipmentsData = await getShipments({ limit: 60 }, { skipLive: true }, mlCtx(req));
     let shipments = shipmentsData.results || [];
 
     let { matched, matchedBy, ambiguous, count } = buscarEnvio(shipments, candidatos);
@@ -183,7 +189,7 @@ router.post('/scan', async (req, res) => {
     if (matched) {
       // Enriquece solo el match con el estado oficial en vivo de ML.
       try {
-        const live = await getShipmentLiveStatus(matched.id);
+        const live = await getShipmentLiveStatus(matched.id, mlCtx(req));
         matched = {
           ...matched,
           status: matched.packing?.statusOverride || live.status || matched.status,
@@ -367,7 +373,7 @@ router.post('/scan', async (req, res) => {
 // GET /api/shipments/:id/status
 router.get('/:id/status', async (req, res) => {
   try {
-    const data = await getShipmentLiveStatus(req.params.id);
+    const data = await getShipmentLiveStatus(req.params.id, mlCtx(req));
     res.json({ success: true, ...data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -378,7 +384,7 @@ router.get('/:id/status', async (req, res) => {
 router.get('/:id/label', async (req, res) => {
   try {
     const format = req.query.format || 'pdf';
-    const labelData = await getShipmentLabel(req.params.id, format);
+    const labelData = await getShipmentLabel(req.params.id, format, mlCtx(req));
 
     res.setHeader('Content-Type', labelData.contentType);
     res.setHeader('Content-Disposition', `inline; filename="etiqueta-${req.params.id}.${format}"`);

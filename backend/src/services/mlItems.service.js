@@ -1,12 +1,12 @@
 const axios = require('axios');
-const { getSettings, getAuth } = require('../db/store');
+const { getSettings, getAuth, getAuthAsync } = require('../db/store');
 const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
-async function getItems(query = {}) {
-  const token = await getValidAccessToken();
-  const auth = getAuth();
+async function getItems(query = {}, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
+  const auth = ctx.email ? await getAuthAsync(ctx.email) : getAuth();
   if (!token || !auth.userId) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre con tus credenciales primero.');
   }
@@ -78,8 +78,8 @@ async function getItems(query = {}) {
   };
 }
 
-async function getItemById(itemId) {
-  const token = await getValidAccessToken();
+async function getItemById(itemId, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -90,13 +90,13 @@ async function getItemById(itemId) {
   return res.data;
 }
 
-async function updateStock(itemId, quantity, variationId = null) {
+async function updateStock(itemId, quantity, variationId = null, ctx = {}) {
   const numQuantity = parseInt(quantity, 10);
   if (isNaN(numQuantity) || numQuantity < 0) {
     throw new Error('La cantidad de stock debe ser un número entero mayor o igual a 0.');
   }
 
-  const token = await getValidAccessToken();
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -131,13 +131,13 @@ async function updateStock(itemId, quantity, variationId = null) {
   };
 }
 
-async function updatePrice(itemId, price, variationId = null) {
+async function updatePrice(itemId, price, variationId = null, ctx = {}) {
   const numPrice = parseFloat(price);
   if (isNaN(numPrice) || numPrice <= 0) {
     throw new Error('El precio debe ser un número válido mayor a 0.');
   }
 
-  const token = await getValidAccessToken();
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -172,12 +172,12 @@ async function updatePrice(itemId, price, variationId = null) {
   };
 }
 
-async function toggleItemStatus(itemId, newStatus) {
+async function toggleItemStatus(itemId, newStatus, ctx = {}) {
   if (!['active', 'paused', 'closed'].includes(newStatus)) {
     throw new Error(`Estado '${newStatus}' no válido. Valores permitidos: active, paused, closed.`);
   }
 
-  const token = await getValidAccessToken();
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -200,17 +200,17 @@ async function toggleItemStatus(itemId, newStatus) {
   };
 }
 
-async function batchUpdateStock(updates) {
+async function batchUpdateStock(updates, ctx = {}) {
   // updates: array of { itemId, variationId, available_quantity, price }
   const results = [];
   for (const item of updates) {
     try {
       let res;
       if (item.available_quantity !== undefined) {
-        res = await updateStock(item.itemId, item.available_quantity, item.variationId);
+        res = await updateStock(item.itemId, item.available_quantity, item.variationId, ctx);
       }
       if (item.price !== undefined) {
-        res = await updatePrice(item.itemId, item.price, item.variationId);
+        res = await updatePrice(item.itemId, item.price, item.variationId, ctx);
       }
       results.push({ ...item, success: true, res });
     } catch (err) {

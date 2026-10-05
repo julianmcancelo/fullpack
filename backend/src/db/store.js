@@ -109,6 +109,7 @@ function readDb() {
       pairingSessions: parsed.pairingSessions || [],
       devices: parsed.devices || [],
       sessions: parsed.sessions || [],
+      authByEmail: parsed.authByEmail || {},
     };
     return inMemoryCache;
   } catch (err) {
@@ -133,7 +134,8 @@ function writeDb(data) {
 // Background sync from Neon if available
 (async () => {
   try {
-    const neonAuth = await neon.getAuthFromNeon();
+    const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    const neonAuth = adminEmail ? await neon.getAuthFromNeon(adminEmail) : null;
     if (neonAuth && neonAuth.accessToken) {
       const db = readDb();
       db.auth = { ...db.auth, ...neonAuth };
@@ -184,24 +186,75 @@ function updateSettings(newSettings) {
   return db.settings;
 }
 
+function emptyAuth() {
+  return { ...defaultData.auth };
+}
+
+// Phase 2 multi-user: credenciales de ML por email de cuenta.
+// Sin email se usa el legado global (compatibilidad: instancia de una cuenta).
+async function getAuthAsync(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (cleanEmail) {
+    try {
+      const neonAuth = await neon.getAuthFromNeon(cleanEmail);
+      if (neonAuth && neonAuth.accessToken) return neonAuth;
+    } catch {}
+    const db = readDb();
+    const local = (db.authByEmail || {})[cleanEmail];
+    if (local && local.accessToken) return local;
+  }
+  return getAuth();
+}
+
 function getAuth() {
   const db = readDb();
   return db.auth;
+}
+
+async function updateAuthAsync(email, newAuth) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return updateAuth(newAuth);
+  try {
+    await neon.saveAuthToNeon(cleanEmail, { ...emptyAuth(), ...newAuth });
+  } catch (e) {
+    console.warn('Neon saveAuth failed:', e.message);
+  }
+  const db = readDb();
+  if (!db.authByEmail) db.authByEmail = {};
+  db.authByEmail[cleanEmail] = { ...(db.authByEmail[cleanEmail] || emptyAuth()), ...newAuth };
+  writeDb(db);
+  return db.authByEmail[cleanEmail];
 }
 
 function updateAuth(newAuth) {
   const db = readDb();
   db.auth = { ...db.auth, ...newAuth };
   writeDb(db);
-  neon.saveAuthToNeon(db.auth).catch(() => {});
+  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (adminEmail) neon.saveAuthToNeon(adminEmail, db.auth).catch(() => {});
   return db.auth;
+}
+
+async function clearAuthAsync(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return clearAuth();
+  try {
+    await neon.clearAuthInNeon(cleanEmail);
+  } catch {}
+  const db = readDb();
+  if (db.authByEmail) {
+    delete db.authByEmail[cleanEmail];
+    writeDb(db);
+  }
+  return emptyAuth();
 }
 
 function clearAuth() {
   const db = readDb();
   db.auth = { ...defaultData.auth };
   writeDb(db);
-  neon.saveAuthToNeon(db.auth).catch(() => {});
+  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (adminEmail) neon.clearAuthInNeon(adminEmail).catch(() => {});
   return db.auth;
 }
 
@@ -699,6 +752,9 @@ module.exports = {
   createSession,
   getSessionByToken,
   deleteSession,
+  getAuthAsync,
+  updateAuthAsync,
+  clearAuthAsync,
   createPairingSession,
   getPairingSession,
   claimPairingSession,

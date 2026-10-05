@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { getSettings, getAuth, updateAuth, clearAuth } = require('../db/store');
+const { getSettings, getAuth, getAuthAsync, updateAuth, updateAuthAsync, clearAuth, clearAuthAsync } = require('../db/store');
 
 const ML_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token';
 const ML_USERS_ME_URL = 'https://api.mercadolibre.com/users/me';
@@ -15,17 +15,19 @@ const AUTH_DOMAINS = {
   MPE: 'https://auth.mercadolibre.com.pe/authorization',
 };
 
-function getAuthUrl() {
+function getAuthUrl(sessionToken = '') {
   const settings = getSettings();
   if (!settings.appId) {
     throw new Error('Debes configurar tu APP_ID en la sección de Ajustes primero.');
   }
   const domain = AUTH_DOMAINS[settings.siteId] || 'https://auth.mercadolibre.com.ar/authorization';
   const redirectUri = encodeURIComponent(settings.redirectUri);
-  return `${domain}?response_type=code&client_id=${settings.appId}&redirect_uri=${redirectUri}`;
+  // `state` ata los tokens resultantes a la cuenta que inició el flujo (Fase 2).
+  const state = sessionToken ? `&state=${encodeURIComponent(String(sessionToken).trim())}` : '';
+  return `${domain}?response_type=code&client_id=${settings.appId}&redirect_uri=${redirectUri}${state}`;
 }
 
-async function exchangeCodeForToken(code) {
+async function exchangeCodeForToken(code, email = '') {
   const settings = getSettings();
   if (!settings.appId || !settings.clientSecret) {
     throw new Error('Faltan APP_ID o CLIENT_SECRET en los ajustes.');
@@ -59,7 +61,7 @@ async function exchangeCodeForToken(code) {
     console.warn('Advertencia al consultar /users/me:', uErr.message);
   }
 
-  const updated = updateAuth({
+  const updated = await updateAuthAsync(email, {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt,
@@ -72,14 +74,14 @@ async function exchangeCodeForToken(code) {
   return updated;
 }
 
-async function saveManualToken(accessToken, refreshToken = '', userId = '') {
+async function saveManualToken(accessToken, refreshToken = '', userId = '', email = '') {
   // Validate token directly with Mercado Libre /users/me
   const userRes = await axios.get(ML_USERS_ME_URL, {
     headers: { Authorization: `Bearer ${accessToken.trim()}` },
   });
 
   const userData = userRes.data;
-  const updated = updateAuth({
+  const updated = await updateAuthAsync(email, {
     accessToken: accessToken.trim(),
     refreshToken: refreshToken.trim(),
     expiresAt: Date.now() + 6 * 3600 * 1000,
@@ -96,9 +98,9 @@ async function saveManualToken(accessToken, refreshToken = '', userId = '') {
   };
 }
 
-async function refreshAccessToken() {
+async function refreshAccessToken(email = '') {
   const settings = getSettings();
-  const auth = getAuth();
+  const auth = email ? await getAuthAsync(email) : getAuth();
 
   if (!auth.refreshToken) {
     throw new Error('No hay Refresh Token disponible para renovar la sesión.');
@@ -121,7 +123,7 @@ async function refreshAccessToken() {
   const data = response.data;
   const expiresAt = Date.now() + (data.expires_in || 21600) * 1000;
 
-  return updateAuth({
+  return updateAuthAsync(email, {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt,
@@ -129,8 +131,8 @@ async function refreshAccessToken() {
   });
 }
 
-async function getValidAccessToken() {
-  const auth = getAuth();
+async function getValidAccessToken(email = '') {
+  const auth = email ? await getAuthAsync(email) : getAuth();
   if (!auth.accessToken) {
     return null;
   }
@@ -138,7 +140,7 @@ async function getValidAccessToken() {
   // If token expires in less than 10 minutes and we have a refresh token, auto-refresh
   if (auth.expiresAt && Date.now() > auth.expiresAt - 10 * 60 * 1000 && auth.refreshToken) {
     try {
-      const refreshed = await refreshAccessToken();
+      const refreshed = await refreshAccessToken(email);
       return refreshed.accessToken;
     } catch (err) {
       console.error('Error al autorenovar token:', err.response?.data || err.message);
@@ -149,8 +151,8 @@ async function getValidAccessToken() {
   return auth.accessToken;
 }
 
-async function checkConnectionStatus() {
-  const auth = getAuth();
+async function checkConnectionStatus(email = '') {
+  const auth = email ? await getAuthAsync(email) : getAuth();
   if (!auth.accessToken) {
     return {
       connected: false,
@@ -159,7 +161,7 @@ async function checkConnectionStatus() {
   }
 
   try {
-    const token = await getValidAccessToken();
+    const token = await getValidAccessToken(email);
     const res = await axios.get(ML_USERS_ME_URL, {
       headers: { Authorization: `Bearer ${token}` },
     });

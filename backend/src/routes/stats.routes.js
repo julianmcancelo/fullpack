@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const { getOverview } = require('../services/overview.service');
+const { optionalSession } = require('../middleware/session');
+const { resolveMlEmail } = require('../middleware/mlContext');
+
+// Resuelve la cuenta de ML del llamante (sesión web o dispositivo móvil).
+router.use(optionalSession);
 
 // GET /api/stats/dashboard (resumen canónico compartido con la app móvil)
 router.get('/dashboard', async (req, res) => {
   try {
-    const data = await getOverview();
+    const data = await getOverview({ email: resolveMlEmail(req) });
 
     res.json({
       summary: data.summary,

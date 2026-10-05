@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { getAuth, getPackingMetadata, updatePackingMetadata, updatePackingMetadataAsync, refreshPackingFromNeon } = require('../db/store');
+const { getAuth, getAuthAsync, getPackingMetadata, updatePackingMetadata, updatePackingMetadataAsync, refreshPackingFromNeon } = require('../db/store');
 const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
@@ -96,9 +96,9 @@ async function buildShipmentsFromOrders(orders, token, options = {}) {
   return shipmentsList;
 }
 
-async function getShipments(query = {}, options = {}) {
-  const token = await getValidAccessToken();
-  const auth = getAuth();
+async function getShipments(query = {}, options = {}, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
+  const auth = ctx.email ? await getAuthAsync(ctx.email) : getAuth();
   if (!token || !auth.userId) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -113,7 +113,7 @@ async function getShipments(query = {}, options = {}) {
     q: query.q,
     dateFrom: query.dateFrom,
     dateTo: query.dateTo,
-  });
+  }, ctx);
   const orders = ordersData.results || [];
 
   const shipmentsList = await buildShipmentsFromOrders(orders, token, options);
@@ -157,8 +157,8 @@ async function getShipments(query = {}, options = {}) {
   };
 }
 
-async function getShipmentLiveStatus(shipmentId) {
-  const token = await getValidAccessToken();
+async function getShipmentLiveStatus(shipmentId, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -180,8 +180,8 @@ async function getShipmentLiveStatus(shipmentId) {
   };
 }
 
-async function getShipmentDetail(shipmentId) {
-  const token = await getValidAccessToken();
+async function getShipmentDetail(shipmentId, ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
@@ -192,8 +192,8 @@ async function getShipmentDetail(shipmentId) {
   return res.data;
 }
 
-async function getShipmentLabel(shipmentId, format = 'pdf') {
-  const token = await getValidAccessToken();
+async function getShipmentLabel(shipmentId, format = 'pdf', ctx = {}) {
+  const token = await getValidAccessToken(ctx.email);
   if (!token) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
