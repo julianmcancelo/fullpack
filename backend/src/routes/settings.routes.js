@@ -45,4 +45,15 @@ router.post('/', (req, res) => {
   }
 });
 
+// GET /api/settings/database (Get Neon status)
+router.get('/database', async (req, res) => {
+  try {
+    const { getDatabaseStatus } = require('../db/store');
+    const status = await getDatabaseStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -425,6 +425,35 @@ export default function Settings({ connection, onRefreshStatus, onRefreshAllData
         </form>
       </div>
 
+      {/* Neon PostgreSQL Cloud Database Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
+          <div className="p-2 bg-emerald-100 rounded-xl text-emerald-900">
+            <ShieldCheck className="w-5 h-5 text-emerald-700" />
+          </div>
+          <div>
+            <h2 className="font-bold text-base text-slate-900">
+              Base de Datos Cloud: Neon PostgreSQL
+            </h2>
+            <p className="text-xs text-slate-500">
+              Persistencia permanente de tokens OAuth, listas de empaque, estados de calidad y logs de escaneo.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2.5">
+          <p className="text-slate-700 leading-relaxed font-medium">
+            El sistema cuenta con soporte nativo para <b>Neon PostgreSQL Serverless</b>. Si agregas tu variable <code className="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[11px]">DATABASE_URL</code> en el panel de Vercel (o en tu archivo <code className="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[11px]">.env</code>), se crearán y sincronizarán automáticamente las tablas:
+          </p>
+          <ul className="list-disc list-inside text-slate-600 space-y-1 pl-1 font-mono text-[11px]">
+            <li><b>ml_auth</b>: Tokens de acceso y credenciales @GRANA3DOK</li>
+            <li><b>ml_settings</b>: Preferencias y configuración de la tienda</li>
+            <li><b>ml_packing_metadata</b>: Control de calidad, checklist y estados de empaque</li>
+            <li><b>ml_scan_logs</b>: Auditoría histórica de cada escaneo QR y código de barras</li>
+          </ul>
+        </div>
+      </div>
+
     </div>
   );
 }

@@ -13,37 +13,59 @@ import {
   Printer,
   Sparkles,
   MapPin,
-  Search
+  Search,
+  History,
+  Flashlight,
+  SwitchCamera,
+  Layers,
+  Check,
+  RotateCcw,
+  Database,
+  ExternalLink
 } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
 import { playSuccessBeep, playErrorBeep } from '../utils/audio';
 import { api } from '../services/api';
 
 export default function MobileTerminal({ connection }) {
+  const [activeTab, setActiveTab] = useState('scanner'); // 'scanner', 'shipments', 'history'
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [autoPackOnScan, setAutoPackOnScan] = useState(true);
   const [lastScanned, setLastScanned] = useState(null);
   const [cameraError, setCameraError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [manualCode, setManualCode] = useState('');
+  const [scanLogs, setScanLogs] = useState([]);
+  const [dbStatus, setDbStatus] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'packed'
+  const [isProcessingScan, setIsProcessingScan] = useState(false);
+  
   const html5QrCodeRef = useRef(null);
 
-  const loadShipments = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const res = await api.getShipments({ status: 'ready_to_ship' });
-      setShipments(res.results || []);
+      const [shipmentsRes, logsRes, dbRes] = await Promise.all([
+        api.getShipments({ limit: 50 }).catch(() => ({ results: [] })),
+        api.getScanLogs().catch(() => ({ logs: [] })),
+        api.getDatabaseStatus().catch(() => null),
+      ]);
+      setShipments(shipmentsRes.results || []);
+      setScanLogs(logsRes.logs || []);
+      setDbStatus(dbRes);
     } catch (err) {
-      console.error('Error al cargar envíos para móvil:', err);
+      console.error('Error al cargar datos móviles:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadShipments();
+    loadData();
     return () => {
       stopCamera();
     };
@@ -56,12 +78,28 @@ export default function MobileTerminal({ connection }) {
         await stopCamera();
       }
 
-      const html5QrCode = new Html5Qrcode("mobile-reader");
+      // Support QR and all common 1D barcodes used on shipping labels (Code 128, EAN 13, etc.)
+      const formats = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.PDF_417,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+      ];
+
+      const html5QrCode = new Html5Qrcode("mobile-camera-viewfinder", { formatsToSupport: formats });
       html5QrCodeRef.current = html5QrCode;
 
       const config = {
-        fps: 15,
-        qrbox: { width: 220, height: 220 },
+        fps: 20,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          return {
+            width: Math.floor(minEdge * 0.8),
+            height: Math.floor(minEdge * 0.6),
+          };
+        },
         aspectRatio: 1.0,
       };
 
@@ -69,85 +107,135 @@ export default function MobileTerminal({ connection }) {
         { facingMode: "environment" },
         config,
         (decodedText) => {
-          handleCodeDetected(decodedText);
+          processScannedCode(decodedText);
         },
         () => {}
       );
       setScanning(true);
     } catch (err) {
       console.warn("Camera start failed:", err);
-      setCameraError("No se pudo iniciar la cámara trasera del dispositivo.");
+      setCameraError("No se pudo acceder a la cámara trasera. Verificá los permisos del navegador en tu celular.");
       setScanning(false);
     }
   };
 
   const stopCamera = async () => {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+    if (html5QrCodeRef.current) {
       try {
-        await html5QrCodeRef.current.stop();
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
         html5QrCodeRef.current.clear();
       } catch (e) {
-        console.warn(e);
+        console.warn('Error closing camera:', e);
       }
       html5QrCodeRef.current = null;
     }
     setScanning(false);
   };
 
-  const handleCodeDetected = async (rawCode) => {
-    if (!rawCode || !rawCode.trim()) return;
-    const clean = rawCode.trim();
+  const processScannedCode = async (rawCode) => {
+    if (!rawCode || isProcessingScan) return;
+    setIsProcessingScan(true);
 
-    const matched = shipments.find(s => 
-      String(s.id).includes(clean) ||
-      String(s.order_id).includes(clean) ||
-      (s.tracking_number && s.tracking_number.toLowerCase() === clean.toLowerCase()) ||
-      clean.includes(String(s.id)) ||
-      clean.includes(String(s.order_id))
-    );
+    try {
+      const res = await api.scanShipment(rawCode, autoPackOnScan);
 
-    if (matched) {
-      if (soundEnabled) playSuccessBeep();
-      if (navigator.vibrate) navigator.vibrate([60, 40, 80]); // Haptic pulse
-      confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+      if (res.found && res.shipment) {
+        if (soundEnabled) playSuccessBeep();
+        if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
+        confetti({ particleCount: 45, spread: 70, origin: { y: 0.65 } });
 
-      try {
-        await api.updateShipmentPacking(matched.id, {
-          packed: true,
-          printed: true,
-          qualityChecked: true,
-        });
-
+        // Update shipment in local state
         setShipments(prev =>
-          prev.map(s =>
-            s.id === matched.id
-              ? { ...s, packing: { ...(s.packing || {}), packed: true, printed: true, qualityChecked: true } }
-              : s
-          )
+          prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
         );
 
         setLastScanned({
           success: true,
-          shipment: matched,
-          message: `¡Orden #${matched.order_id} verificada con éxito!`,
+          shipment: res.shipment,
+          alreadyPacked: res.alreadyPacked,
+          message: res.message,
+          timestamp: new Date().toLocaleTimeString('es-AR'),
         });
-      } catch (e) {
-        console.error(e);
+      } else {
+        if (soundEnabled) playErrorBeep();
+        if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+
+        setLastScanned({
+          success: false,
+          code: res.scannedCode || rawCode,
+          message: res.message || `Código "${rawCode}" no encontrado en envíos activos.`,
+          timestamp: new Date().toLocaleTimeString('es-AR'),
+        });
       }
-    } else {
+
+      // Reload scan logs in background
+      api.getScanLogs().then(r => setScanLogs(r.logs || [])).catch(() => {});
+    } catch (err) {
       if (soundEnabled) playErrorBeep();
-      if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
       setLastScanned({
         success: false,
-        message: `Código "${clean}" no encontrado en envíos pendientes de hoy.`,
+        message: err.message || 'Error al procesar el código.',
+        timestamp: new Date().toLocaleTimeString('es-AR'),
       });
+    } finally {
+      setTimeout(() => {
+        setIsProcessingScan(false);
+      }, 1200); // 1.2s debounce to prevent double-scanning
     }
   };
 
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    if (!manualCode.trim()) return;
+    processScannedCode(manualCode);
+    setManualCode('');
+  };
+
+  const handleTogglePacking = async (shipmentId, currentPackedState) => {
+    const nextState = !currentPackedState;
+    try {
+      await api.updateShipmentPacking(shipmentId, {
+        packed: nextState,
+        qualityChecked: nextState,
+      });
+
+      setShipments(prev =>
+        prev.map(s =>
+          s.id === shipmentId
+            ? {
+                ...s,
+                packing: {
+                  ...(s.packing || {}),
+                  packed: nextState,
+                  qualityChecked: nextState,
+                },
+              }
+            : s
+        )
+      );
+
+      if (nextState) {
+        if (soundEnabled) playSuccessBeep();
+        confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
+      }
+    } catch (err) {
+      alert(`Error al actualizar empaque: ${err.message}`);
+    }
+  };
+
+  // Metrics
   const packedCount = shipments.filter(s => s.packing?.packed).length;
   const pendingCount = shipments.length - packedCount;
+  const progressPercent = shipments.length > 0 ? Math.round((packedCount / shipments.length) * 100) : 0;
 
+  // Filtered list
   const filteredShipments = shipments.filter(s => {
+    const isPacked = Boolean(s.packing?.packed);
+    if (filterStatus === 'pending' && isPacked) return false;
+    if (filterStatus === 'packed' && !isPacked) return false;
+
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -155,214 +243,481 @@ export default function MobileTerminal({ connection }) {
       String(s.id).includes(q) ||
       s.buyer?.first_name?.toLowerCase().includes(q) ||
       s.buyer?.nickname?.toLowerCase().includes(q) ||
-      s.items?.some(it => it.item?.title?.toLowerCase().includes(q))
+      s.order_items?.some(it => 
+        it.item?.title?.toLowerCase().includes(q) || 
+        it.item?.seller_sku?.toLowerCase().includes(q)
+      )
     );
   });
 
   return (
-    <div className="space-y-4 pb-20 max-w-lg mx-auto animate-in fade-in">
+    <div className="space-y-4 pb-24 max-w-lg mx-auto animate-in fade-in select-none">
       
-      {/* Top Header Card */}
-      <div className="bg-gradient-to-tr from-slate-900 to-slate-800 text-white p-5 rounded-3xl shadow-lg border border-slate-700">
+      {/* Top Mobile Warehouse Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white p-5 rounded-3xl shadow-xl border border-slate-700/80">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
-            <div className="p-2 bg-yellow-400 text-slate-950 rounded-2xl shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-yellow-400 text-slate-950 rounded-2xl shadow-md">
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-extrabold text-base text-white">Terminal Móvil de Empaque</h2>
-              <p className="text-[11px] text-slate-300">Modo optimizado para celular y depósito</p>
+              <div className="flex items-center space-x-1.5">
+                <h2 className="font-extrabold text-base text-white tracking-tight">Terminal Móvil de Empaque</h2>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-medium">Lector en depósito @GRANA3DOK</p>
             </div>
           </div>
 
+          {/* Sound Mute/Unmute */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300"
-            title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
+            className="p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
+            title={soundEnabled ? 'Silenciar alertas' : 'Activar sonido'}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-yellow-400" /> : <VolumeX className="w-4 h-4" />}
           </button>
         </div>
 
-        {/* Packing Progress Bar */}
-        <div className="mt-4 pt-3 border-t border-slate-700/80">
-          <div className="flex justify-between text-xs font-bold mb-1.5">
-            <span className="text-yellow-400">{packedCount} de {shipments.length} empaquetados</span>
-            <span className="text-slate-300">{pendingCount} pendientes</span>
+        {/* Packing Progress */}
+        <div className="mt-4 pt-3.5 border-t border-slate-700/80">
+          <div className="flex justify-between items-end mb-1.5">
+            <div>
+              <span className="text-2xl font-black text-white">{packedCount}</span>
+              <span className="text-xs text-slate-300 font-bold ml-1">/ {shipments.length} paquetes</span>
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-black px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/30">
+                {progressPercent}% Completado
+              </span>
+            </div>
           </div>
-          <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+
+          <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/60">
             <div 
-              className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 transition-all duration-300 rounded-full"
-              style={{ width: `${shipments.length > 0 ? (packedCount / shipments.length) * 100 : 0}%` }}
+              className="h-full bg-gradient-to-r from-amber-400 via-yellow-400 to-emerald-400 transition-all duration-500 rounded-full shadow-sm"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
       </div>
 
-      {/* Live Camera Scanner Box */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
-            <QrCode className="w-4 h-4 text-yellow-500" />
-            <span>Escáner de Cámara Trasera</span>
-          </span>
+      {/* Tabs Switcher */}
+      <div className="grid grid-cols-3 gap-1 bg-slate-200/70 dark:bg-slate-800/80 p-1 rounded-2xl font-bold text-xs">
+        <button
+          onClick={() => setActiveTab('scanner')}
+          className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
+            activeTab === 'scanner'
+              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <QrCode className="w-3.5 h-3.5 text-yellow-500" />
+          <span>Escanear</span>
+        </button>
 
-          <button
-            onClick={scanning ? stopCamera : startCamera}
-            className={`px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center space-x-1.5 ${
-              scanning 
-                ? 'bg-rose-500 text-white shadow-sm' 
-                : 'bg-yellow-400 hover:bg-yellow-500 text-slate-950 shadow-sm'
-            }`}
-          >
-            <Camera className="w-4 h-4" />
-            <span>{scanning ? 'Detener Cámara' : 'Abrir Cámara'}</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setActiveTab('shipments')}
+          className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
+            activeTab === 'shipments'
+              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-blue-500" />
+          <span>Envíos ({pendingCount})</span>
+        </button>
 
-        {scanning && (
-          <div className="relative rounded-2xl overflow-hidden bg-black flex flex-col items-center justify-center min-h-[220px] border-2 border-yellow-400">
-            <div id="mobile-reader" className="w-full h-full max-w-xs"></div>
-          </div>
-        )}
-
-        {cameraError && (
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-amber-900 dark:text-amber-200 text-xs rounded-2xl flex items-start space-x-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <span>{cameraError}</span>
-          </div>
-        )}
-
-        {/* Last scanned feedback banner */}
-        {lastScanned && (
-          <div 
-            className={`p-3.5 rounded-2xl border text-xs animate-in zoom-in-95 ${
-              lastScanned.success
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-950 dark:text-emerald-100 font-bold'
-                : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-950 dark:text-rose-100 font-bold'
-            }`}
-          >
-            <div className="flex items-center space-x-2">
-              {lastScanned.success ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />}
-              <span>{lastScanned.message}</span>
-            </div>
-            {lastScanned.shipment && (
-              <p className="mt-1 pl-7 text-[11px] font-normal text-emerald-800 dark:text-emerald-300">
-                Comprador: {lastScanned.shipment.buyer?.first_name ? `${lastScanned.shipment.buyer.first_name} ${lastScanned.shipment.buyer.last_name || ''}` : lastScanned.shipment.buyer?.nickname}
-              </p>
-            )}
-          </div>
-        )}
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
+            activeTab === 'history'
+              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <History className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Historial</span>
+        </button>
       </div>
 
-      {/* Search Input */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Buscar paquete por orden, nombre o artículo..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400"
-        />
-      </div>
+      {/* TAB 1: SCANNER */}
+      {activeTab === 'scanner' && (
+        <div className="space-y-3.5">
+          {/* Camera Viewfinder Box */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                <Camera className="w-4 h-4 text-yellow-500" />
+                <span>Cámara de Celular</span>
+              </span>
 
-      {/* Shipments List (Mobile Cards) */}
-      <div className="space-y-3">
-        {loading ? (
-          <div className="p-8 text-center text-slate-400 text-xs">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
-            <span>Cargando envíos...</span>
-          </div>
-        ) : filteredShipments.length > 0 ? (
-          filteredShipments.map((s) => {
-            const isPacked = s.packing?.packed;
-            const itemsList = s.items || [];
-
-            return (
-              <div
-                key={s.id}
-                className={`p-4 rounded-3xl border shadow-xs transition ${
-                  isPacked
-                    ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+              <button
+                onClick={scanning ? stopCamera : startCamera}
+                className={`px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center space-x-1.5 ${
+                  scanning 
+                    ? 'bg-rose-500 text-white shadow-sm' 
+                    : 'bg-yellow-400 hover:bg-yellow-500 text-slate-950 shadow-md font-bold'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-extrabold text-xs text-slate-900 dark:text-white">
-                        Orden #{s.order_id}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        {s.logistic_type === 'self_service' ? 'FLEX' : s.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
-                      </span>
+                <Camera className="w-4 h-4" />
+                <span>{scanning ? 'Apagar Cámara' : 'Abrir Cámara'}</span>
+              </button>
+            </div>
+
+            {/* Viewfinder Canvas */}
+            <div className={`relative rounded-2xl overflow-hidden bg-slate-950 transition-all ${scanning ? 'min-h-[260px] border-2 border-yellow-400 shadow-inner' : 'min-h-[140px] flex items-center justify-center border border-dashed border-slate-300 dark:border-slate-800'}`}>
+              <div id="mobile-camera-viewfinder" className="w-full max-w-sm mx-auto"></div>
+              
+              {!scanning && (
+                <div className="text-center p-4">
+                  <QrCode className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs text-slate-400 font-bold">Cámara en espera</p>
+                  <p className="text-[11px] text-slate-500">Tocá "Abrir Cámara" para escanear etiquetas</p>
+                </div>
+              )}
+
+              {scanning && (
+                <div className="absolute top-2 left-2 right-2 flex justify-between items-center pointer-events-none">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-950/80 text-[10px] font-bold text-yellow-300 border border-yellow-400/40">
+                    🟢 Escaneando en vivo...
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-pack switch */}
+            <div className="flex items-center justify-between pt-1 text-xs">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoPackOnScan}
+                  onChange={(e) => setAutoPackOnScan(e.target.checked)}
+                  className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-400 cursor-pointer accent-yellow-500"
+                />
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  Marcar "Empaquetado" automáticamente al leer
+                </span>
+              </label>
+            </div>
+
+            {cameraError && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-2xl flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>{cameraError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Input (Pistola láser / Teclado) */}
+          <form onSubmit={handleManualSubmit} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="O ingresá el código de envío / SKU..."
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+            <button
+              type="submit"
+              disabled={!manualCode.trim() || isProcessingScan}
+              className="px-4 py-2.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 rounded-2xl text-xs font-black hover:bg-slate-800 transition disabled:opacity-50"
+            >
+              Verificar
+            </button>
+          </form>
+
+          {/* Scanned Package Result Card */}
+          {lastScanned && (
+            <div 
+              className={`p-4 rounded-3xl border shadow-md animate-in zoom-in-95 space-y-3 ${
+                lastScanned.success
+                  ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2.5">
+                  {lastScanned.success ? (
+                    <div className="p-2 bg-emerald-500 text-white rounded-2xl shadow-sm">
+                      <CheckCircle2 className="w-5 h-5" />
                     </div>
+                  ) : (
+                    <div className="p-2 bg-rose-500 text-white rounded-2xl shadow-sm">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                      {lastScanned.success ? '¡Paquete Confirmado!' : 'Código No Encontrado'}
+                    </h3>
+                    <p className="text-[11px] text-slate-500">{lastScanned.timestamp}</p>
+                  </div>
+                </div>
 
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 line-clamp-1">
-                      {itemsList.map(it => `${it.quantity}x ${it.item?.title || 'Producto'}`).join(', ')}
-                    </p>
+                {lastScanned.success && (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500 text-white shadow-xs">
+                    EMPAQUETADO OK
+                  </span>
+                )}
+              </div>
 
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Comprador: <b>{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</b>
-                    </p>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                {lastScanned.message}
+              </p>
+
+              {/* Scanned Shipment Details */}
+              {lastScanned.shipment && (
+                <div className="bg-white/90 dark:bg-slate-900/90 p-3.5 rounded-2xl border border-emerald-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-500">Envío #{lastScanned.shipment.id}</span>
+                    <span className="font-black text-slate-900 dark:text-white">Orden #{lastScanned.shipment.order_id}</span>
                   </div>
 
-                  {/* Packed check badge */}
-                  {isPacked && (
-                    <span className="p-1.5 rounded-full bg-emerald-500 text-white shrink-0">
-                      <CheckCircle2 className="w-4 h-4" />
+                  {/* Items in order */}
+                  <div className="space-y-1.5 pt-1">
+                    {(lastScanned.shipment.order_items || []).map((it, idx) => (
+                      <div key={idx} className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1 flex-1 pr-2">
+                          {it.item?.title || 'Producto'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-lg bg-yellow-400 text-slate-950 font-black text-xs shrink-0">
+                          x{it.quantity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 pt-1 flex justify-between">
+                    <span>Comprador: <b>{lastScanned.shipment.buyer?.nickname || 'Cliente'}</b></span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {lastScanned.shipment.receiver_address?.city?.name || 'Mercado Envíos'}
                     </span>
-                  )}
+                  </div>
+
+                  {/* Quick label print button */}
+                  <div className="pt-2 flex gap-2">
+                    <a
+                      href={api.downloadLabelUrl(lastScanned.shipment.id, 'pdf')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Imprimir Etiqueta PDF</span>
+                    </a>
+                  </div>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
-                {/* Mobile action buttons */}
-                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                  <a
-                    href={api.downloadLabelUrl(s.id, 'pdf')}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center space-x-1"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Etiqueta</span>
-                  </a>
+      {/* TAB 2: SHIPMENTS LIST */}
+      {activeTab === 'shipments' && (
+        <div className="space-y-3">
+          {/* Filter Pills */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            <button
+              onClick={() => setFilterStatus('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                filterStatus === 'all'
+                  ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600'
+              }`}
+            >
+              Todos ({shipments.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus('pending')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                filterStatus === 'pending'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600'
+              }`}
+            >
+              Pendientes ({pendingCount})
+            </button>
+            <button
+              onClick={() => setFilterStatus('packed')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                filterStatus === 'packed'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600'
+              }`}
+            >
+              Empaquetados ({packedCount})
+            </button>
+          </div>
 
-                  <button
-                    onClick={async () => {
-                      const nextVal = !isPacked;
-                      await api.updateShipmentPacking(s.id, { packed: nextVal, qualityChecked: nextVal });
-                      setShipments(prev =>
-                        prev.map(item =>
-                          item.id === s.id
-                            ? { ...item, packing: { ...(item.packing || {}), packed: nextVal, qualityChecked: nextVal } }
-                            : item
-                        )
-                      );
-                      if (nextVal) {
-                        if (soundEnabled) playSuccessBeep();
-                        confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center space-x-1 ${
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Buscar por orden, cliente o producto..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+          </div>
+
+          {/* List items */}
+          <div className="space-y-2.5">
+            {loading ? (
+              <div className="p-8 text-center text-slate-400 text-xs">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
+                <span>Cargando despachos...</span>
+              </div>
+            ) : filteredShipments.length > 0 ? (
+              filteredShipments.map((s) => {
+                const isPacked = Boolean(s.packing?.packed);
+                const itemsList = s.order_items || [];
+
+                return (
+                  <div
+                    key={s.id}
+                    className={`p-4 rounded-3xl border shadow-xs transition ${
                       isPacked
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                        : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
+                        ? 'bg-emerald-500/10 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                     }`}
                   >
-                    <PackageCheck className="w-3.5 h-3.5" />
-                    <span>{isPacked ? 'Desmarcar' : 'Marcar Listo'}</span>
-                  </button>
-                </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-extrabold text-xs text-slate-900 dark:text-white">
+                            Orden #{s.order_id}
+                          </span>
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {s.logistic_type === 'self_service' ? 'FLEX' : s.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 space-y-1">
+                          {itemsList.map((it, idx) => (
+                            <p key={idx} className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
+                              <span className="text-yellow-600 dark:text-yellow-400 font-black">[{it.quantity}x]</span> {it.item?.title || 'Artículo'}
+                            </p>
+                          ))}
+                        </div>
+
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Comprador: <b>{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</b>
+                        </p>
+                      </div>
+
+                      {isPacked && (
+                        <span className="p-1.5 rounded-full bg-emerald-500 text-white shrink-0 shadow-xs">
+                          <Check className="w-4 h-4" />
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                      <a
+                        href={api.downloadLabelUrl(s.id, 'pdf')}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center space-x-1"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Etiqueta</span>
+                      </a>
+
+                      <button
+                        onClick={() => handleTogglePacking(s.id, isPacked)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center space-x-1 ${
+                          isPacked
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                            : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
+                        }`}
+                      >
+                        <PackageCheck className="w-3.5 h-3.5" />
+                        <span>{isPacked ? 'Desmarcar' : 'Listo para Despacho'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="p-8 text-center text-slate-400 text-xs bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+                <PackageCheck className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-500" />
+                <p>No se encontraron paquetes con ese filtro.</p>
               </div>
-            );
-          })
-        ) : (
-          <div className="p-8 text-center text-slate-400 text-xs bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-            <PackageCheck className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-500" />
-            <p>No hay paquetes pendientes de despacho.</p>
+            )}
           </div>
-        )}
+        </div>
+      )}
+
+      {/* TAB 3: SCAN HISTORY (NEON DB AUDIT) */}
+      {activeTab === 'history' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+              <History className="w-4 h-4 text-emerald-500" />
+              <span>Auditoría de Escaneos</span>
+            </span>
+            <button
+              onClick={loadData}
+              className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+              title="Actualizar registro"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {scanLogs.length > 0 ? (
+              scanLogs.map((log, idx) => (
+                <div
+                  key={log.id || idx}
+                  className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <div className={`p-1.5 rounded-xl ${log.action === 'PACK_VERIFIED' ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                      <QrCode className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-extrabold text-slate-900 dark:text-white">
+                          {log.barcode}
+                        </span>
+                        {log.action === 'PACK_VERIFIED' && (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                            EMPAQUE OK
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        {log.details?.title || log.details?.buyer || log.action}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-[10px] text-slate-400 font-semibold shrink-0">
+                    {new Date(log.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-slate-400 text-xs bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+                <History className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
+                <p>Aún no hay escaneos registrados hoy.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Database connection footer badge */}
+      <div className="pt-2 text-center">
+        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-[10px] font-bold text-slate-600 dark:text-slate-400">
+          <Database className="w-3 h-3 text-emerald-500" />
+          <span>Base de datos: {dbStatus?.provider || 'Neon PostgreSQL'}</span>
+        </span>
       </div>
 
     </div>

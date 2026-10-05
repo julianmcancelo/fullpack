@@ -106,6 +106,13 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return fetchApi(`/shipments${query ? `?${query}` : ''}`);
   },
+  scanShipment: (rawCode, autoPack = true) =>
+    fetchApi('/shipments/scan', {
+      method: 'POST',
+      body: JSON.stringify({ rawCode, autoPack }),
+    }),
+  getScanLogs: () => fetchApi('/shipments/scan-logs'),
+  getDatabaseStatus: () => fetchApi('/settings/database'),
   downloadLabelUrl: (shipmentId, format = 'pdf') =>
     `${API_BASE}/shipments/${shipmentId}/label?format=${format}`,
   updateShipmentPacking: (shipmentId, data) =>
