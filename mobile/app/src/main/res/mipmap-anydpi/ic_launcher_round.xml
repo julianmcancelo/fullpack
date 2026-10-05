@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Respaldo redondo para Android 7/7.1 (API 24-25). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M4,54 A50,50 0 1,1 104,54 A50,50 0 1,1 4,54 Z" />
+    <path
+        android:fillColor="#141826"
+        android:pathData="M54,26 L80,39 L80,69 L54,82 L28,69 L28,39 Z" />
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M32,46 L76,46 L76,54 L32,54 Z" />
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M54,58 L63,62.5 L63,71 L54,75.5 L45,71 L45,62.5 Z" />
+</vector>

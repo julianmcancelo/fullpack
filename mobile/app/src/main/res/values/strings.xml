@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ML Pro Suite</string>
+
+    <!-- Acciones generales -->
+    <string name="action_back">Volver</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_dismiss">Descartar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_open_settings">Abrir Ajustes</string>
+
+    <!-- Escáner -->
+    <string name="camera_unavailable_title">Cámara no disponible</string>
+    <string name="camera_unavailable_message">No pudimos iniciar la cámara de este dispositivo. Podés ingresar el código a mano.</string>
+
+    <!-- Vinculación -->
+    <string name="pairing_title">Vincular dispositivo</string>
+    <string name="pairing_subtitle">Escaneá el código QR que muestra ML Pro Suite en la web.</string>
+    <string name="pairing_scan_hint">Apuntá al código QR de vinculación</string>
+    <string name="pairing_server_label">URL del servidor</string>
+    <string name="pairing_server_placeholder">https://ml-manager-pro-jade.vercel.app/api</string>
+    <string name="pairing_check_server">Probar conexión</string>
+    <string name="pairing_manual_entry">Ingresar código a mano</string>
+    <string name="pairing_connecting">Vinculando dispositivo…</string>
+    <string name="pairing_connecting_hint">No cierres la app.</string>
+    <string name="pairing_manual_title">Ingresar código a mano</string>
+    <string name="pairing_manual_raw_label">Código QR o JSON completo</string>
+    <string name="pairing_manual_raw_placeholder">{"v":1,"t":"mlpro-pair","c":"ABC123","s":"…"}</string>
+    <string name="pairing_manual_or">O ingresá el código y la clave</string>
+    <string name="pairing_manual_code_label">Código</string>
+    <string name="pairing_manual_code_placeholder">ABC123</string>
+    <string name="pairing_manual_secret_label">Clave</string>
+    <string name="pairing_manual_secret_placeholder">Clave secreta del código</string>
+    <string name="pairing_manual_confirm">Vincular</string>
+    <string name="pairing_camera_denied_title">Permiso de cámara denegado</string>
+    <string name="pairing_camera_denied_message">Para escanear el QR necesitamos la cámara. Podés habilitarla en Ajustes › Aplicaciones › ML Pro Suite › Permisos, o vincular el dispositivo con el código a mano.</string>
+    <string name="pairing_allow_camera">Permitir cámara</string>
+    <string name="pairing_help_title">Cómo vincular</string>
+    <string name="pairing_help_step_1">Abrí ML Pro Suite en la computadora y entrá a Ajustes › Dispositivos.</string>
+    <string name="pairing_help_step_2">Generá un código QR de vinculación: vence a los pocos minutos.</string>
+    <string name="pairing_help_step_3">Escanealo con esta pantalla y la terminal queda habilitada al instante.</string>
+    <string name="pairing_server_status_checking">Consultando el servidor…</string>
+    <string name="pairing_server_status_online">Servidor respondiendo</string>
+    <string name="pairing_server_status_offline">Sin respuesta del servidor</string>
+</resources>

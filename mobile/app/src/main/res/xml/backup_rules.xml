@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La sesión (token de dispositivo) no se respalda: cada instalación se vincula
+     de nuevo escaneando un QR, así el token nunca viaja en un backup. -->
+<full-backup-content>
+    <exclude
+        domain="file"
+        path="datastore/" />
+    <exclude
+        domain="sharedpref"
+        path="." />
+    <exclude
+        domain="database"
+        path="." />
+</full-backup-content>

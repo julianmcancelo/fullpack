@@ -8,9 +8,9 @@
     "autoSyncMinutes": 15
   },
   "auth": {
-    "accessToken": "APP_USR-8410220120357196-100419-2648c0acae44d53470bba2f79e301dc0-139483581",
-    "refreshToken": "TG-6ac2df3ed316aa0001e2e33b-139483581",
-    "expiresAt": 1791177630368,
+    "accessToken": "APP_USR-8410220120357196-100506-7e087211af016d57cd3d96a0c8966fc7-139483581",
+    "refreshToken": "TG-6ac3770163f33300014d1253-139483581",
+    "expiresAt": 1791216482276,
     "userId": 139483581,
     "nickname": "GRANA3DOK",
     "permalink": "http://perfil.mercadolibre.com.ar/GRANA3DOK",
@@ -85,5 +85,7 @@
       "lastLoginAt": "2026-10-05T01:43:50.998Z"
     }
   ],
-  "loginTokens": []
+  "loginTokens": [],
+  "pairingSessions": [],
+  "devices": []
 }

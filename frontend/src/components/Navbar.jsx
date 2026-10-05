@@ -9,6 +9,7 @@ import {
   LogOut,
   Users,
   ChevronDown,
+  Smartphone,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +22,7 @@ export default function Navbar({
   onOpenCommand,
   onOpenLogin,
   onOpenUsersAdmin,
+  onOpenPairDevice,
 }) {
   const { isDark, toggleTheme } = useTheme();
   const { currentUser, logout, isAdmin } = useAuth();
@@ -124,6 +126,16 @@ export default function Navbar({
             ) : (
               <Moon className="h-4 w-4 text-ink-muted" />
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenPairDevice}
+            title="Vincular celular"
+            aria-label="Vincular celular"
+            className="btn btn-outline btn-icon"
+          >
+            <Smartphone className="h-4 w-4 text-ink-muted" />
           </button>
 
           <button

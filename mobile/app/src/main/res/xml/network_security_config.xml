@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ML Pro Suite es una app interna: el servidor puede correr en la LAN con HTTP
+     plano, así que habilitamos cleartext en la configuración base y aceptamos
+     también los certificados instalados por el usuario (servidores de prueba). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

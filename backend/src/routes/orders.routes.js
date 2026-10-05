@@ -6,13 +6,14 @@ const { getOrders, getOrderById } = require('../services/mlOrders.service');
 router.get('/', async (req, res) => {
   try {
     const data = await getOrders(req.query);
-    res.json(data);
+    res.json({ ...data, serverTime: data.serverTime || new Date().toISOString() });
   } catch (err) {
     res.json({
       results: [],
       total: 0,
       connected: false,
       message: err.message || 'Mercado Libre no conectado',
+      serverTime: new Date().toISOString(),
     });
   }
 });

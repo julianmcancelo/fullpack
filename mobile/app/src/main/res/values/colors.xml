@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Espejo mínimo de los tokens de ui/theme/Color.kt para el tema XML
+         (ventana y barras del sistema). El color de la UI vive en Compose. -->
+    <color name="ml_app">#F2F5FB</color>
+    <color name="ml_card">#FFFFFF</color>
+    <color name="ml_brand">#FFD600</color>
+    <color name="ml_brand_ink">#141826</color>
+    <color name="ml_ink">#0C1322</color>
+    <color name="ml_transparent">#00000000</color>
+</resources>

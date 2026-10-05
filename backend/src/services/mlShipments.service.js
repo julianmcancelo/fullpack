@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { getAuth, getPackingMetadata, updatePackingMetadata, refreshPackingFromNeon } = require('../db/store');
+const { getAuth, getPackingMetadata, updatePackingMetadata, updatePackingMetadataAsync, refreshPackingFromNeon } = require('../db/store');
 const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
@@ -14,7 +14,7 @@ async function getShipments(query = {}) {
   const params = {
     seller: auth.userId,
     sort: 'date_desc',
-    limit: query.limit ? Math.min(parseInt(query.limit, 10), 50) : 50,
+    limit: query.limit ? Math.min(parseInt(query.limit, 10), 100) : 50,
     offset: query.offset ? parseInt(query.offset, 10) : 0,
   };
 
@@ -142,6 +142,30 @@ async function getShipments(query = {}) {
     results: filtered,
     total: filtered.length,
     paging: ordersRes.data.paging,
+    serverTime: new Date().toISOString(),
+  };
+}
+
+async function getShipmentLiveStatus(shipmentId) {
+  const token = await getValidAccessToken();
+  if (!token) {
+    throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
+  }
+
+  const res = await axios.get(`${ML_API_BASE}/shipments/${shipmentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const d = res.data || {};
+  return {
+    id: d.id,
+    status: d.status,
+    substatus: d.substatus,
+    logistic_type: d.logistic_type,
+    tracking_number: d.tracking_number,
+    receiver_address: d.receiver_address,
+    status_history: d.status_history,
+    estimated_handling_limit: d.estimated_handling_limit,
+    serverTime: new Date().toISOString(),
   };
 }
 
@@ -164,7 +188,7 @@ async function getShipmentLabel(shipmentId, format = 'pdf') {
   }
 
   // When printing/downloading label, automatically flag as printed!
-  updatePackingMetadata(String(shipmentId), {
+  await updatePackingMetadataAsync(String(shipmentId), {
     printed: true,
     printedAt: new Date().toISOString(),
   });
@@ -190,6 +214,7 @@ async function getShipmentLabel(shipmentId, format = 'pdf') {
 module.exports = {
   getShipments,
   getShipmentDetail,
+  getShipmentLiveStatus,
   getShipmentLabel,
   updatePackingMetadata,
 };

@@ -50,16 +50,44 @@ const defaultData = {
     },
   ],
   loginTokens: [],
+  pairingSessions: [],
+  devices: [],
 };
 
 // In-memory cache for ultra-fast response
 let inMemoryCache = null;
 
+/**
+ * Lee un JSON tolerando el BOM UTF-8.
+ *
+ * Un editor que guarde el archivo como "UTF-8 con BOM" (PowerShell 5.1 lo hace por
+ * defecto con `Set-Content -Encoding UTF8`) rompía `JSON.parse`, el servidor caía a
+ * los valores por defecto y el primer guardado **borraba** la configuración, los
+ * tokens de Mercado Libre y el historial de empaque. Ya pasó una vez.
+ */
+function parseJsonFile(file, raw) {
+  return JSON.parse(String(raw).replace(/^\uFEFF/, ''));
+}
+
+/** Copia de seguridad antes de tocar un archivo que no se pudo interpretar. */
+function backupUnreadableFile(file) {
+  try {
+    if (!fs.existsSync(file)) return null;
+    const backup = `${file}.unreadable-${Date.now()}`;
+    fs.copyFileSync(file, backup);
+    console.error(`store.json ilegible: se guardó una copia en ${backup}`);
+    return backup;
+  } catch (e) {
+    console.error('No se pudo respaldar store.json:', e.message);
+    return null;
+  }
+}
+
 function getInitialData() {
   try {
     if (fs.existsSync(BUNDLED_DB_FILE)) {
       const raw = fs.readFileSync(BUNDLED_DB_FILE, 'utf-8');
-      return JSON.parse(raw);
+      return parseJsonFile(BUNDLED_DB_FILE, raw);
     }
   } catch (e) {
     console.warn('Could not read bundled store.json:', e.message);
@@ -79,7 +107,7 @@ function readDb() {
       return init;
     }
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
+    const parsed = parseJsonFile(DB_FILE, raw);
     inMemoryCache = {
       ...parsed,
       settings: {
@@ -92,10 +120,15 @@ function readDb() {
       scanLogs: parsed.scanLogs || [],
       users: parsed.users || defaultData.users,
       loginTokens: parsed.loginTokens || [],
+      pairingSessions: parsed.pairingSessions || [],
+      devices: parsed.devices || [],
     };
     return inMemoryCache;
   } catch (err) {
-    console.error('Error reading store.json, restoring default state:', err);
+    // NUNCA reemplazar en silencio los datos del usuario: se respalda el archivo
+    // ilegible antes de que cualquier guardado posterior lo pise.
+    console.error('Error leyendo store.json, se respalda antes de continuar:', err.message);
+    backupUnreadableFile(DB_FILE);
     inMemoryCache = defaultData;
     return defaultData;
   }
@@ -443,6 +476,177 @@ async function getDatabaseStatus() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Mobile pairing sessions & device tokens
+// Neon is the source of truth (the phone and the web may hit different
+// serverless instances); the local JSON store is the offline fallback.
+// ---------------------------------------------------------------------------
+async function createPairingSession({ code, secret, email, expiresAt }) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  try {
+    const neonSession = await neon.createPairingSessionInNeon({
+      code,
+      secret,
+      email: cleanEmail,
+      expiresAt: new Date(expiresAt),
+    });
+    if (neonSession) return neonSession;
+  } catch (e) {
+    console.warn('Neon createPairingSession fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.pairingSessions) db.pairingSessions = [];
+  const session = {
+    code,
+    secret,
+    email: cleanEmail,
+    status: 'pending',
+    deviceId: null,
+    deviceName: null,
+    devicePlatform: null,
+    appVersion: null,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(expiresAt).toISOString(),
+    claimedAt: null,
+  };
+  db.pairingSessions = db.pairingSessions.filter((s) => s.code !== code);
+  db.pairingSessions.push(session);
+  if (db.pairingSessions.length > 100) db.pairingSessions = db.pairingSessions.slice(-100);
+  writeDb(db);
+  return session;
+}
+
+async function getPairingSession(code) {
+  try {
+    const neonSession = await neon.getPairingSessionFromNeon(code);
+    if (neonSession) return neonSession;
+  } catch (e) {
+    console.warn('Neon getPairingSession fallback:', e.message);
+  }
+  const db = readDb();
+  return (db.pairingSessions || []).find((s) => s.code === code) || null;
+}
+
+async function claimPairingSession(code, device) {
+  try {
+    const neonClaimed = await neon.claimPairingSessionInNeon(code, device);
+    if (neonClaimed) return neonClaimed;
+  } catch (e) {
+    console.warn('Neon claimPairingSession fallback:', e.message);
+  }
+
+  const db = readDb();
+  const session = (db.pairingSessions || []).find((s) => s.code === code);
+  if (!session) return null;
+  const stillValid =
+    session.status === 'pending' && new Date(session.expiresAt).getTime() > Date.now();
+  if (!stillValid) return null;
+
+  session.status = 'claimed';
+  session.deviceId = device.deviceId;
+  session.deviceName = device.deviceName;
+  session.devicePlatform = device.devicePlatform;
+  session.appVersion = device.appVersion || null;
+  session.claimedAt = new Date().toISOString();
+  writeDb(db);
+  return session;
+}
+
+async function createDevice({ id, token, email, name, platform, appVersion }) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  try {
+    const neonDevice = await neon.createDeviceInNeon({
+      id,
+      token,
+      email: cleanEmail,
+      name,
+      platform,
+      appVersion,
+    });
+    if (neonDevice) return neonDevice;
+  } catch (e) {
+    console.warn('Neon createDevice fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.devices) db.devices = [];
+  const device = {
+    id,
+    token,
+    email: cleanEmail,
+    name: name || 'Dispositivo móvil',
+    platform: platform || 'android',
+    appVersion: appVersion || '',
+    createdAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    revoked: false,
+  };
+  db.devices.push(device);
+  writeDb(db);
+  return device;
+}
+
+async function getDeviceByToken(token) {
+  try {
+    const neonDevice = await neon.getDeviceByTokenFromNeon(token);
+    if (neonDevice) return neonDevice;
+  } catch (e) {
+    console.warn('Neon getDeviceByToken fallback:', e.message);
+  }
+  const db = readDb();
+  return (db.devices || []).find((d) => d.token === token && !d.revoked) || null;
+}
+
+async function listDevices(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  try {
+    const neonDevices = await neon.listDevicesFromNeon(cleanEmail);
+    if (neonDevices && neonDevices.length > 0) return neonDevices;
+  } catch (e) {
+    console.warn('Neon listDevices fallback:', e.message);
+  }
+  const db = readDb();
+  return (db.devices || []).filter((d) => d.email === cleanEmail && !d.revoked);
+}
+
+async function deleteDevice(id) {
+  try {
+    await neon.deleteDeviceFromNeon(id);
+  } catch (e) {
+    console.warn('Neon deleteDevice fallback:', e.message);
+  }
+  const db = readDb();
+  let removed = false;
+  if (db.devices) {
+    db.devices = db.devices.map((d) => {
+      if (d.id === id || d.token === id) {
+        removed = true;
+        return { ...d, revoked: true };
+      }
+      return d;
+    });
+    writeDb(db);
+  }
+  return removed;
+}
+
+async function touchDevice(id) {
+  try {
+    await neon.touchDeviceInNeon(id);
+  } catch (e) {
+    /* best effort */
+  }
+  const db = readDb();
+  const device = (db.devices || []).find((d) => d.id === id);
+  if (device) {
+    device.lastSeenAt = new Date().toISOString();
+    writeDb(db);
+  }
+}
+
 module.exports = {
   getSettings,
   updateSettings,
@@ -462,4 +666,12 @@ module.exports = {
   createLoginToken,
   verifyLoginToken,
   getDatabaseStatus,
+  createPairingSession,
+  getPairingSession,
+  claimPairingSession,
+  createDevice,
+  getDeviceByToken,
+  listDevices,
+  deleteDevice,
+  touchDevice,
 };

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema de arranque. La estética real la aplica Compose (ui/theme/Theme.kt):
+         acá sólo se evita el flash y se preparan las barras del sistema para
+         edge-to-edge. No se usa AppCompat (no es dependencia del proyecto). -->
+    <style name="Theme.MlPro" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ml_app</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@color/ml_transparent</item>
+        <item name="android:navigationBarColor">@color/ml_transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

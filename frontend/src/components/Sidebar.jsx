@@ -12,7 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, connection }) {
+export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
     { id: 'stock', label: 'Stock & Publicaciones', icon: Boxes, badge: '96 Ítems' },
@@ -82,7 +82,24 @@ export default function Sidebar({ activeTab, setActiveTab, connection }) {
       </div>
 
       {/* Footer info card */}
-      <div className="mt-8 border-t border-line px-1 pt-5">
+      <div className="mt-8 space-y-3 border-t border-line px-1 pt-5">
+        {/* Acceso directo a la vinculación del celular: es el paso que pide la app. */}
+        <button
+          type="button"
+          onClick={onOpenPairDevice}
+          className="group w-full rounded-2xl border border-accent/30 bg-accent-soft p-3.5 text-left transition-all duration-200 ease-spring hover:border-accent/60 hover:shadow-glow-accent"
+        >
+          <span className="flex items-center gap-2 text-xs font-extrabold text-accent">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white">
+              <Smartphone className="h-4 w-4" />
+            </span>
+            <span>Vincular celular</span>
+          </span>
+          <span className="mt-1.5 block text-[11px] leading-relaxed text-ink-muted">
+            Mostrá el código QR en pantalla y escanealo con la app ML Pro Mobile.
+          </span>
+        </button>
+
         <div className="relative overflow-hidden rounded-2xl border border-line bg-ink-gradient p-4 text-white shadow-card">
           <span className="pointer-events-none absolute -right-10 -top-12 h-24 w-24 rounded-full bg-brand/25 blur-2xl" />
           <div className="relative flex items-center gap-2 text-xs font-bold text-brand-300">

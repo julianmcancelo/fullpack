@@ -62,6 +62,7 @@ router.get('/dashboard', async (req, res) => {
       itemsError: itemsData.error,
       ordersError: ordersData.error,
       shipmentsError: shipmentsData.error,
+      serverTime: new Date().toISOString(),
     });
   } catch (err) {
     res.json({
@@ -83,6 +84,7 @@ router.get('/dashboard', async (req, res) => {
       urgentShipments: [],
       recentOrders: [],
       error: err.message,
+      serverTime: new Date().toISOString(),
     });
   }
 });

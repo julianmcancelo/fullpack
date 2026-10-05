@@ -46,6 +46,9 @@ export default function ShipmentsManager({ connection }) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [error, setError] = useState(null);
   const [manifestModalOpen, setManifestModalOpen] = useState(false);
+  const [syncingStatus, setSyncingStatus] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   const loadShipments = async (isBackground = false) => {
     try {
@@ -71,12 +74,78 @@ export default function ShipmentsManager({ connection }) {
 
       const res = await api.getShipments(params);
       setShipments(res.results || []);
+      setLastSync(new Date().toISOString());
     } catch (err) {
       console.error('Error al cargar envíos:', err);
       if (!isBackground) setError(err.message);
     } finally {
       if (!isBackground) setLoading(false);
     }
+  };
+
+  // Sincroniza estados vivos desde Mercado Libre (máx 20, de a 5 en paralelo)
+  const handleSyncStatuses = async () => {
+    if (syncingStatus || shipments.length === 0) return;
+    try {
+      setSyncingStatus(true);
+      setSyncMessage(null);
+      const targets = shipments.slice(0, 20);
+      const updates = {};
+      let okCount = 0;
+
+      for (let i = 0; i < targets.length; i += 5) {
+        const chunk = targets.slice(i, i + 5);
+        const results = await Promise.all(
+          chunk.map((s) =>
+            api
+              .getShipmentStatus(s.id)
+              .then((st) => ({ id: s.id, data: st }))
+              .catch((err) => ({ id: s.id, error: err }))
+          )
+        );
+        results.forEach((r) => {
+          if (r.error || !r.data) return;
+          const d = r.data?.shipment || r.data;
+          const patch = {};
+          if (d.status) patch.status = d.status;
+          if (d.substatus) patch.substatus = d.substatus;
+          if (d.tracking_number) patch.tracking_number = d.tracking_number;
+          if (d.logistic_type) patch.logistic_type = d.logistic_type;
+          if (Object.keys(patch).length > 0) {
+            updates[String(r.id)] = patch;
+            okCount += 1;
+          }
+        });
+      }
+
+      if (Object.keys(updates).length > 0) {
+        setShipments((prev) =>
+          prev.map((s) =>
+            updates[String(s.id)] ? { ...s, ...updates[String(s.id)] } : s
+          )
+        );
+      }
+      setLastSync(new Date().toISOString());
+      setSyncMessage(
+        okCount > 0
+          ? `${okCount}/${targets.length} actualizados`
+          : 'Sin cambios de estado en Mercado Libre'
+      );
+    } catch (err) {
+      console.error('Error al sincronizar estados:', err);
+      setSyncMessage('No se pudieron sincronizar los estados');
+    } finally {
+      setSyncingStatus(false);
+    }
+  };
+
+  const formatSyncTime = (iso) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   };
 
   useEffect(() => {
@@ -90,9 +159,13 @@ export default function ShipmentsManager({ connection }) {
     const onFocus = () => loadShipments(true);
     window.addEventListener('focus', onFocus);
 
+    const onNewOrders = () => loadShipments(true);
+    window.addEventListener('ml:new-orders', onNewOrders);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('ml:new-orders', onNewOrders);
     };
   }, [statusTab, logisticFilter, packingFilter]);
 
@@ -282,7 +355,20 @@ export default function ShipmentsManager({ connection }) {
             <span className="mx-2 text-ink-subtle">·</span>
             Listos / Empaquetados:{' '}
             <strong className="tabular font-extrabold text-success">{packedCount}</strong>
+            {lastSync && (
+              <>
+                <span className="mx-2 text-ink-subtle">·</span>
+                <span className="tabular text-[11px] font-semibold text-ink-subtle">
+                  Actualizado {formatSyncTime(lastSync)}
+                </span>
+              </>
+            )}
           </p>
+          {syncMessage && (
+            <p className="mt-1 text-[11px] font-semibold text-ink-muted" role="status">
+              {syncMessage}
+            </p>
+          )}
         </div>
 
         <div className="toolbar">
@@ -321,6 +407,16 @@ export default function ShipmentsManager({ connection }) {
           >
             <FileCheck2 className="h-4 w-4" />
             <span className="hidden sm:inline">Manifiesto de Despacho</span>
+          </button>
+
+          <button
+            onClick={handleSyncStatuses}
+            disabled={syncingStatus || shipments.length === 0}
+            className="btn btn-outline btn-sm"
+            title="Consultar el estado vivo de cada envío en Mercado Libre"
+          >
+            <RefreshCw className={`h-4 w-4 ${syncingStatus ? 'animate-spin text-brand-600' : ''}`} />
+            <span>{syncingStatus ? 'Sincronizando…' : 'Sincronizar estados'}</span>
           </button>
 
           <button
@@ -579,6 +675,11 @@ export default function ShipmentsManager({ connection }) {
                         <span className={`badge ${logistic.bg}`}>
                           {logistic.label}
                         </span>
+                        {shipment.substatus && (
+                          <span className="block w-full text-[11px] font-medium text-ink-subtle">
+                            {shipment.substatus}
+                          </span>
+                        )}
 
                         {isDelivered ? (
                           <span className="badge badge-success">
@@ -692,6 +793,12 @@ export default function ShipmentsManager({ connection }) {
                     {/* Quick State Changer */}
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-extrabold uppercase text-ink-subtle">Estado:</span>
+                      {shipment.packing?.statusOverride &&
+                        shipment.packing.statusOverride !== shipment.status && (
+                          <span className="badge badge-neutral" title="Estado fijado manualmente">
+                            Manual
+                          </span>
+                        )}
                       <select
                         value={shipment.status}
                         onChange={(e) => handleManualStatusChange(shipment.id, e.target.value)}

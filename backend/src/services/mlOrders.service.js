@@ -14,7 +14,7 @@ async function getOrders(query = {}) {
   const params = {
     seller: auth.userId,
     sort: 'date_desc',
-    limit: query.limit ? Math.min(parseInt(query.limit, 10), 50) : 50,
+    limit: query.limit ? Math.min(parseInt(query.limit, 10), 100) : 50,
     offset: query.offset ? parseInt(query.offset, 10) : 0,
   };
 
@@ -36,8 +36,14 @@ async function getOrders(query = {}) {
     params,
   });
 
-  const { getPackingMetadata } = require('../db/store');
-  const packingMeta = getPackingMetadata();
+  let packingMeta = {};
+  try {
+    const { refreshPackingFromNeon } = require('../db/store');
+    packingMeta = await refreshPackingFromNeon();
+  } catch {
+    const { getPackingMetadata } = require('../db/store');
+    packingMeta = getPackingMetadata();
+  }
 
   const enrichedResults = (searchRes.data.results || []).map(o => {
     const shippingId = o.shipping?.id ? String(o.shipping.id) : null;
@@ -52,6 +58,8 @@ async function getOrders(query = {}) {
     results: enrichedResults,
     total: searchRes.data.paging?.total || 0,
     paging: searchRes.data.paging,
+    serverTime: new Date().toISOString(),
+    connected: true,
   };
 }
 

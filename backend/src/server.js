@@ -12,6 +12,9 @@ const settingsRoutes = require('./routes/settings.routes');
 const statsRoutes = require('./routes/stats.routes');
 const questionsRoutes = require('./routes/questions.routes');
 const usersRoutes = require('./routes/users.routes');
+const pairRoutes = require('./routes/pair.routes');
+const mobileRoutes = require('./routes/mobile.routes');
+const { attachDevice } = require('./middleware/device');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +23,10 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(morgan('dev'));
+
+// Resolves the paired mobile device (if any) for every request. It never
+// rejects, so the existing web routes behave exactly as before.
+app.use(attachDevice);
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -30,6 +37,8 @@ app.use('/api/shipments', shipmentsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/questions', questionsRoutes);
+app.use('/api/pair', pairRoutes);
+app.use('/api/mobile', mobileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

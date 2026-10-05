@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   ShoppingCart, 
@@ -26,36 +26,86 @@ export default function OrdersManager({ connection }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [error, setError] = useState(null);
+  const [lastSync, setLastSync] = useState(null);
 
-  const loadOrders = async () => {
+  // Refs para que el intervalo background lea filtros/búsqueda vigentes
+  const searchRef = useRef(search);
+  const statusFilterRef = useRef(statusFilter);
+  searchRef.current = search;
+  statusFilterRef.current = statusFilter;
+
+  const loadOrders = async (isBackground = false, overrideParams = null) => {
     try {
-      setLoading(true);
-      setError(null);
-      const params = {};
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
+      if (!isBackground) {
+        setLoading(true);
+        setError(null);
       }
-      if (search) {
-        params.q = search;
+      const params = overrideParams || {};
+      const status = statusFilterRef.current;
+      const q = searchRef.current;
+      if (Object.keys(params).length === 0) {
+        if (status !== 'all') {
+          params.status = status;
+        }
+        if (q) {
+          params.q = q;
+        }
       }
 
       const res = await api.getOrders(params);
       setOrders(res.results || []);
+      setLastSync(new Date().toISOString());
     } catch (err) {
       console.error('Error al cargar órdenes:', err);
-      setError(err.message);
+      if (!isBackground) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadOrders();
+    loadOrders(false);
+
+    // Actualización automática cada 15s en background
+    const interval = setInterval(() => {
+      loadOrders(true);
+    }, 15000);
+
+    const onFocus = () => loadOrders(true);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') loadOrders(true);
+    };
+    const onNewOrders = () => loadOrders(true);
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('ml:new-orders', onNewOrders);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('ml:new-orders', onNewOrders);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
+
+  const formatSyncTime = (iso) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const isSyncFresh = lastSync
+    ? Date.now() - new Date(lastSync).getTime() < 60000
+    : false;
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    loadOrders();
+    loadOrders(false);
   };
 
   const toggleExpand = (orderId) => {
@@ -96,7 +146,7 @@ export default function OrdersManager({ connection }) {
 
         <div className="toolbar">
           <button
-            onClick={loadOrders}
+            onClick={() => loadOrders(false)}
             className="btn btn-outline btn-sm"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand-600' : ''}`} />
@@ -121,6 +171,18 @@ export default function OrdersManager({ connection }) {
           <CreditCard className="h-4 w-4 text-accent" aria-hidden="true" />
           <span>Cobros, comisiones y neto acreditado en el detalle de cada venta.</span>
         </span>
+
+        {lastSync && (
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-subtle">
+            {isSyncFresh && (
+              <span className="relative flex h-2 w-2" aria-hidden="true">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+              </span>
+            )}
+            <span className="tabular">Actualizado {formatSyncTime(lastSync)}</span>
+          </span>
+        )}
       </div>
 
       {/* Alerta de error */}

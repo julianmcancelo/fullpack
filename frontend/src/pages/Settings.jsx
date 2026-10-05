@@ -17,6 +17,7 @@ import {
   Moon,
   Monitor,
   Palette,
+  Smartphone,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +35,7 @@ export default function Settings({
   onRefreshAllData,
   onOpenLogin,
   onOpenUsersAdmin,
+  onOpenPairDevice,
 }) {
   const { currentUser, isAdmin, adminEmail } = useAuth();
   const { mode, setMode } = useTheme();
@@ -275,6 +277,37 @@ export default function Settings({
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ---------------- Mobile device ---------------- */}
+      <section className="card">
+        <div className="card-head">
+          <div className="flex items-start gap-3">
+            <span className="kpi-icon kpi-icon-brand">
+              <Smartphone className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="card-title">Dispositivo móvil</h2>
+              <p className="card-sub">
+                Vinculá la app Android escaneando un código QR desde este panel.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card-body flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed text-ink-muted sm:max-w-sm">
+            Escaneá el código y el celular queda habilitado para operar con tu cuenta, sin cargar
+            claves a mano.
+          </p>
+          <button
+            type="button"
+            onClick={onOpenPairDevice}
+            className="btn btn-primary btn-sm shrink-0"
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            <span>Vincular celular</span>
+          </button>
         </div>
       </section>
 

@@ -5,6 +5,7 @@ import ConnectionBanner from './components/ConnectionBanner';
 import CommandPalette from './components/CommandPalette';
 import MobileBottomNav from './components/MobileBottomNav';
 import BarcodeScannerModal from './components/BarcodeScannerModal';
+import PairDeviceModal from './components/PairDeviceModal';
 import NewSaleNotification from './components/NewSaleNotification';
 import Dashboard from './pages/Dashboard';
 import StockManager from './pages/StockManager';
@@ -33,12 +34,14 @@ export default function App() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [usersAdminModalOpen, setUsersAdminModalOpen] = useState(false);
+  const [pairModalOpen, setPairModalOpen] = useState(false);
   const [shipments, setShipments] = useState([]);
 
   // Real-time new sale listener state
   const [newSaleAlert, setNewSaleAlert] = useState(null);
   const knownOrderIdsRef = useRef(new Set());
   const initialOrdersLoadedRef = useRef(false);
+  const lastStatsAtRef = useRef(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -74,6 +77,7 @@ export default function App() {
       ]);
       if (data) setStats(data);
       if (shipRes?.results) setShipments(shipRes.results);
+      lastStatsAtRef.current = Date.now();
     } catch (err) {
       console.error('Error loading stats:', err);
     } finally {
@@ -142,6 +146,11 @@ export default function App() {
 
           // Automatically reload stats and shipments
           loadDashboardStats();
+          window.dispatchEvent(
+            new CustomEvent('ml:new-orders', {
+              detail: { count: brandNewOrders.length, latest: latestOrder },
+            })
+          );
         }
       } catch (e) {
         // Silent polling error
@@ -153,6 +162,26 @@ export default function App() {
     const interval = setInterval(checkNewOrders, 15000);
     return () => clearInterval(interval);
   }, [connection?.connected]);
+
+  // Refresh periódico de stats cada 60s solo si hay conexión
+  useEffect(() => {
+    if (!connection?.connected) return;
+    const interval = setInterval(() => {
+      loadDashboardStats();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [connection?.connected]);
+
+  // Recarga de stats al volver el foco (throttle 30s)
+  useEffect(() => {
+    const onFocus = () => {
+      if (Date.now() - lastStatsAtRef.current > 30000) {
+        loadDashboardStats();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   // If user is not logged in, display the minimalist Landing Gate
   if (!currentUser) {
@@ -206,6 +235,9 @@ export default function App() {
       {/* SaaS Users Admin Approval Modal */}
       <UsersAdminModal isOpen={usersAdminModalOpen} onClose={() => setUsersAdminModalOpen(false)} />
 
+      {/* Android app pairing modal (QR link) */}
+      <PairDeviceModal isOpen={pairModalOpen} onClose={() => setPairModalOpen(false)} />
+
       {/* Top Header */}
       <Navbar
         connection={connection}
@@ -215,12 +247,18 @@ export default function App() {
         onOpenCommand={setCommandOpen}
         onOpenLogin={() => setLoginModalOpen(true)}
         onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
+        onOpenPairDevice={() => setPairModalOpen(true)}
       />
 
       {/* Main App Layout */}
       <div className="mx-auto flex w-full max-w-[1700px] flex-1 flex-col px-3 pb-24 sm:px-4 md:flex-row md:pb-0 lg:px-6">
         {/* Desktop Sidebar */}
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} connection={connection} />
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          connection={connection}
+          onOpenPairDevice={() => setPairModalOpen(true)}
+        />
 
         {/* Dynamic Page Content */}
         <main className="min-w-0 flex-1 px-0 py-4 sm:py-5 lg:px-8 lg:py-7">
@@ -260,6 +298,7 @@ export default function App() {
               onRefreshAllData={refreshAll}
               onOpenLogin={() => setLoginModalOpen(true)}
               onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
+              onOpenPairDevice={() => setPairModalOpen(true)}
             />
           )}
         </main>

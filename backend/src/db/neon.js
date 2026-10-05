@@ -113,6 +113,37 @@ async function initNeonDb() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- Mobile device pairing: the web app creates a session and renders it as
+        -- a QR code; the phone claims it and receives a long-lived device token.
+        CREATE TABLE IF NOT EXISTS ml_pairing_sessions (
+          code VARCHAR(12) PRIMARY KEY,
+          secret VARCHAR(64) NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending',
+          device_id VARCHAR(100),
+          device_name VARCHAR(255),
+          device_platform VARCHAR(50),
+          app_version VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          expires_at TIMESTAMP NOT NULL,
+          claimed_at TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ml_devices (
+          id VARCHAR(100) PRIMARY KEY,
+          token VARCHAR(128) UNIQUE NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          name VARCHAR(255),
+          platform VARCHAR(50),
+          app_version VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_seen_at TIMESTAMP,
+          revoked BOOLEAN DEFAULT FALSE
+        );
+
+        CREATE INDEX IF NOT EXISTS ml_devices_email_idx ON ml_devices (email);
+        CREATE INDEX IF NOT EXISTS ml_pairing_created_idx ON ml_pairing_sessions (created_at);
+
         -- Ensure SuperAdmin jcancelo.dev@gmail.com is always pre-seeded and active
         INSERT INTO ml_users (email, name, role, status, auth_provider)
         VALUES ('jcancelo.dev@gmail.com', 'Julián Cancelo (Admin)', 'admin', 'active', 'google')
@@ -520,6 +551,201 @@ async function verifyLoginTokenInNeon(email, codeOrToken) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Mobile pairing sessions & device tokens
+// ---------------------------------------------------------------------------
+function mapPairingRow(row) {
+  if (!row) return null;
+  return {
+    code: row.code,
+    secret: row.secret,
+    email: row.email,
+    status: row.status,
+    deviceId: row.device_id || null,
+    deviceName: row.device_name || null,
+    devicePlatform: row.device_platform || null,
+    appVersion: row.app_version || null,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    claimedAt: row.claimed_at ? new Date(row.claimed_at).toISOString() : null,
+  };
+}
+
+function mapDeviceRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    token: row.token,
+    email: row.email,
+    name: row.name || 'Dispositivo móvil',
+    platform: row.platform || 'android',
+    appVersion: row.app_version || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
+    revoked: Boolean(row.revoked),
+  };
+}
+
+async function createPairingSessionInNeon({ code, secret, email, expiresAt }) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      `INSERT INTO ml_pairing_sessions (code, secret, email, status, expires_at)
+       VALUES ($1, $2, $3, 'pending', $4)
+       ON CONFLICT (code) DO UPDATE SET
+         secret = EXCLUDED.secret,
+         email = EXCLUDED.email,
+         status = 'pending',
+         device_id = NULL,
+         device_name = NULL,
+         device_platform = NULL,
+         app_version = NULL,
+         claimed_at = NULL,
+         created_at = CURRENT_TIMESTAMP,
+         expires_at = EXCLUDED.expires_at
+       RETURNING *`,
+      [code, secret, String(email).trim().toLowerCase(), expiresAt]
+    );
+    return mapPairingRow(res.rows[0]);
+  } catch (e) {
+    console.warn('Neon createPairingSession error:', e.message);
+    return null;
+  }
+}
+
+async function getPairingSessionFromNeon(code) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query('SELECT * FROM ml_pairing_sessions WHERE code = $1', [code]);
+    return mapPairingRow(res.rows[0]);
+  } catch (e) {
+    console.warn('Neon getPairingSession error:', e.message);
+    return null;
+  }
+}
+
+// Race-safe: only the first claimer of a pending, unexpired code wins.
+async function claimPairingSessionInNeon(code, { deviceId, deviceName, devicePlatform, appVersion }) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      `UPDATE ml_pairing_sessions
+       SET status = 'claimed',
+           device_id = $2,
+           device_name = $3,
+           device_platform = $4,
+           app_version = $5,
+           claimed_at = CURRENT_TIMESTAMP
+       WHERE code = $1
+         AND status = 'pending'
+         AND expires_at > CURRENT_TIMESTAMP
+       RETURNING *`,
+      [code, deviceId, deviceName, devicePlatform, appVersion || null]
+    );
+    return mapPairingRow(res.rows[0]);
+  } catch (e) {
+    console.warn('Neon claimPairingSession error:', e.message);
+    return null;
+  }
+}
+
+async function createDeviceInNeon({ id, token, email, name, platform, appVersion }) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      `INSERT INTO ml_devices (id, token, email, name, platform, app_version, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [id, token, String(email).trim().toLowerCase(), name, platform, appVersion || null]
+    );
+    return mapDeviceRow(res.rows[0]);
+  } catch (e) {
+    console.warn('Neon createDevice error:', e.message);
+    return null;
+  }
+}
+
+async function getDeviceByTokenFromNeon(token) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      'SELECT * FROM ml_devices WHERE token = $1 AND revoked = FALSE',
+      [token]
+    );
+    return mapDeviceRow(res.rows[0]);
+  } catch (e) {
+    console.warn('Neon getDeviceByToken error:', e.message);
+    return null;
+  }
+}
+
+async function listDevicesFromNeon(email) {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      'SELECT * FROM ml_devices WHERE LOWER(email) = LOWER($1) AND revoked = FALSE ORDER BY created_at DESC',
+      [String(email).trim()]
+    );
+    return res.rows.map(mapDeviceRow);
+  } catch (e) {
+    console.warn('Neon listDevices error:', e.message);
+    return [];
+  }
+}
+
+async function deleteDeviceFromNeon(id) {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    const res = await p.query(
+      `UPDATE ml_devices SET revoked = TRUE WHERE id = $1 OR token = $1`,
+      [String(id)]
+    );
+    return res.rowCount > 0;
+  } catch (e) {
+    console.warn('Neon deleteDevice error:', e.message);
+    return false;
+  }
+}
+
+async function touchDeviceInNeon(id) {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await initNeonDb();
+    await p.query('UPDATE ml_devices SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+  } catch (e) {
+    /* best effort */
+  }
+}
+
+async function purgeExpiredPairingSessionsInNeon() {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await initNeonDb();
+    await p.query(
+      `DELETE FROM ml_pairing_sessions
+       WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '2 days'`
+    );
+  } catch (e) {
+    /* best effort */
+  }
+}
+
 module.exports = {
   getConnectionString,
   initNeonDb,
@@ -538,4 +764,13 @@ module.exports = {
   updateUserStatusInNeon,
   createLoginTokenInNeon,
   verifyLoginTokenInNeon,
+  createPairingSessionInNeon,
+  getPairingSessionFromNeon,
+  claimPairingSessionInNeon,
+  createDeviceInNeon,
+  getDeviceByTokenFromNeon,
+  listDevicesFromNeon,
+  deleteDeviceFromNeon,
+  touchDeviceInNeon,
+  purgeExpiredPairingSessionsInNeon,
 };

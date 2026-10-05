@@ -72,6 +72,23 @@ export const api = {
   refreshToken: () => fetchApi('/auth/refresh', { method: 'POST' }),
   disconnect: () => fetchApi('/auth/disconnect', { method: 'POST' }),
 
+  // Mobile app pairing (Android QR link)
+  createPairing: (email) =>
+    fetchApi('/pair/create', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  getPairingStatus: (code, secret, ticket) =>
+    fetchApi(
+      `/pair/status?code=${encodeURIComponent(code)}&secret=${encodeURIComponent(secret)}` +
+        (ticket ? `&ticket=${encodeURIComponent(ticket)}` : ''),
+    ),
+  getPairDevices: (email) => fetchApi(`/pair/devices?email=${encodeURIComponent(email)}`),
+  unlinkDevice: (id) =>
+    fetchApi(`/pair/devices/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
   // Settings
   getSettings: () => fetchApi('/settings'),
   saveSettings: (settings) =>
@@ -132,6 +149,7 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return fetchApi(`/shipments${query ? `?${query}` : ''}`);
   },
+  getShipmentStatus: (id) => fetchApi(`/shipments/${id}/status`),
   scanShipment: (rawCode, autoPack = true, scanMode = 'pack', carrierFilter = 'all') =>
     fetchApi('/shipments/scan', {
       method: 'POST',

@@ -2,22 +2,138 @@ const express = require('express');
 const router = express.Router();
 const {
   getShipments,
+  getShipmentDetail,
+  getShipmentLiveStatus,
   getShipmentLabel,
   updatePackingMetadata,
 } = require('../services/mlShipments.service');
 const { addScanLog, getScanLogs, updatePackingMetadataAsync } = require('../db/store');
 
+// ---------------------------------------------------------------------------
+// Lectura de etiquetas
+// ---------------------------------------------------------------------------
+/**
+ * Un QR de etiqueta de Mercado Libre trae mucha información (envío, orden,
+ * seguimiento, SKU, URLs). Antes se armaba una bolsa de candidatos y se aceptaba
+ * el primer envío que coincidiera con *cualquiera* de ellos; como el id de
+ * publicación es el mismo en todos los envíos de un producto, escanear una
+ * etiqueta podía marcar OTRO paquete y descuadrar los conteos.
+ *
+ * Ahora se compara por prioridad estricta (envío → orden → seguimiento → SKU) y,
+ * si dos paquetes empatan, se avisa en lugar de adivinar.
+ */
+const SCAN_DEDUPE_MS = 8000; // relecturas del mismo paquete dentro de esta ventana no cuentan
+const PRIORITY_FIELDS = ['shipment_id', 'order_id', 'tracking', 'sku'];
+const CLAVES_ID = [
+  'id',
+  'shipment',
+  'shipment_id',
+  'order',
+  'order_id',
+  'tracking',
+  'tracking_number',
+  'sku',
+  'seller_sku',
+  'package',
+  'package_id',
+];
+
+const ETIQUETA_CAMPO = {
+  shipment_id: 'número de envío',
+  order_id: 'número de orden',
+  tracking: 'número de seguimiento',
+  sku: 'SKU',
+};
+
+function normalizar(value) {
+  return String(value == null ? '' : value).trim().toUpperCase();
+}
+
+/** Valores del código leído que pueden identificar un envío, sin duplicados. */
+function candidatosDeCodigo(rawCode) {
+  const texto = String(rawCode || '').trim();
+  const salida = [];
+  const agregar = (valor) => {
+    const v = normalizar(valor);
+    if (v && v.length >= 3 && !salida.includes(v)) salida.push(v);
+  };
+
+  agregar(texto);
+
+  // URLs del estilo https://.../shipments/48164856585 o ?shipment_id=...
+  try {
+    if (/^https?:\/\//i.test(texto)) {
+      const url = new URL(texto);
+      url.pathname.split('/').filter(Boolean).forEach(agregar);
+      url.searchParams.forEach((valor) => agregar(valor));
+    }
+  } catch {
+    // no es una URL: seguimos con el texto plano
+  }
+
+  // Pares "clave:valor" típicos de las etiquetas (sólo claves que identifican).
+  texto.split(/[;,\s|]+/).forEach((trozo) => {
+    const corte = trozo.indexOf(':');
+    if (corte <= 0) return;
+    const clave = trozo.slice(0, corte).toLowerCase().trim();
+    if (CLAVES_ID.some((c) => clave === c || clave.endsWith(`_${c}`))) {
+      agregar(trozo.slice(corte + 1));
+    }
+  });
+
+  // Números con pinta de id de envío (9 a 16 dígitos).
+  (texto.match(/\b\d{9,16}\b/g) || []).forEach(agregar);
+
+  return salida;
+}
+
+/** Valores comparables de un envío, por campo. */
+function camposDeEnvio(shipment) {
+  const skus = [];
+  for (const linea of shipment.items || []) {
+    const sku = normalizar(linea.item && linea.item.seller_sku);
+    if (sku) skus.push(sku);
+  }
+  return {
+    shipment_id: [normalizar(shipment.id)],
+    order_id: [normalizar(shipment.order_id)],
+    tracking: [normalizar(shipment.tracking_number)],
+    sku: skus,
+  };
+}
+
+/**
+ * Busca el envío comparando por prioridad. Devuelve el paquete sólo si hay un
+ * único candidato en el primer nivel que tenga coincidencias.
+ */
+function buscarEnvio(shipments, candidatos) {
+  const buscados = new Set(candidatos);
+  for (const campo of PRIORITY_FIELDS) {
+    const encontrados = shipments.filter((s) =>
+      camposDeEnvio(s)[campo].some((valor) => valor && buscados.has(valor)),
+    );
+    if (encontrados.length === 1) {
+      return { matched: encontrados[0], matchedBy: campo, ambiguous: false, count: 1 };
+    }
+    if (encontrados.length > 1) {
+      return { matched: null, matchedBy: campo, ambiguous: true, count: encontrados.length };
+    }
+  }
+  return { matched: null, matchedBy: null, ambiguous: false, count: 0 };
+}
+
 // GET /api/shipments
 router.get('/', async (req, res) => {
   try {
     const data = await getShipments(req.query);
-    res.json(data);
+    res.json({ ...data, serverTime: data.serverTime || new Date().toISOString() });
   } catch (err) {
     res.json({
       results: [],
       total: 0,
       connected: false,
       message: err.message || 'Mercado Libre no conectado',
+      serverTime: new Date().toISOString(),
     });
   }
 });
@@ -41,41 +157,27 @@ router.post('/scan', async (req, res) => {
     }
 
     const trimmed = rawCode.trim();
-    // Normalize code: extract numbers, extract parameters from ML QR URLs, or use clean string
-    const numbersFound = trimmed.match(/\b\d{9,16}\b/g) || [];
-    const candidateId = numbersFound.length > 0 ? numbersFound[0] : trimmed;
-    const candidatePool = [trimmed, ...numbersFound];
-    
-    // Also support parsing URLs like https://.../shipments/48164856585 or ?shipment_id=...
-    try {
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        const parsedUrl = new URL(trimmed);
-        const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
-        candidatePool.push(...pathSegments);
-        parsedUrl.searchParams.forEach((val) => candidatePool.push(val));
-      }
-    } catch {}
+    const candidatos = candidatosDeCodigo(trimmed);
+    const codigoLeido = candidatos[0] || trimmed;
 
-    // Fetch active shipments
-    const shipmentsData = await getShipments({ limit: 50 });
+    // Envíos activos recientes (misma ventana que usa la app para la cola).
+    const shipmentsData = await getShipments({ limit: 100 });
     const shipments = shipmentsData.results || [];
 
-    // Find match by shipment ID, order ID, tracking number, or SKU
-    let matched = shipments.find(s => {
-      const sId = String(s.id);
-      const oId = String(s.order_id);
-      const trk = s.tracking_number ? String(s.tracking_number).toUpperCase() : '';
-      
-      return candidatePool.some(cand => {
-        const candNorm = String(cand).toUpperCase();
-        if (sId === cand || oId === cand || (trk && trk === candNorm)) return true;
-        if (s.items && s.items.some(it => 
-          (it.item?.id && it.item.id.toUpperCase() === candNorm) ||
-          (it.item?.seller_sku && it.item.seller_sku.toUpperCase() === candNorm)
-        )) return true;
-        return false;
+    const { matched, matchedBy, ambiguous, count } = buscarEnvio(shipments, candidatos);
+
+    // Código que apunta a más de un paquete: no adivinamos.
+    if (ambiguous) {
+      await addScanLog(trimmed, null, 'AMBIGUOUS_CODE', { matchedBy, count });
+      return res.json({
+        success: true,
+        found: false,
+        ambiguous: true,
+        matchedBy,
+        scannedCode: codigoLeido,
+        message: `Ese código coincide con ${count} paquetes (por ${ETIQUETA_CAMPO[matchedBy] || matchedBy}). Escaneá el QR o el código de barras de la etiqueta del paquete.`,
       });
-    });
+    }
 
     if (matched) {
       const prevPacking = matched.packing || {};
@@ -84,7 +186,27 @@ router.post('/scan', async (req, res) => {
       const buyerName = matched.buyer?.first_name 
         ? `${matched.buyer.first_name} ${matched.buyer.last_name || ''}`.trim()
         : (matched.buyer?.nickname || 'Comprador');
-      const loggedCode = String(matched.id) || candidateId;
+      const loggedCode = String(matched.id) || codigoLeido;
+      const scanCountPrevio = Number(prevPacking.scanCount) || 0;
+
+      // Relectura inmediata del mismo paquete (la etiqueta trae QR *y* código de
+      // barras, y la cámara puede entregar los dos): no se vuelve a contar.
+      const ultimoEscaneo = prevPacking.lastScannedAt ? new Date(prevPacking.lastScannedAt).getTime() : 0;
+      const relectura = ultimoEscaneo > 0 && Date.now() - ultimoEscaneo < SCAN_DEDUPE_MS;
+      if (relectura) {
+        return res.json({
+          success: true,
+          found: true,
+          duplicateRead: true,
+          matchedBy,
+          scannedCode: codigoLeido,
+          alreadyPacked: Boolean(prevPacking.packed),
+          alreadyDispatchChecked: Boolean(prevPacking.dispatchChecked),
+          scanCount: scanCountPrevio,
+          shipment: matched,
+          message: `Este paquete ya se escaneó hace instantes (lectura #${scanCountPrevio}). No se volvió a contar.`,
+        });
+      }
 
       // -------------------------------------------------------------
       // MODE: CONTROL DE DESPACHO / SALIDA A TRANSPORTE
@@ -111,6 +233,8 @@ router.post('/scan', async (req, res) => {
             success: true,
             found: true,
             carrierMismatch: true,
+            matchedBy,
+            scannedCode: codigoLeido,
             expectedCarrier: expectedName,
             actualCarrier: actualName,
             shipment: matched,
@@ -137,6 +261,8 @@ router.post('/scan', async (req, res) => {
           found: true,
           scanMode: 'dispatch',
           carrierMismatch: false,
+          matchedBy,
+          scannedCode: codigoLeido,
           alreadyDispatchChecked: wasAlreadyDispatchChecked,
           shipment: {
             ...matched,
@@ -193,6 +319,8 @@ router.post('/scan', async (req, res) => {
         success: true,
         found: true,
         scanMode: 'pack',
+        matchedBy,
+        scannedCode: codigoLeido,
         alreadyPacked: wasAlreadyPacked,
         scanCount: newScanCount,
         firstScannedAt,
@@ -201,23 +329,33 @@ router.post('/scan', async (req, res) => {
           ...matched,
           packing: updatedPacking,
         },
-        message: wasAlreadyPacked 
-          ? `⚠️ ATENCIÓN: El paquete #${matched.id} ya había sido empaquetado previamente (Lectura #${newScanCount}).`
-          : `✅ ¡Paquete #${matched.id} verificado y marcado como EMPAQUETADO con éxito!`,
+        message: wasAlreadyPacked
+          ? `⚠️ El paquete #${matched.id} ya estaba empaquetado (lectura #${newScanCount}). No hace falta volver a escanearlo.`
+          : `✅ Paquete #${matched.id} empaquetado y verificado.`,
       });
     }
 
-    // If not found in current active shipments
-    await addScanLog(candidateId, null, 'NOT_FOUND', { raw: trimmed });
+    // Sin coincidencias en la ventana de envíos activos.
+    await addScanLog(codigoLeido, null, 'NOT_FOUND', { raw: trimmed });
 
     return res.json({
       success: true,
       found: false,
-      scannedCode: candidateId,
-      message: `Código "${candidateId}" no corresponde a ningún envío activo pendiente.`,
+      scannedCode: codigoLeido,
+      message: `No encontramos ningún paquete activo con el código "${codigoLeido}". Probá con el QR de la etiqueta o revisá que el envío siga pendiente.`,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/shipments/:id/status
+router.get('/:id/status', async (req, res) => {
+  try {
+    const data = await getShipmentLiveStatus(req.params.id);
+    res.json({ success: true, ...data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
