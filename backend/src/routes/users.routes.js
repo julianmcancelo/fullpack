@@ -39,7 +39,7 @@ router.post('/google-login', async (req, res) => {
     if (user.status === 'pending') {
       return res.status(403).json({
         error: 'pending_approval',
-        message: 'Tu cuenta ha sido creada y está pendiente de aprobación por el administrador principal (jcancelo.dev@gmail.com). Te notificaremos en cuanto sea aprobada.',
+        message: 'Tu cuenta ha sido registrada y se encuentra pendiente de autorización por administración.',
         user,
       });
     }
@@ -47,11 +47,11 @@ router.post('/google-login', async (req, res) => {
     if (user.status === 'rejected') {
       return res.status(403).json({
         error: 'account_rejected',
-        message: 'Tu acceso a la plataforma no ha sido autorizado. Contacta al administrador.',
+        message: 'Tu acceso a la plataforma no ha sido autorizado. Contacta a administración.',
       });
     }
 
-    // Generate SaaS session token
+    // Generate session token
     const sessionToken = crypto.randomBytes(32).toString('hex');
 
     res.json({
@@ -140,7 +140,7 @@ router.post('/verify-code', async (req, res) => {
     if (user.status === 'pending') {
       return res.status(403).json({
         error: 'pending_approval',
-        message: 'Tu código es correcto, pero tu cuenta está esperando la aprobación del administrador (jcancelo.dev@gmail.com).',
+        message: 'Tu código es correcto, pero tu cuenta está esperando la autorización por administración.',
         user,
       });
     }

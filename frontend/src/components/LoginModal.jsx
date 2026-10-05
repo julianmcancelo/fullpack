@@ -324,7 +324,7 @@ export default function LoginModal({ isOpen, onClose }) {
               </div>
 
               <p className="help">
-                * Las cuentas nuevas requieren aprobación de seguridad de <b className="font-bold text-ink-muted">{adminEmail}</b> antes de acceder.
+                * Tu acceso será verificado por administración antes de habilitar la sesión.
               </p>
 
               <div className="modal-foot -mx-5 -mb-5 gap-2">
@@ -373,7 +373,7 @@ export default function LoginModal({ isOpen, onClose }) {
               {debugOtp && (
                 <div className="rounded-xl border border-warning/30 bg-warning-soft p-2.5 text-center">
                   <span className="text-[11px] font-bold text-warning">
-                    Código de demostración generado: <b className="font-mono text-sm">{debugOtp}</b>
+                    Código de acceso temporal: <b className="font-mono text-sm">{debugOtp}</b>
                   </span>
                 </div>
               )}
@@ -406,7 +406,7 @@ export default function LoginModal({ isOpen, onClose }) {
               <div className="space-y-1.5">
                 <h3 className="font-display text-base font-extrabold tracking-tight text-ink">Cuenta Pendiente de Aprobación</h3>
                 <p className="text-xs leading-relaxed text-ink-muted">
-                  Tu solicitud para <b className="font-bold text-ink">{pendingUser?.email}</b> ha sido registrada con éxito. Por motivos de seguridad del sistema SaaS, el administrador principal (<b className="font-bold text-ink">{adminEmail}</b>) debe autorizar tu acceso.
+                  Tu solicitud ha sido registrada correctamente. Por motivos de seguridad, tu acceso debe ser autorizado por administración antes de ingresar a la plataforma.
                 </p>
               </div>
 

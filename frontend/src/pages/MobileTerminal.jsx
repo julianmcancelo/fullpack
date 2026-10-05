@@ -29,76 +29,137 @@ import {
   PackageOpen, 
   CheckCircle, 
   Send, 
-  Tag 
+  Tag,
+  AlertOctagon,
+  Navigation
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
 import { playSuccessBeep, playWarningBeep, playErrorBeep, speakSpanish } from '../utils/audio';
 import { api } from '../services/api';
 
-// Helper: classify shipment by logistic urgency & date (Hoy vs Mañana)
+// Helper: classify shipment by logistic urgency & exact date (Hoy, Mañana, Días Anteriores, En Camino)
 const getShipmentMeta = (s) => {
   const isFlex = s.logistic_type === 'self_service';
   const isColecta = s.logistic_type === 'cross_docking';
   const isCorreo = s.logistic_type === 'drop_off' || s.logistic_type === 'xd_drop_off' || s.logistic_type === 'default';
 
-  let dateCategory = 'today'; // 'today', 'tomorrow', 'other'
   const isPacked = Boolean(s.packing?.packed);
+  const isShipped = s.status === 'shipped';
+  const isDelivered = s.status === 'delivered';
+
+  let dateCategory = 'today'; // 'today', 'tomorrow', 'past', 'future'
+  let formattedDateStr = '';
+  let formattedTimeStr = '';
+  let dayDifferenceDays = 0;
 
   if (s.order_date) {
     try {
       const orderDate = new Date(s.order_date);
       const now = new Date();
       
-      const orderDayStr = orderDate.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
-      const todayStr = now.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
-      
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+      // Calculate exact midnight in Argentina timezone (UTC-3)
+      const getMidnightTs = (d) => {
+        const str = d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }); // YYYY-MM-DD
+        return new Date(str + 'T00:00:00-03:00').getTime();
+      };
 
-      if (orderDayStr === todayStr || isFlex) {
+      const orderMidnight = getMidnightTs(orderDate);
+      const todayMidnight = getMidnightTs(now);
+      const msPerDay = 24 * 60 * 60 * 1000;
+      dayDifferenceDays = Math.round((orderMidnight - todayMidnight) / msPerDay);
+
+      formattedDateStr = orderDate.toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        timeZone: 'America/Argentina/Buenos_Aires',
+      });
+      formattedTimeStr = orderDate.toLocaleTimeString('es-AR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Argentina/Buenos_Aires',
+      });
+
+      if (dayDifferenceDays === 0) {
         dateCategory = 'today';
-      } else if (orderDayStr === tomorrowStr) {
+      } else if (dayDifferenceDays === 1) {
         dateCategory = 'tomorrow';
+      } else if (dayDifferenceDays < 0) {
+        dateCategory = 'past';
       } else {
-        const diffHours = (now - orderDate) / (1000 * 60 * 60);
-        if (diffHours <= 26) {
-          dateCategory = 'today';
-        } else if (diffHours <= 50) {
-          dateCategory = 'tomorrow';
-        } else {
-          dateCategory = 'today';
-        }
+        dateCategory = 'future';
       }
     } catch {
       dateCategory = isFlex ? 'today' : 'today';
     }
   }
 
-  // Priority score for warehouse sorting (Flex hoy = top 1, Colecta hoy = 2, Mañana = 3, Packed = 4)
+  // Priority score for warehouse sorting:
+  // 1: Flex Hoy (Pending) - Highest urgent courier cutoff
+  // 2: Días Anteriores / Atrasados (Pending) - Priority backlog
+  // 3: Colecta/Correo Hoy (Pending) - Same-day dispatch
+  // 4: Mañana (Pending) - Next-day cutoff
+  // 5: Empaquetados listos
+  // 6: En camino / Despachados
   let priority = 3;
-  if (!isPacked) {
-    if (isFlex) priority = 1;
-    else if (dateCategory === 'today') priority = 2;
-    else priority = 3;
+  if (isShipped || isDelivered) {
+    priority = 6;
+  } else if (isPacked) {
+    priority = 5;
+  } else if (isFlex && dateCategory === 'today') {
+    priority = 1;
+  } else if (dateCategory === 'past') {
+    priority = 2;
+  } else if (dateCategory === 'today') {
+    priority = 3;
   } else {
     priority = 4;
+  }
+
+  // Visual date label
+  let dateBadgeText = '📅 Despachar Hoy';
+  let dateBadgeClass = 'bg-brand/20 border-brand/40 text-brand-ink dark:text-brand';
+
+  if (isShipped) {
+    dateBadgeText = '🚚 En Camino';
+    dateBadgeClass = 'bg-blue-500/20 border-blue-400/40 text-blue-700 dark:text-blue-300 font-bold';
+  } else if (isDelivered) {
+    dateBadgeText = '✅ Entregado';
+    dateBadgeClass = 'bg-emerald-500/20 border-emerald-400/40 text-emerald-700 dark:text-emerald-300 font-bold';
+  } else if (dateCategory === 'past') {
+    dateBadgeText = `⚠️ Día Anterior (${formattedDateStr || 'Previo'})`;
+    dateBadgeClass = 'bg-amber-500/20 border-amber-500/50 text-amber-800 dark:text-amber-300 font-black';
+  } else if (dateCategory === 'tomorrow') {
+    dateBadgeText = '📦 Despacho Mañana';
+    dateBadgeClass = 'bg-purple-500/20 border-purple-400/40 text-purple-700 dark:text-purple-300 font-bold';
+  } else if (dateCategory === 'today') {
+    dateBadgeText = isFlex ? '⚡ Flex Hoy' : '📅 Despachar Hoy';
+    dateBadgeClass = isFlex 
+      ? 'bg-amber-400 text-slate-950 font-black border-amber-500 shadow-xs' 
+      : 'bg-brand/20 border-brand/40 text-brand-ink dark:text-brand font-bold';
   }
 
   return {
     isFlex,
     isColecta,
     isCorreo,
+    isShipped,
+    isDelivered,
     dateCategory,
+    dayDifferenceDays,
+    formattedDateStr,
+    formattedTimeStr,
+    fullDateTime: formattedDateStr ? `${formattedDateStr} ${formattedTimeStr} hs` : '',
     isPacked,
     priority,
+    dateBadgeText,
+    dateBadgeClass,
     logisticLabel: isFlex ? 'FLEX EN EL DÍA' : isColecta ? 'COLECTA' : isCorreo ? 'CORREO / PUNTO' : 'ESTÁNDAR',
   };
 };
 
 export default function MobileTerminal({ connection }) {
-  const [activeTab, setActiveTab] = useState('shipments'); // Default directly to 'shipments'
+  const [activeTab, setActiveTab] = useState('shipments'); // 'shipments', 'scanner', 'history'
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -114,8 +175,8 @@ export default function MobileTerminal({ connection }) {
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
-  // Filter States
-  const [dateFilter, setDateFilter] = useState('all_urgent'); // 'all_urgent', 'flex', 'today', 'tomorrow', 'all'
+  // Filter States: 'all_active', 'today', 'flex', 'past', 'tomorrow', 'shipped', 'all'
+  const [dateFilter, setDateFilter] = useState('all_active');
   const [statusFilter, setStatusFilter] = useState('pending'); // 'pending', 'packed', 'all'
 
   const html5QrCodeRef = useRef(null);
@@ -383,47 +444,50 @@ export default function MobileTerminal({ connection }) {
     progressPercent,
     flexTotal,
     flexPending,
-    colectaTotal,
-    colectaPending,
     todayTotal,
     todayPending,
+    pastTotal,
+    pastPending,
     tomorrowTotal,
     tomorrowPending,
+    shippedTotal,
   } = useMemo(() => {
     let flexTot = 0;
     let flexPend = 0;
-    let colTot = 0;
-    let colPend = 0;
     let todTot = 0;
     let todPend = 0;
+    let pastTot = 0;
+    let pastPend = 0;
     let tomTot = 0;
     let tomPend = 0;
+    let shipTot = 0;
     let packedTot = 0;
 
     const enriched = shipments.map(s => {
       const meta = getShipmentMeta(s);
       if (meta.isPacked) packedTot++;
-      
+      if (meta.isShipped) shipTot++;
+
       if (meta.isFlex) {
         flexTot++;
-        if (!meta.isPacked) flexPend++;
-      } else if (meta.isColecta) {
-        colTot++;
-        if (!meta.isPacked) colPend++;
+        if (!meta.isPacked && !meta.isShipped) flexPend++;
       }
 
       if (meta.dateCategory === 'today') {
         todTot++;
-        if (!meta.isPacked) todPend++;
+        if (!meta.isPacked && !meta.isShipped) todPend++;
+      } else if (meta.dateCategory === 'past') {
+        pastTot++;
+        if (!meta.isPacked && !meta.isShipped) pastPend++;
       } else if (meta.dateCategory === 'tomorrow') {
         tomTot++;
-        if (!meta.isPacked) tomPend++;
+        if (!meta.isPacked && !meta.isShipped) tomPend++;
       }
 
       return { ...s, meta };
     });
 
-    // Sort: Flex pending first, then today pending, then tomorrow pending, then packed
+    // Sort: Flex pending first, then past pending, then today pending, then tomorrow pending, then packed
     enriched.sort((a, b) => a.meta.priority - b.meta.priority);
 
     const total = shipments.length;
@@ -437,12 +501,13 @@ export default function MobileTerminal({ connection }) {
       progressPercent: progress,
       flexTotal: flexTot,
       flexPending: flexPend,
-      colectaTotal: colTot,
-      colectaPending: colPend,
       todayTotal: todTot,
       todayPending: todPend,
+      pastTotal: pastTot,
+      pastPending: pastPend,
       tomorrowTotal: tomTot,
       tomorrowPending: tomPend,
+      shippedTotal: shipTot,
     };
   }, [shipments]);
 
@@ -450,7 +515,7 @@ export default function MobileTerminal({ connection }) {
   const displayedShipments = useMemo(() => {
     return enrichedShipments.filter(s => {
       // 1. Status Filter
-      if (statusFilter === 'pending' && s.meta.isPacked) return false;
+      if (statusFilter === 'pending' && (s.meta.isPacked || s.meta.isShipped)) return false;
       if (statusFilter === 'packed' && !s.meta.isPacked) return false;
 
       // 2. Date / Urgency Filter
@@ -458,10 +523,15 @@ export default function MobileTerminal({ connection }) {
         if (!s.meta.isFlex) return false;
       } else if (dateFilter === 'today') {
         if (s.meta.dateCategory !== 'today') return false;
+      } else if (dateFilter === 'past') {
+        if (s.meta.dateCategory !== 'past') return false;
       } else if (dateFilter === 'tomorrow') {
         if (s.meta.dateCategory !== 'tomorrow') return false;
-      } else if (dateFilter === 'all_urgent') {
-        if (s.meta.dateCategory !== 'today' && s.meta.dateCategory !== 'tomorrow' && !s.meta.isFlex) return false;
+      } else if (dateFilter === 'shipped') {
+        if (!s.meta.isShipped) return false;
+      } else if (dateFilter === 'all_active') {
+        // Active dispatch queue (Today + Past backlog + Tomorrow)
+        if (s.meta.isShipped) return false;
       }
 
       // 3. Search text query
@@ -547,7 +617,12 @@ export default function MobileTerminal({ connection }) {
                 </p>
                 {flexPending > 0 && (
                   <span className="badge badge-warning text-[10px] font-black animate-pulse">
-                    ⚡ {flexPending} FLEX URGENTE
+                    ⚡ {flexPending} FLEX PENDIENTE
+                  </span>
+                )}
+                {pastPending > 0 && (
+                  <span className="badge badge-danger text-[10px] font-black">
+                    ⚠️ {pastPending} DÍAS ANTERIORES
                   </span>
                 )}
               </div>
@@ -608,7 +683,7 @@ export default function MobileTerminal({ connection }) {
               </p>
             </button>
 
-            {/* Colecta / Correo Hoy */}
+            {/* Hoy (General) */}
             <button
               onClick={() => {
                 setDateFilter('today');
@@ -622,7 +697,7 @@ export default function MobileTerminal({ connection }) {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black text-ink uppercase tracking-wider flex items-center gap-1">
-                  <Truck className="h-3 w-3 text-ink-subtle" />
+                  <CalendarCheck className="h-3 w-3 text-ink-subtle" />
                   Hoy
                 </span>
                 <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-muted text-ink-muted">
@@ -634,29 +709,29 @@ export default function MobileTerminal({ connection }) {
               </p>
             </button>
 
-            {/* Despacho Mañana */}
+            {/* Días Anteriores / Atrasados */}
             <button
               onClick={() => {
-                setDateFilter('tomorrow');
+                setDateFilter('past');
                 setActiveTab('shipments');
               }}
               className={`p-2.5 rounded-2xl border text-left transition-all ${
-                dateFilter === 'tomorrow' 
-                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/40 shadow-xs ring-2 ring-purple-500/30' 
+                dateFilter === 'past' 
+                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 shadow-xs ring-2 ring-amber-500/30' 
                   : 'border-line bg-card hover:bg-muted'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black text-purple-700 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1">
-                  <Calendar className="h-3 w-3 text-purple-500" />
-                  Mañana
+                <span className="text-[10px] font-black text-amber-800 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  Previos
                 </span>
-                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-muted text-ink-muted">
-                  {tomorrowPending} pend.
+                <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${pastPending > 0 ? 'bg-amber-500 text-white' : 'bg-muted text-ink-muted'}`}>
+                  {pastPending} pend.
                 </span>
               </div>
               <p className="mt-1 font-display text-lg font-black text-ink tabular">
-                {tomorrowTotal} <span className="text-[11px] font-normal text-ink-muted">total</span>
+                {pastTotal} <span className="text-[11px] font-normal text-ink-muted">total</span>
               </p>
             </button>
 
@@ -695,25 +770,26 @@ export default function MobileTerminal({ connection }) {
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: LISTA DE ENVÍOS (HOY / MAÑANA / FLEX / PENDIENTES) */}
+        {/* TAB 1: LISTA DE ENVÍOS (HOY / MAÑANA / PREVIOS / EN CAMINO) */}
         {/* ========================================================================= */}
         {activeTab === 'shipments' && (
           <div className="space-y-3 animate-in fade-in-50 duration-200">
 
             {/* A. DATE & LOGISTICS CHIP SELECTOR */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              
               <button
-                onClick={() => setDateFilter('all_urgent')}
+                onClick={() => setDateFilter('all_active')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
-                  dateFilter === 'all_urgent'
+                  dateFilter === 'all_active'
                     ? 'bg-ink text-bg shadow-xs'
                     : 'bg-card border border-line text-ink-muted hover:bg-muted'
                 }`}
               >
                 <Flame className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                <span>Hoy y Mañana</span>
+                <span>Despacho Activo</span>
                 <span className="badge badge-neutral text-[10px] tabular">
-                  {todayTotal + tomorrowTotal}
+                  {todayTotal + pastTotal + tomorrowTotal}
                 </span>
               </button>
 
@@ -726,7 +802,7 @@ export default function MobileTerminal({ connection }) {
                 }`}
               >
                 <Zap className="h-3.5 w-3.5 fill-current" />
-                <span>Solo Flex ({flexTotal})</span>
+                <span>Flex ({flexTotal})</span>
               </button>
 
               <button
@@ -738,7 +814,19 @@ export default function MobileTerminal({ connection }) {
                 }`}
               >
                 <CalendarCheck className="h-3.5 w-3.5" />
-                <span>Despacho Hoy ({todayTotal})</span>
+                <span>Hoy ({todayTotal})</span>
+              </button>
+
+              <button
+                onClick={() => setDateFilter('past')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'past'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-card border border-line text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                }`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Días Anteriores ({pastTotal})</span>
               </button>
 
               <button
@@ -751,6 +839,18 @@ export default function MobileTerminal({ connection }) {
               >
                 <Calendar className="h-3.5 w-3.5" />
                 <span>Mañana ({tomorrowTotal})</span>
+              </button>
+
+              <button
+                onClick={() => setDateFilter('shipped')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'shipped'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-card border border-line text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                }`}
+              >
+                <Truck className="h-3.5 w-3.5" />
+                <span>En Camino ({shippedTotal})</span>
               </button>
 
               <button
@@ -814,7 +914,7 @@ export default function MobileTerminal({ connection }) {
                 <Search className="h-4 w-4 text-ink-subtle absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Filtrar por orden, cliente, SKU o producto..."
+                  placeholder="Buscar por orden, tracking, cliente o SKU..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="input pl-9 text-xs py-2 h-9 bg-muted/60"
@@ -849,10 +949,14 @@ export default function MobileTerminal({ connection }) {
                     <div
                       key={s.id}
                       className={`card card-pad p-4 transition-all duration-200 border-2 ${
-                        isPacked
+                        meta.isShipped
+                          ? 'border-blue-300 dark:border-blue-800/60 bg-blue-50/10 dark:bg-blue-950/20'
+                          : isPacked
                           ? 'border-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/20 opacity-80 hover:opacity-100'
-                          : meta.isFlex
+                          : meta.isFlex && meta.dateCategory === 'today'
                           ? 'border-amber-400 bg-amber-500/5 dark:bg-amber-950/20 shadow-md ring-1 ring-amber-400/30'
+                          : meta.dateCategory === 'past'
+                          ? 'border-amber-500/80 bg-amber-50/30 dark:bg-amber-950/30 shadow-xs'
                           : 'border-line hover:border-line-strong'
                       }`}
                     >
@@ -862,7 +966,7 @@ export default function MobileTerminal({ connection }) {
                         <div className="flex flex-wrap items-center gap-1.5">
                           {/* Logistic Priority Tag */}
                           {meta.isFlex ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-[11px] font-black shadow-xs animate-pulse">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-[11px] font-black shadow-xs">
                               <Zap className="h-3 w-3 fill-slate-950" />
                               FLEX EN EL DÍA
                             </span>
@@ -878,19 +982,20 @@ export default function MobileTerminal({ connection }) {
                             </span>
                           )}
 
-                          {/* Date delivery context */}
-                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${
-                            meta.dateCategory === 'today'
-                              ? 'bg-brand/20 border-brand/40 text-brand-ink dark:text-brand'
-                              : 'bg-muted border-line text-ink-muted'
-                          }`}>
-                            {meta.dateCategory === 'today' ? '📅 Despachar Hoy' : '📦 Despacho Mañana'}
+                          {/* ACCURATE Real Date delivery context */}
+                          <span className={`px-2 py-0.5 rounded-lg text-[10px] border ${meta.dateBadgeClass}`}>
+                            {meta.dateBadgeText}
                           </span>
                         </div>
 
                         {/* Status badge */}
                         <div className="flex items-center gap-1.5">
-                          {isPacked ? (
+                          {meta.isShipped ? (
+                            <span className="badge badge-info text-[10px] font-black gap-1">
+                              <Truck className="h-3 w-3" />
+                              En camino
+                            </span>
+                          ) : isPacked ? (
                             <span className="badge badge-success text-[10px] font-black gap-1">
                               <CheckCircle className="h-3 w-3" />
                               Empaquetado
@@ -905,7 +1010,7 @@ export default function MobileTerminal({ connection }) {
 
                       </div>
 
-                      {/* Shipment & Order Identification */}
+                      {/* Shipment & Order Identification with EXACT PURCHASE TIMESTAMP */}
                       <div className="pt-2.5 flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
@@ -917,18 +1022,20 @@ export default function MobileTerminal({ connection }) {
                             </span>
                           </div>
                           
-                          <p className="text-xs text-ink-muted mt-0.5 flex items-center gap-1">
-                            <span>Comprador:</span>
-                            <b className="font-bold text-ink">
-                              {s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname || 'Cliente'}
-                            </b>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                            <span>Comprador: <b className="font-bold text-ink">{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname || 'Cliente'}</b></span>
+                            {meta.fullDateTime && (
+                              <span className="text-[11px] font-semibold text-ink-subtle">
+                                • Creada: <b className="text-ink">{meta.fullDateTime}</b>
+                              </span>
+                            )}
                             {s.receiver_address?.city?.name && (
                               <span className="text-[11px] text-ink-subtle flex items-center gap-0.5">
                                 • <MapPin className="h-3 w-3 text-ink-subtle inline" />
                                 {s.receiver_address.city.name}
                               </span>
                             )}
-                          </p>
+                          </div>
                         </div>
 
                         <div className="text-right shrink-0">
@@ -984,28 +1091,35 @@ export default function MobileTerminal({ connection }) {
                           <span>Etiqueta PDF</span>
                         </a>
 
-                        <button
-                          onClick={() => handleTogglePacking(s.id, isPacked)}
-                          className={`btn btn-sm flex-1 font-extrabold py-2 text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all ${
-                            isPacked
-                              ? 'btn-outline text-danger hover:bg-danger-soft'
-                              : meta.isFlex
-                              ? 'btn-primary bg-amber-400 text-slate-950 hover:bg-amber-500 border-amber-500 ring-2 ring-amber-400/40'
-                              : 'btn-primary'
-                          }`}
-                        >
-                          {isPacked ? (
-                            <>
-                              <Undo2 className="h-3.5 w-3.5" />
-                              <span>Desmarcar Empaque</span>
-                            </>
-                          ) : (
-                            <>
-                              <PackageCheck className="h-4 w-4" />
-                              <span>Listo para Despacho</span>
-                            </>
-                          )}
-                        </button>
+                        {meta.isShipped ? (
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60">
+                            <Navigation className="h-3.5 w-3.5" />
+                            <span>En reparto / Colecta</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleTogglePacking(s.id, isPacked)}
+                            className={`btn btn-sm flex-1 font-extrabold py-2 text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all ${
+                              isPacked
+                                ? 'btn-outline text-danger hover:bg-danger-soft'
+                                : meta.isFlex && meta.dateCategory === 'today'
+                                ? 'btn-primary bg-amber-400 text-slate-950 hover:bg-amber-500 border-amber-500 ring-2 ring-amber-400/40'
+                                : 'btn-primary'
+                            }`}
+                          >
+                            {isPacked ? (
+                              <>
+                                <Undo2 className="h-3.5 w-3.5" />
+                                <span>Desmarcar Empaque</span>
+                              </>
+                            ) : (
+                              <>
+                                <PackageCheck className="h-4 w-4" />
+                                <span>Listo para Despacho</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
 
                     </div>
@@ -1016,11 +1130,11 @@ export default function MobileTerminal({ connection }) {
                   <PackageOpen className="h-10 w-10 mx-auto text-brand opacity-60" />
                   <h3 className="font-display font-bold text-sm text-ink">No hay paquetes con este filtro</h3>
                   <p className="text-xs text-ink-subtle max-w-xs mx-auto">
-                    Probá cambiando la pestaña de fechas (Hoy / Mañana) o el estado a "Todos".
+                    Probá cambiando la pestaña de fechas o el estado a "Todos".
                   </p>
                   <button
                     onClick={() => {
-                      setDateFilter('all_urgent');
+                      setDateFilter('all_active');
                       setStatusFilter('all');
                       setSearchQuery('');
                     }}
