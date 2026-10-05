@@ -4,19 +4,10 @@ const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
-async function getShipments(query = {}, options = {}) {
-  const token = await getValidAccessToken();
-  const auth = getAuth();
-  if (!token || !auth.userId) {
-    throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
-  }
-
-  // Reutiliza el paginado de órdenes (ML acepta máx. 50 por llamada).
-  const { getOrders } = require('./mlOrders.service');
-  const ordersData = await getOrders(query);
-  const ordersRes = { data: { results: ordersData.results, paging: ordersData.paging } };
-
-  const orders = ordersRes.data.results || [];
+// Construye la lista de envíos a partir de órdenes ya obtenidas, con UNA sola
+// derivación de estado (override local > vivo ML > orden). La usan getShipments
+// y el resumen compartido (overview), así todos muestran los mismos estados.
+async function buildShipmentsFromOrders(orders, token, options = {}) {
   const shipmentsList = [];
   const packingMeta = await refreshPackingFromNeon();
 
@@ -102,6 +93,23 @@ async function getShipments(query = {}, options = {}) {
     }
   }
 
+  return shipmentsList;
+}
+
+async function getShipments(query = {}, options = {}) {
+  const token = await getValidAccessToken();
+  const auth = getAuth();
+  if (!token || !auth.userId) {
+    throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
+  }
+
+  // Reutiliza el paginado de órdenes (ML acepta máx. 50 por llamada).
+  const { getOrders } = require('./mlOrders.service');
+  const ordersData = await getOrders(query);
+  const orders = ordersData.results || [];
+
+  const shipmentsList = await buildShipmentsFromOrders(orders, token, options);
+
   let filtered = shipmentsList;
   if (query.status && query.status !== 'all') {
     filtered = filtered.filter(s => s.status === query.status);
@@ -135,7 +143,7 @@ async function getShipments(query = {}, options = {}) {
   return {
     results: filtered,
     total: filtered.length,
-    paging: ordersRes.data.paging,
+    paging: ordersData.paging,
     serverTime: new Date().toISOString(),
   };
 }
@@ -207,6 +215,7 @@ async function getShipmentLabel(shipmentId, format = 'pdf') {
 
 module.exports = {
   getShipments,
+  buildShipmentsFromOrders,
   getShipmentDetail,
   getShipmentLiveStatus,
   getShipmentLabel,

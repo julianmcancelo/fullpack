@@ -3,8 +3,7 @@ const router = express.Router();
 const store = require('../db/store');
 const { requireDevice } = require('../middleware/device');
 const { getShipments, getShipmentLabel } = require('../services/mlShipments.service');
-const { getItems } = require('../services/mlItems.service');
-const { getOrders } = require('../services/mlOrders.service');
+const { getOverview } = require('../services/overview.service');
 const { checkConnectionStatus } = require('../services/mlAuth.service');
 
 /**
@@ -154,33 +153,29 @@ router.get('/queue', async (req, res) => {
 });
 
 // GET /api/mobile/bootstrap  (single call with everything the app needs on open)
+// Usa el resumen canónico compartido con /stats/dashboard: mismos números.
 router.get('/bootstrap', async (req, res) => {
   try {
     const settings = store.getSettings();
     const threshold = settings.lowStockThreshold || 5;
 
-    const [connection, shipmentsData, itemsData, ordersData] = await Promise.all([
+    const [connection, data] = await Promise.all([
       checkConnectionStatus().catch(() => ({ connected: false })),
-      getShipments({ limit: 50 }).catch((e) => ({ results: [], error: e.message })),
-      getItems({ limit: 50 }).catch((e) => ({ results: [], error: e.message })),
-      getOrders({ limit: 50 }).catch((e) => ({ results: [], error: e.message })),
+      getOverview().catch((e) => null),
     ]);
 
-    const shipments = (shipmentsData.results || []).map(compactShipment);
-    const items = itemsData.results || [];
-    const orders = ordersData.results || [];
+    if (!data) throw new Error('No se pudo sincronizar con Mercado Libre.');
+
+    const shipments = (data.shipments || []).map(compactShipment);
+    const items = data.items || [];
 
     // Universo del día: envíos listos para despachar, separados por estado de empaque.
     // Se cuenta ANTES de recortar la cola, así el progreso no miente cuando hay más
     // de 30 pendientes.
     const readyToShip = shipments.filter((s) => s.status === 'ready_to_ship');
     const unpackedReady = readyToShip.filter((s) => !s.packing.packed);
-    const packedReady = readyToShip.filter((s) => s.packing.packed);
 
     const queue = unpackedReady.slice().sort(sortByOldestFirst).slice(0, 30);
-
-    const inTransit = shipments.filter((s) => s.status === 'shipped');
-    const delivered = shipments.filter((s) => s.status === 'delivered');
 
     const lowStock = items.filter(
       (i) => Number(i.available_quantity || 0) <= threshold,
@@ -188,27 +183,11 @@ router.get('/bootstrap', async (req, res) => {
 
     res.json({
       success: true,
-      serverTime: new Date().toISOString(),
+      serverTime: data.serverTime,
       user: req.mobileUser,
       device: { id: req.device.id, name: req.device.name, platform: req.device.platform },
       connection,
-      summary: {
-        // Progreso de empaque: packedCount + unpackedCount = readyToShipCount.
-        pendingShipmentsCount: readyToShip.length,
-        readyToShipCount: readyToShip.length,
-        unpackedCount: unpackedReady.length,
-        packedCount: packedReady.length,
-        inTransitShipmentsCount: inTransit.length,
-        deliveredShipmentsCount: delivered.length,
-        paidOrdersCount: orders.filter((o) => o.status === 'paid').length,
-        totalOrdersCount: ordersData.total || orders.length,
-        totalSalesAmount: orders.reduce((acc, o) => acc + Number(o.total_amount || 0), 0),
-        totalItemsCount: itemsData.total || items.length,
-        activeItemsCount: items.filter((i) => i.status === 'active').length,
-        pausedItemsCount: items.filter((i) => i.status === 'paused').length,
-        lowStockCount: lowStock.filter((i) => Number(i.available_quantity || 0) > 0).length,
-        outOfStockCount: items.filter((i) => Number(i.available_quantity || 0) === 0).length,
-      },
+      summary: data.summary,
       queue,
       queueFull: shipments.slice(0, 50),
       lowStock: lowStock.slice(0, 12).map((i) => ({
@@ -221,11 +200,7 @@ router.get('/bootstrap', async (req, res) => {
         status: i.status || '',
       })),
       recentLogs: store.getScanLogs(15),
-      errors: {
-        shipments: shipmentsData.error || null,
-        items: itemsData.error || null,
-        orders: ordersData.error || null,
-      },
+      errors: data.errors,
     });
   } catch (err) {
     console.error('mobile/bootstrap error:', err);

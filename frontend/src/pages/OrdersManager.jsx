@@ -40,7 +40,8 @@ export default function OrdersManager({ connection }) {
         setLoading(true);
         setError(null);
       }
-      const params = overrideParams || {};
+      // Ventana canónica de órdenes (100): la misma del resumen del dashboard.
+      const params = { limit: 100, ...(overrideParams || {}) };
       const status = statusFilterRef.current;
       const q = searchRef.current;
       if (Object.keys(params).length === 0) {
