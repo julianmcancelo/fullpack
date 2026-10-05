@@ -3,6 +3,6 @@ dist
 .vercel
 .env
 .env.local
+.env.*.local
 .system_generated
-
-.vercel
+*.log

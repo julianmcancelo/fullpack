@@ -1,16 +1,34 @@
-# React + Vite
+# React + Vite — frontend de ML Pro Suite
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+App web de gestión de Mercado Libre: Dashboard con KPIs, Stock, Ventas, Mesa de
+Empaque/Logística, Terminal de depósito, Preguntas, Calculadora y Ajustes.
 
-Currently, two official plugins are available:
+## Scripts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm run dev     # Vite en http://localhost:5173 (usa http://localhost:3001/api)
+npm run build   # Build de producción a dist/
+npm run preview # Previsualizar el build
+npm run lint    # oxlint
+```
 
-## React Compiler
+## Estructura
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```
+src/
+├── pages/            # Dashboard, StockManager, OrdersManager, ShipmentsManager,
+│                     # MobileTerminal, QuestionsManager, FeeCalculator, Settings
+├── components/       # Navbar, Sidebar, MobileBottomNav, BarcodeScannerModal,
+│                     # PairDeviceModal, NewSaleNotification, CommandPalette, ...
+├── context/          # AuthContext, ThemeContext
+├── services/         # api.js (cliente REST), firebase.js (Google Auth)
+└── utils/            # audio.js (beeps y voz en español)
+```
 
-## Expanding the Oxlint configuration
+## Sincronización en vivo
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+- Ventas: polling cada 15s + evento global `ml:new-orders` (ver `App.jsx`).
+- Envíos: polling cada 10s + botón "Sincronizar estados" (usa
+  `GET /shipments/:id/status` del backend).
+- `VITE_API_BASE` (opcional): en local con puerto 5173 apunta a
+  `http://localhost:3001/api`; en Vercel usa `/api`.

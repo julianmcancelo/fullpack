@@ -47,26 +47,44 @@ Si ya tienes un `access_token` generado desde la consola de desarrollador o Post
 
 ```
 d:\ML/
+├── api/
+│   └── index.js               # Entry point serverless (Vercel): re-exporta el backend
 ├── backend/
 │   ├── src/
-│   │   ├── db/store.js            # Almacenamiento local seguro de credenciales y tokens
-│   │   ├── services/
-│   │   │   ├── mlAuth.service.js      # OAuth 2.0 & Token Auto-refresher
-│   │   │   ├── mlItems.service.js     # API de ítems, precios y stock
-│   │   │   ├── mlOrders.service.js    # API de ventas y compradores
-│   │   │   └── mlShipments.service.js # API de logística y descarga de etiquetas
-│   │   ├── routes/                # Rutas REST de Express
-│   │   └── server.js              # Servidor Express
+│   │   ├── server.js              # App Express (rutas /api/*)
+│   │   ├── middleware/device.js   # Auth de dispositivos móviles (X-Device-Token)
+│   │   ├── routes/                # auth, users, items, orders, shipments,
+│   │   │                         # settings, stats, questions, pair, mobile
+│   │   ├── services/              # mlAuth (OAuth + refresh), mlItems, mlOrders,
+│   │   │                         # mlShipments, mlQuestions, mobileTokens
+│   │   └── db/                   # store.js (JSON local + seed) / neon.js (PostgreSQL)
+│   └── data/store.json       # Seed inicial para el deploy (los tokens rotan por OAuth)
 ├── frontend/
 │   ├── src/
-│   │   ├── components/            # Navbar, Sidebar, Banners
+│   │   ├── components/            # Navbar, Sidebar, Banners, PairDeviceModal, ...
 │   │   ├── pages/
 │   │   │   ├── Dashboard.jsx        # KPIs, gráficos, órdenes y envíos urgentes
 │   │   │   ├── StockManager.jsx     # Edición de stock y precio en vivo
-│   │   │   ├── OrdersManager.jsx    # Desglose financiero y compradores
-│   │   │   ├── ShipmentsManager.jsx # Envíos y etiquetas PDF/ZPL
-│   │   │   └── Settings.jsx         # Asistente de conexión y credenciales
-│   │   ├── services/api.js        # Cliente API frontend
-│   │   └── App.jsx
-└── package.json                   # Script orquestador
+│   │   │   ├── OrdersManager.jsx    # Ventas (auto-sync 15s + evento ml:new-orders)
+│   │   │   ├── ShipmentsManager.jsx # Empaque, etiquetas PDF/ZPL, sync de estados ML
+│   │   │   ├── MobileTerminal.jsx   # Terminal web de depósito (QR + despacho)
+│   │   │   ├── QuestionsManager.jsx # Preguntas pre-venta
+│   │   │   ├── FeeCalculator.jsx    # Calculadora de comisiones
+│   │   │   └── Settings.jsx         # Conexión ML, pairing QR, ajustes
+│   │   ├── services/api.js        # Cliente REST del frontend
+│   │   └── App.jsx                # Polling global de ventas + notificaciones
+│   └── README.md                 # Docs del frontend
+├── mobile/                       # App Android nativa (Kotlin + Compose)
+│   ├── CONTRACT.md                 # Fuente de verdad: API, firmas y diseño
+│   └── README.md                   # Flujo de vinculación QR
+├── vercel.json                   # Deploy: frontend estático + /api/* serverless
+├── .vercelignore                 # Excluye mobile/, dist y logs del deploy
+├── firebase.json                  # Config de Google Sign-In (redirect URIs)
+└── package.json                   # Script orquestador (npm run dev)
+```
+
+> Nota: las dependencias del `package.json` raíz duplican a propósito las del
+> backend: el builder `@vercel/node` de `api/index.js` resuelve desde la raíz.
+> `backend/data/store.json` es el seed inicial del deploy; en producción la
+> fuente de verdad es Neon PostgreSQL (`DATABASE_URL`).
 ```
