@@ -60,6 +60,7 @@ async function initNeonDb() {
           packed BOOLEAN DEFAULT FALSE,
           quality_checked BOOLEAN DEFAULT FALSE,
           note TEXT DEFAULT '',
+          status_override VARCHAR(50),
           printed_at TIMESTAMP,
           packed_at TIMESTAMP,
           first_scanned_at TIMESTAMP,
@@ -70,6 +71,12 @@ async function initNeonDb() {
           order_id VARCHAR(100),
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Add status_override column if table already exists
+        DO $$ BEGIN
+          ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS status_override VARCHAR(50);
+        EXCEPTION WHEN others THEN NULL;
+        END $$;
 
         CREATE TABLE IF NOT EXISTS ml_scan_logs (
           id SERIAL PRIMARY KEY,
@@ -250,6 +257,7 @@ async function getPackingMetadataFromNeon() {
         packed: Boolean(row.packed),
         qualityChecked: Boolean(row.quality_checked),
         note: row.note || '',
+        statusOverride: row.status_override || null,
         printedAt: row.printed_at ? row.printed_at.toISOString() : null,
         packedAt: row.packed_at ? row.packed_at.toISOString() : null,
         firstScannedAt: row.first_scanned_at ? row.first_scanned_at.toISOString() : null,
@@ -275,16 +283,17 @@ async function savePackingMetadataToNeon(shipmentId, data) {
     await initNeonDb();
     await p.query(
       `INSERT INTO ml_packing_metadata (
-         shipment_id, printed, packed, quality_checked, note, 
+         shipment_id, printed, packed, quality_checked, note, status_override,
          printed_at, packed_at, first_scanned_at, last_scanned_at, scan_count, 
          sku, buyer_name, order_id, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
        ON CONFLICT (shipment_id) DO UPDATE SET
          printed = EXCLUDED.printed,
          packed = EXCLUDED.packed,
          quality_checked = EXCLUDED.quality_checked,
          note = EXCLUDED.note,
+         status_override = EXCLUDED.status_override,
          printed_at = EXCLUDED.printed_at,
          packed_at = EXCLUDED.packed_at,
          first_scanned_at = COALESCE(ml_packing_metadata.first_scanned_at, EXCLUDED.first_scanned_at),
@@ -300,6 +309,7 @@ async function savePackingMetadataToNeon(shipmentId, data) {
         Boolean(data.packed),
         Boolean(data.qualityChecked),
         data.note || '',
+        data.statusOverride || null,
         data.printedAt ? new Date(data.printedAt) : null,
         data.packedAt ? new Date(data.packedAt) : null,
         data.firstScannedAt ? new Date(data.firstScannedAt) : (data.packedAt ? new Date(data.packedAt) : null),

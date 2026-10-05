@@ -41,24 +41,40 @@ router.post('/scan', async (req, res) => {
     }
 
     const trimmed = rawCode.trim();
-    // Normalize code: extract numbers or clean string
-    const numberMatch = trimmed.match(/\b\d{9,16}\b/);
-    const candidateId = numberMatch ? numberMatch[0] : trimmed;
+    // Normalize code: extract numbers, extract parameters from ML QR URLs, or use clean string
+    const numbersFound = trimmed.match(/\b\d{9,16}\b/g) || [];
+    const candidatePool = [trimmed, ...numbersFound];
+    
+    // Also support parsing URLs like https://.../shipments/48164856585 or ?shipment_id=...
+    try {
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        const parsedUrl = new URL(trimmed);
+        const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
+        candidatePool.push(...pathSegments);
+        parsedUrl.searchParams.forEach((val) => candidatePool.push(val));
+      }
+    } catch {}
 
     // Fetch active shipments
     const shipmentsData = await getShipments({ limit: 50 });
     const shipments = shipmentsData.results || [];
 
     // Find match by shipment ID, order ID, tracking number, or SKU
-    let matched = shipments.find(s => 
-      String(s.id) === candidateId ||
-      String(s.order_id) === candidateId ||
-      String(s.tracking_number) === candidateId ||
-      (s.items && s.items.some(it => 
-        (it.item?.id && it.item.id.toUpperCase() === candidateId.toUpperCase()) ||
-        (it.item?.seller_sku && it.item.seller_sku.toUpperCase() === candidateId.toUpperCase())
-      ))
-    );
+    let matched = shipments.find(s => {
+      const sId = String(s.id);
+      const oId = String(s.order_id);
+      const trk = s.tracking_number ? String(s.tracking_number).toUpperCase() : '';
+      
+      return candidatePool.some(cand => {
+        const candNorm = String(cand).toUpperCase();
+        if (sId === cand || oId === cand || (trk && trk === candNorm)) return true;
+        if (s.items && s.items.some(it => 
+          (it.item?.id && it.item.id.toUpperCase() === candNorm) ||
+          (it.item?.seller_sku && it.item.seller_sku.toUpperCase() === candNorm)
+        )) return true;
+        return false;
+      });
+    });
 
     if (matched) {
       const prevPacking = matched.packing || {};
