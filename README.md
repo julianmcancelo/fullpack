@@ -1,90 +1,82 @@
-#  Mercado Libre Pro Manager
+![ML Pro Suite](docs/banner.svg)
 
-Aplicación profesional y completa para la gestión integral de tu cuenta de **Mercado Libre**:
-- **Control de Stock y Precios:** Edición en tiempo real, variantes y publicaciones pausadas/activas sincronizadas directamente con la API oficial.
-- **Centro de Ventas y Facturación:** Historial de compras, compradores, cobros en Mercado Pago y cálculo de comisiones netas.
-- **Logística y Envíos:** Gestión de Mercado Envíos (Flex, Colecta, Full y Correo tradicional) con **descarga e impresión directa de etiquetas oficiales (PDF y térmicas ZPL)**.
-- **Conexión Oficial:** Autenticación OAuth 2.0 con auto-renovación de Access Token o ingreso manual directo de token.
+[![Vercel](https://img.shields.io/badge/deploy-vercel-black?logo=vercel)](https://ml-manager-pro-jade.vercel.app)
+[![Release APK](https://img.shields.io/github/v/release/julianmcancelo/ml-manager-pro?label=APK&color=FFD600)](https://github.com/julianmcancelo/ml-manager-pro/releases/latest)
+[![CI](https://github.com/julianmcancelo/ml-manager-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/julianmcancelo/ml-manager-pro/actions/workflows/ci.yml)
+[![Android](https://img.shields.io/badge/Android-Kotlin%20%2B%20Compose-3DDC84?logo=android)](mobile/CONTRACT.md)
+[![Web](https://img.shields.io/badge/Web-React%20%2B%20Vite-61DAFB?logo=react)](frontend/README.md)
+
+# ML Pro Suite
+
+Gestión integral de tu cuenta de **Mercado Libre** con datos 100% reales de la API oficial:
+
+- **Stock y precios:** edición en vivo, variantes y publicaciones pausadas/activas.
+- **Ventas:** historial, compradores, cobros, comisiones y neto acreditado, con aviso de venta nueva en tiempo real.
+- **Logística:** Mercado Envíos (Flex, Colecta, Full, Correo) con etiquetas oficiales **PDF y ZPL térmica**, manifiesto de despacho y sincronización de estados.
+- **Terminal de depósito:** escáner QR/barras en la web y en la **app Android** con modo ráfaga, linterna y verificación de despacho por transportista.
+
+```mermaid
+flowchart LR
+    ML[(Mercado Libre API)] <--> API[Backend Express /api]
+    API <--> WEB[Web React]
+    API <--> APP[App Android]
+    WEB -->|QR| APP
+    APP -->|escaneo| API
+```
 
 ---
 
-##  Inicio Rápido
+## Inicio rápido
 
-### 1. Iniciar toda la aplicación
-Desde la raíz del proyecto (`d:\ML`), ejecuta:
+Desde la raíz del proyecto:
 
 ```bash
 npm run dev
 ```
 
-Esto levantará automáticamente:
-- **Backend API:** `http://localhost:3001`
-- **Frontend App:** `http://localhost:5173`
+Levanta **Backend** en `http://localhost:3001` y **Frontend** en `http://localhost:5173`.
+
+## Conectar tu cuenta de Mercado Libre
+
+### Opción A: OAuth 2.0 (recomendada)
+
+1. Entrá al [DevCenter de Mercado Libre](https://developers.mercadolibre.com.ar/devcenter) y creá una aplicación.
+2. En **Redirect URI** poné `http://localhost:3001/api/auth/callback` (o la URL de tu deploy + `/api/auth/callback`).
+3. En la app, pestaña **Credenciales & Config**: pegá App ID y Secret, elegí tu país y conectá. Los tokens se auto-renuevan.
+
+### Opción B: Access Token directo
+
+En **Credenciales & Config → Método 2** pegá tu token `APP_USR-...` y vinculá.
+
+> Las credenciales viven en variables de entorno (`ML_APP_ID`, `ML_CLIENT_SECRET`, `ML_REDIRECT_URI`, ver `.env.example`). Nunca se commitean secretos.
 
 ---
 
-##  Guía para Conectar tu Cuenta de Mercado Libre
-
-### Opción A: Conexión Automática OAuth 2.0 (Recomendada)
-1. Ingresa al [DevCenter de Mercado Libre](https://developers.mercadolibre.com.ar/devcenter) con tu cuenta de vendedor.
-2. Haz clic en **Crear una aplicación**.
-3. En **Redirect URI (URL de retorno)**, ingresa:
-   ```
-   http://localhost:3001/api/auth/callback
-   ```
-4. Guarda tu aplicación y copia tu **APP ID (Client ID)** y **Client Secret Key**.
-5. Abre la aplicación en `http://localhost:5173`, ve a la pestaña **Credenciales & Ajustes**, pega tu App ID y Secret, selecciona tu país (Argentina, Brasil, México, Chile, Colombia, Uruguay, Perú) y haz clic en **"Conectar con Mercado Libre (OAuth 2.0)"**.
-6. Autoriza la aplicación en Mercado Libre ¡y listo! La app renovará los tokens automáticamente en segundo plano.
-
-### Opción B: Ingreso Directo de Access Token
-Si ya tienes un `access_token` generado desde la consola de desarrollador o Postman:
-1. Ve a **Credenciales & Ajustes** > **Método 2: Ingreso Directo**.
-2. Pega tu `APP_USR-...` token y haz clic en **Vincular**.
-
----
-
-##  Estructura del Proyecto
+## Estructura
 
 ```
-d:\ML/
-├── api/
-│   └── index.js               # Entry point serverless (Vercel): re-exporta el backend
-├── backend/
-│   ├── src/
-│   │   ├── server.js              # App Express (rutas /api/*)
-│   │   ├── middleware/device.js   # Auth de dispositivos móviles (X-Device-Token)
-│   │   ├── routes/                # auth, users, items, orders, shipments,
-│   │   │                         # settings, stats, questions, pair, mobile
-│   │   ├── services/              # mlAuth (OAuth + refresh), mlItems, mlOrders,
-│   │   │                         # mlShipments, mlQuestions, mobileTokens
-│   │   └── db/                   # store.js (JSON local + seed) / neon.js (PostgreSQL)
-│   └── data/store.json       # Seed inicial para el deploy (los tokens rotan por OAuth)
-├── frontend/
-│   ├── src/
-│   │   ├── components/            # Navbar, Sidebar, Banners, PairDeviceModal, ...
-│   │   ├── pages/
-│   │   │   ├── Dashboard.jsx        # KPIs, gráficos, órdenes y envíos urgentes
-│   │   │   ├── StockManager.jsx     # Edición de stock y precio en vivo
-│   │   │   ├── OrdersManager.jsx    # Ventas (auto-sync 15s + evento ml:new-orders)
-│   │   │   ├── ShipmentsManager.jsx # Empaque, etiquetas PDF/ZPL, sync de estados ML
-│   │   │   ├── MobileTerminal.jsx   # Terminal web de depósito (QR + despacho)
-│   │   │   ├── QuestionsManager.jsx # Preguntas pre-venta
-│   │   │   ├── FeeCalculator.jsx    # Calculadora de comisiones
-│   │   │   └── Settings.jsx         # Conexión ML, pairing QR, ajustes
-│   │   ├── services/api.js        # Cliente REST del frontend
-│   │   └── App.jsx                # Polling global de ventas + notificaciones
-│   └── README.md                 # Docs del frontend
-├── mobile/                       # App Android nativa (Kotlin + Compose)
-│   ├── CONTRACT.md                 # Fuente de verdad: API, firmas y diseño
-│   └── README.md                   # Flujo de vinculación QR
-├── vercel.json                   # Deploy: frontend estático + /api/* serverless
-├── .vercelignore                 # Excluye mobile/, dist y logs del deploy
-├── firebase.json                  # Config de Google Sign-In (redirect URIs)
-└── package.json                   # Script orquestador (npm run dev)
+├── api/                # Entry point serverless (Vercel)
+├── backend/            # Express: routes, services, Neon PostgreSQL + JSON local
+├── frontend/           # React + Vite + Tailwind
+├── mobile/             # App Android nativa (Kotlin + Compose, ver CONTRACT.md)
+├── docs/banner.svg     # Banner del repo
+├── vercel.json         # Deploy: frontend estático + /api/* serverless
+└── firebase.json       # Google Sign-In (redirect URIs)
 ```
 
-> Nota: las dependencias del `package.json` raíz duplican a propósito las del
-> backend: el builder `@vercel/node` de `api/index.js` resuelve desde la raíz.
-> `backend/data/store.json` es el seed inicial del deploy; en producción la
-> fuente de verdad es Neon PostgreSQL (`DATABASE_URL`).
+Un solo resumen canónico (`backend/src/services/overview.service.js`) alimenta al dashboard web y a la app móvil: mismos números en todos lados.
+
+## App Android
+
+Vinculás el celular escaneando el QR de la web (**Vincular celular**) y operás la terminal de empaque desde el depósito. La app avisa sola cuando hay una versión nueva (**Ajustes → Buscar actualizaciones**).
+
+- 📲 Último APK: [Releases](https://github.com/julianmcancelo/ml-manager-pro/releases/latest)
+- 📖 Contrato técnico: [mobile/CONTRACT.md](mobile/CONTRACT.md)
+
+## Deploy
+
+```bash
+npx vercel --prod --yes   # siempre desde la raíz del repo
 ```
+
+Producción: <https://ml-manager-pro-jade.vercel.app>
