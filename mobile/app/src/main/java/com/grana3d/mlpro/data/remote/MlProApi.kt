@@ -5,6 +5,7 @@ import com.grana3d.mlpro.core.Constants
 import com.grana3d.mlpro.core.normalizeApiBase
 import com.grana3d.mlpro.data.remote.dto.ApiErrorDto
 import com.grana3d.mlpro.data.remote.dto.BootstrapResponse
+import com.grana3d.mlpro.data.remote.dto.GitHubReleaseDto
 import com.grana3d.mlpro.data.remote.dto.MeResponse
 import com.grana3d.mlpro.data.remote.dto.PackingUpdateRequest
 import com.grana3d.mlpro.data.remote.dto.PackingUpdateResponse
@@ -135,6 +136,61 @@ class MlProApi(private val client: OkHttpClient, private val json: Json) {
         )
 
     /**
+     * Último GitHub Release publicado (`Ajustes → Buscar actualizaciones`).
+     * El repo es público: no necesita token. GitHub exige `User-Agent`.
+     */
+    suspend fun checkLatestRelease(owner: String, repo: String): ApiResult<GitHubReleaseDto> =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("https://api.github.com/repos/$owner/$repo/releases/latest")
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", USER_AGENT)
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val raw = runCatching { response.body?.string() }.getOrNull().orEmpty()
+                    if (response.code == 404) {
+                        return@use ApiResult.Err(
+                            message = "Todavía no hay versiones publicadas.",
+                            code = "no_releases",
+                            httpStatus = 404,
+                        )
+                    }
+                    if (response.code == 403 || response.code == 429) {
+                        return@use ApiResult.Err(
+                            message = "GitHub limitó las consultas. Probá de nuevo en unos minutos.",
+                            code = "rate_limited",
+                            httpStatus = response.code,
+                        )
+                    }
+                    if (response.code !in 200..299 || raw.isBlank()) {
+                        return@use ApiResult.Err(
+                            message = "No pudimos consultar las actualizaciones (HTTP ${response.code}).",
+                            code = "http_${response.code}",
+                            httpStatus = response.code,
+                        )
+                    }
+                    val element = runCatching { json.parseToJsonElement(raw) }.getOrNull()
+                        ?: return@use ApiResult.Err(Constants.MSG_BAD_RESPONSE, code = CODE_BAD_PAYLOAD)
+                    runCatching {
+                        ApiResult.Ok(json.decodeFromJsonElement(GitHubReleaseDto.serializer(), element))
+                    }.getOrElse {
+                        ApiResult.Err(Constants.MSG_BAD_RESPONSE, code = CODE_BAD_PAYLOAD)
+                    }
+                }
+            } catch (e: SocketTimeoutException) {
+                ApiResult.Err(Constants.MSG_TIMEOUT, code = CODE_TIMEOUT)
+            } catch (e: UnknownHostException) {
+                ApiResult.Err(Constants.MSG_NO_CONNECTION, code = CODE_NETWORK)
+            } catch (e: IOException) {
+                ApiResult.Err(Constants.MSG_NO_CONNECTION, code = CODE_NETWORK)
+            } catch (e: Exception) {
+                ApiResult.Err(Constants.MSG_BAD_RESPONSE, code = CODE_UNEXPECTED)
+            }
+        }
+
+    /**
      * URL de descarga de la etiqueta. Se abre en un visor externo (Chrome, visor de PDF),
      * que **no** puede mandar headers, así que el token viaja como query
      * (`?deviceToken=...`): el backend lo acepta desde `extractToken`.
@@ -170,6 +226,7 @@ class MlProApi(private val client: OkHttpClient, private val json: Json) {
             val builder = Request.Builder()
                 .url(url.trim())
                 .header("Accept", "application/json")
+                .header("User-Agent", USER_AGENT)
 
             token?.takeIf { it.isNotBlank() }?.let { builder.header(Constants.HEADER_DEVICE_TOKEN, it) }
 
@@ -298,6 +355,9 @@ class MlProApi(private val client: OkHttpClient, private val json: Json) {
         const val HTTP_GET = "GET"
         const val HTTP_POST = "POST"
         const val HTTP_PUT = "PUT"
+
+        /** Identificación ante la API de GitHub (obligatoria) y el backend. */
+        const val USER_AGENT = "MLPro-Android"
 
         const val CODE_TIMEOUT = "timeout"
         const val CODE_NETWORK = "network"

@@ -43,6 +43,7 @@ import com.grana3d.mlpro.core.Constants
 import com.grana3d.mlpro.core.formatDateTime
 import com.grana3d.mlpro.core.formatRelative
 import com.grana3d.mlpro.core.mlViewModelFactory
+import com.grana3d.mlpro.domain.UpdateCheck
 import com.grana3d.mlpro.ui.components.MlBadge
 import com.grana3d.mlpro.ui.components.MlButton
 import com.grana3d.mlpro.ui.components.MlButtonVariant
@@ -335,6 +336,20 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                 MlCard {
                     SettingsRow(label = "Versión de la app", value = Constants.APP_VERSION)
                     Spacer(Modifier.height(10.dp))
+                    UpdateSection(
+                        isChecking = state.isCheckingUpdates,
+                        result = state.updateResult,
+                        onCheck = vm::checkForUpdates,
+                        onDownload = { url ->
+                            val launched = runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }
+                            if (launched.isFailure) {
+                                vm.reportMessage("No hay ninguna app para abrir el navegador.")
+                            }
+                        },
+                    )
+                    Spacer(Modifier.height(10.dp))
                     MlButton(
                         text = "Abrir DevCenter de Mercado Libre",
                         onClick = {
@@ -393,9 +408,86 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
     }
 }
 
+/**
+ * Actualizaciones desde GitHub Releases: busca, informa y abre la descarga del APK.
+ * Composable privado: no forma parte del contrato de pantallas.
+ */
 @Composable
-private fun SettingsRow(label: String, value: String) {
+private fun UpdateSection(
+    isChecking: Boolean,
+    result: UpdateCheck?,
+    onCheck: () -> Unit,
+    onDownload: (String) -> Unit,
+) {
     val colors = MlTheme.colors
+    Text(
+        text = "Actualizaciones de la app",
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        color = colors.ink,
+    )
+    Spacer(Modifier.height(4.dp))
+    when (result) {
+        null -> Text(
+            text = "Tocá para ver si hay una versión nueva publicada.",
+            fontSize = 12.sp,
+            color = colors.inkSubtle,
+        )
+
+        is UpdateCheck.Available -> {
+            MlStatusPill(text = "Nueva versión ${result.versionName}", tone = MlTone.Brand, dot = true)
+            Spacer(Modifier.height(6.dp))
+            val notes = result.notes?.trim().orEmpty()
+            if (notes.isNotBlank()) {
+                Text(
+                    text = notes.take(280),
+                    fontSize = 12.sp,
+                    color = colors.inkMuted,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+
+        UpdateCheck.UpToDate -> Text(
+            text = "Tenés la última versión instalada.",
+            fontSize = 12.sp,
+            color = colors.inkSubtle,
+        )
+
+        is UpdateCheck.Unavailable -> Text(
+            text = result.message,
+            fontSize = 12.sp,
+            color = colors.warning,
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MlButton(
+            text = if (isChecking) "Buscando…" else "Buscar actualizaciones",
+            onClick = onCheck,
+            variant = MlButtonVariant.Outline,
+            icon = Icons.Outlined.Refresh,
+            enabled = !isChecking,
+            loading = isChecking,
+            modifier = Modifier.weight(1f),
+        )
+        val available = result as? UpdateCheck.Available
+        if (available != null) {
+            MlButton(
+                text = "Descargar",
+                onClick = { onDownload(available.downloadUrl) },
+                variant = MlButtonVariant.Primary,
+                icon = Icons.Outlined.Share,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(label: String, value: String) {    val colors = MlTheme.colors
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(
             text = label,

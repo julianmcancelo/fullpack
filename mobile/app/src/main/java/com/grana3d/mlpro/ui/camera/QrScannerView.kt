@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -58,12 +59,17 @@ import kotlin.coroutines.resumeWithException
  * - sólo analiza mientras [isActive] sea `true` (nunca queda la cámara prendida de fondo);
  * - libera el analizador, el ejecutor y el cliente de ML Kit al salir de la composición;
  * - ignora repeticiones del mismo código durante [Constants.SCAN_THROTTLE_MS].
+ * - el enfriamiento global entre lecturas distintas lo gobierna [cooldownMs]
+ *   (en ráfaga la Terminal pasa un valor más corto: el servidor deduplica);
+ * - [isTorchOn] prende o apaga la linterna si el dispositivo tiene flash.
  */
 @Composable
 fun QrScannerView(
     modifier: Modifier = Modifier,
     isActive: Boolean = true,
     onQrDetected: (String) -> Unit,
+    cooldownMs: Long = Constants.SCAN_COOLDOWN_MS,
+    isTorchOn: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -98,9 +104,12 @@ fun QrScannerView(
 
     // El callback más reciente, sin recompilar ni re-vincular la cámara.
     val currentOnDetected by rememberUpdatedState(onQrDetected)
+    val currentCooldownMs by rememberUpdatedState(cooldownMs)
     val lastCode = remember { mutableStateOf<String?>(null) }
     val lastAt = remember { mutableLongStateOf(0L) }
     val lastAnyAt = remember { mutableLongStateOf(0L) }
+    // Cámara vinculada: se guarda para manejar la linterna sin re-vincular.
+    val cameraState = remember { mutableStateOf<Camera?>(null) }
 
     // Cada vez que el consumidor abre el escáner, la respuesta vuelve a ser inmediata.
     LaunchedEffect(isActive) {
@@ -131,7 +140,7 @@ fun QrScannerView(
                             now - lastAt.value < Constants.SCAN_THROTTLE_MS
                         // Enfriamiento global: una etiqueta con QR + código de barras
                         // entrega dos valores distintos casi al mismo tiempo.
-                        val enEnfriamiento = now - lastAnyAt.value < Constants.SCAN_COOLDOWN_MS
+                        val enEnfriamiento = now - lastAnyAt.value < currentCooldownMs
 
                         if (!mismoCodigoSeguido && !enEnfriamiento) {
                             lastCode.value = value
@@ -156,6 +165,7 @@ fun QrScannerView(
     LaunchedEffect(hasPermission.value, isActive) {
         if (!hasPermission.value || !isActive) {
             runCatching { providerState.value?.unbindAll() }
+            cameraState.value = null
             return@LaunchedEffect
         }
 
@@ -166,16 +176,25 @@ fun QrScannerView(
             val provider = providerState.value ?: context.cameraProvider().also { providerState.value = it }
             previewUseCase.surfaceProvider = previewView.surfaceProvider
             provider.unbindAll()
-            provider.bindToLifecycle(
+            val camera = provider.bindToLifecycle(
                 lifecycleOwner,
                 CameraSelector.DEFAULT_BACK_CAMERA,
                 previewUseCase,
                 analysisUseCase,
             )
+            cameraState.value = camera
+            // Si el dispositivo no tiene flash, se ignora en silencio.
+            runCatching { camera.cameraControl.enableTorch(isTorchOn) }
             cameraError = null
         } catch (t: Throwable) {
+            cameraState.value = null
             cameraError = t.message ?: "No se pudo abrir la cámara."
         }
+    }
+
+    // La linterna sigue al interruptor sin re-vincular la cámara.
+    LaunchedEffect(isTorchOn) {
+        runCatching { cameraState.value?.cameraControl?.enableTorch(isTorchOn) }
     }
 
     Box(modifier = modifier) {

@@ -8,6 +8,7 @@ import com.grana3d.mlpro.data.repository.MobileRepository
 import com.grana3d.mlpro.domain.ConnectionState
 import com.grana3d.mlpro.domain.LinkedAccount
 import com.grana3d.mlpro.domain.LinkedDevice
+import com.grana3d.mlpro.domain.UpdateCheck
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,9 @@ data class SettingsUiState(
     val sessionAvatar: String? = null,
     /** Hora del servidor del último `bootstrap`: indica cuán frescos están los datos. */
     val serverTime: String? = null,
+    /** Búsqueda de actualizaciones en GitHub Releases. */
+    val isCheckingUpdates: Boolean = false,
+    val updateResult: UpdateCheck? = null,
 ) {
     val displayName: String
         get() = account?.name?.takeIf { it.isNotBlank() }
@@ -167,6 +171,16 @@ class SettingsViewModel(
                     it.copy(isUnlinking = false, error = result.message)
                 }
             }
+        }
+    }
+
+    /** Consulta los GitHub Releases públicos y guarda el resultado para la pantalla. */
+    fun checkForUpdates() {
+        if (_state.value.isCheckingUpdates) return
+        viewModelScope.launch {
+            _state.update { it.copy(isCheckingUpdates = true, updateResult = null) }
+            val result = repository.checkForUpdates()
+            _state.update { it.copy(isCheckingUpdates = false, updateResult = result) }
         }
     }
 

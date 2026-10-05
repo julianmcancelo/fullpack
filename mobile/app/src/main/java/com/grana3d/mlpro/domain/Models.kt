@@ -250,3 +250,25 @@ sealed interface ScanOutcome {
     /** Falla técnica (red, sesión, servidor) o código vacío. */
     data class Failure(val message: String? = null) : ScanOutcome
 }
+
+/**
+ * Resultado de buscar actualizaciones en GitHub Releases.
+ * El tag del release lleva el formato `v{versionName}+{versionCode}`
+ * (por ejemplo `v1.1.0+2`): se compara el código, tolerando tags viejos
+ * que solo traen el nombre.
+ */
+sealed interface UpdateCheck {
+    /** Esta instalación está al día. */
+    data object UpToDate : UpdateCheck
+
+    /** Hay una versión nueva publicada con APK descargable. */
+    data class Available(
+        val versionName: String,
+        val versionCode: Int,
+        val notes: String? = null,
+        val downloadUrl: String,
+    ) : UpdateCheck
+
+    /** No se pudo consultar (sin red, repo privado o límite de GitHub). */
+    data class Unavailable(val message: String) : UpdateCheck
+}

@@ -14,11 +14,11 @@ android {
         applicationId = "com.grana3d.mlpro"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         // VERSION_NAME se expone a Kotlin para el claim del dispositivo (§3).
-        buildConfigField("String", "VERSION_NAME", "\"1.0.0\"")
+        buildConfigField("String", "VERSION_NAME", "\"1.1.0\"")
         // La URL base por defecto vive en `core/Constants.kt` (única fuente de verdad);
         // no se duplica acá para que no queden dos valores distintos en el APK.
     }

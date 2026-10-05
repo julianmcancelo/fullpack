@@ -14,7 +14,14 @@ object Constants {
     const val DEFAULT_API_BASE: String = "https://mercado-libre-manager.vercel.app/api"
 
     /** Versión de la app (se envía en `POST /pair/claim` como `appVersion`). */
-    const val APP_VERSION: String = "1.0.0"
+    const val APP_VERSION: String = "1.1.0"
+
+    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+2`). */
+    const val APP_VERSION_CODE: Int = 2
+
+    /** Repo público donde se publican los APK (`Ajustes → Buscar actualizaciones`). */
+    const val GITHUB_OWNER: String = "julianmcancelo"
+    const val GITHUB_REPO: String = "ml-manager-pro"
 
     /** Plataforma informada al backend al vincular el dispositivo. */
     const val PLATFORM: String = "android"

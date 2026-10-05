@@ -39,6 +39,7 @@ import com.grana3d.mlpro.domain.ScanLogEntry
 import com.grana3d.mlpro.domain.ScanMode
 import com.grana3d.mlpro.domain.ScanOutcome
 import com.grana3d.mlpro.domain.Shipment
+import com.grana3d.mlpro.domain.UpdateCheck
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -270,6 +271,46 @@ class MobileRepository(
         // Aunque el backend falle, el celular se desvincula localmente: es lo que pidió el usuario.
         session.clear()
         return result
+    }
+
+    /**
+     * Busca actualizaciones en los GitHub Releases públicos.
+     * Compara el `versionCode` del tag (`v1.1.0+2`) con el instalado.
+     * Nunca lanza: sin red o sin releases devuelve [UpdateCheck.Unavailable].
+     */
+    suspend fun checkForUpdates(): UpdateCheck {
+        val current = Constants.APP_VERSION_CODE
+        return when (
+            val result = api.checkLatestRelease(Constants.GITHUB_OWNER, Constants.GITHUB_REPO)
+        ) {
+            is ApiResult.Err -> UpdateCheck.Unavailable(result.message)
+            is ApiResult.Ok -> {
+                val release = result.value
+                val tag = release.tagName?.trim().orEmpty()
+                val remoteCode = tag.substringAfterLast('+', "").toIntOrNull()
+                val remoteName = tag.removePrefix("v").substringBefore('+').ifBlank { tag }
+                val apkUrl = release.assets
+                    .firstOrNull { it.downloadUrl?.endsWith(".apk", ignoreCase = true) == true }
+                    ?.downloadUrl
+                    ?: release.htmlUrl
+                if (apkUrl.isNullOrBlank()) {
+                    UpdateCheck.Unavailable("La versión publicada no trae APK para descargar.")
+                } else if (remoteCode != null) {
+                    if (remoteCode > current) {
+                        UpdateCheck.Available(remoteName, remoteCode, release.body, apkUrl)
+                    } else {
+                        UpdateCheck.UpToDate
+                    }
+                } else if (remoteName.isNotBlank() && remoteName != Constants.APP_VERSION &&
+                    remoteName != "v${Constants.APP_VERSION}"
+                ) {
+                    // Tag viejo sin código: se ofrece igual para no bloquear una mejora.
+                    UpdateCheck.Available(remoteName, current, release.body, apkUrl)
+                } else {
+                    UpdateCheck.UpToDate
+                }
+            }
+        }
     }
 
     /** URL de la etiqueta para abrir en un visor externo, o `null` si no hay sesión. */

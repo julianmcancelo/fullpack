@@ -81,6 +81,15 @@ data class TerminalUiState(
     val isScannerOpen: Boolean = false,
     /** Si está encendido, escanear ya deja el paquete empaquetado. */
     val autoPack: Boolean = true,
+    /**
+     * Ráfaga: con el overlay abierto, cada lectura deja la cámara prendida para
+     * la etiqueta siguiente en vez de cerrar el escáner.
+     */
+    val continuousScan: Boolean = false,
+    /** Lecturas de la sesión continua actual (no cuenta fallas técnicas). */
+    val continuousCount: Int = 0,
+    /** Linterna del escáner (la pantalla la consume, el ViewModel la guarda). */
+    val isTorchOn: Boolean = false,
     val noteTarget: Shipment? = null,
     val noteDraft: String = "",
     val feedback: TerminalFeedback? = null,
@@ -192,7 +201,7 @@ class TerminalViewModel(
     // ------------------------------------------------------------------
 
     fun setMode(mode: ScanMode) {
-        _state.update { it.copy(mode = mode, error = null) }
+        _state.update { it.copy(mode = mode, error = null, continuousCount = 0) }
     }
 
     fun setCarrierFilter(filter: String) {
@@ -235,11 +244,26 @@ class TerminalViewModel(
     }
 
     /**
-     * Un QR detectado dispara el escaneo y cierra el overlay: el operario tiene
-     * que ver la tarjeta de resultado gigante, no la cámara.
+     * Prende o apaga la ráfaga: al cambiar de modo se empieza a contar de cero.
+     */
+    fun setContinuousScan(enabled: Boolean) {
+        _state.update { it.copy(continuousScan = enabled, continuousCount = 0) }
+    }
+
+    /** Prende o apaga la linterna del escáner. */
+    fun toggleTorch() {
+        _state.update { it.copy(isTorchOn = !it.isTorchOn) }
+    }
+
+    /**
+     * Un QR detectado dispara el escaneo. En modo simple cierra el overlay: el
+     * operario tiene que ver la tarjeta de resultado gigante, no la cámara. En
+     * ráfaga la cámara queda prendida para la etiqueta siguiente.
      */
     fun onQrDetected(rawCode: String) {
-        _state.update { it.copy(isScannerOpen = false) }
+        if (!_state.value.continuousScan) {
+            _state.update { it.copy(isScannerOpen = false) }
+        }
         scan(rawCode)
     }
 
@@ -255,7 +279,15 @@ class TerminalViewModel(
 
         viewModelScope.launch {
             _state.update {
-                it.copy(isBusy = true, isScannerOpen = false, error = null, manualCode = "")
+                // En ráfaga el overlay queda abierto; en modo simple se cierra.
+                // Se conserva `isScannerOpen` AND continuo para no abrir la cámara
+                // desde el ingreso manual (ahí el escáner ya estaba cerrado).
+                it.copy(
+                    isBusy = true,
+                    isScannerOpen = it.isScannerOpen && it.continuousScan,
+                    error = null,
+                    manualCode = "",
+                )
             }
             val current = _state.value
             when (val result = repository.scan(code, current.mode, current.carrierFilter, current.autoPack)) {
@@ -280,6 +312,8 @@ class TerminalViewModel(
     }
 
     private fun applyOutcome(outcome: ScanOutcome, dispatchMode: Boolean, readCode: String) {
+        // En ráfaga cada resultado (salvo falla técnica) suma una lectura de sesión.
+        val countContinuous = _state.value.continuousScan && outcome !is ScanOutcome.Failure
         when (outcome) {
             is ScanOutcome.Found -> {
                 val shipment = outcome.shipment
@@ -405,6 +439,9 @@ class TerminalViewModel(
                 ),
                 feedback = TerminalFeedbackKind.Error,
             )
+        }
+        if (countContinuous) {
+            _state.update { it.copy(continuousCount = it.continuousCount + 1) }
         }
     }
 

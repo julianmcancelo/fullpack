@@ -335,6 +335,21 @@ data class ApiErrorDto(
     val message: String? = null,
 )
 
+/** Release de GitHub (`GET repos/{owner}/{repo}/releases/latest`). */
+@Serializable
+data class GitHubReleaseDto(
+    @SerialName("tag_name") val tagName: String? = null,
+    @SerialName("html_url") val htmlUrl: String? = null,
+    val body: String? = null,
+    val assets: List<GitHubAssetDto> = emptyList(),
+)
+
+@Serializable
+data class GitHubAssetDto(
+    val name: String? = null,
+    @SerialName("browser_download_url") val downloadUrl: String? = null,
+)
+
 // ---------------------------------------------------------------------------
 // Helpers de normalización (usados por MobileRepository)
 // ---------------------------------------------------------------------------

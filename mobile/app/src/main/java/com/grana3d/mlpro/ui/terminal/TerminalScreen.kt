@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,11 +26,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FlashlightOff
+import androidx.compose.material.icons.outlined.FlashlightOn
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Refresh
@@ -40,6 +44,8 @@ import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -56,7 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -70,6 +78,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.grana3d.mlpro.core.formatArs
 import com.grana3d.mlpro.core.formatDateTime
+import com.grana3d.mlpro.core.Constants
 import com.grana3d.mlpro.core.mlViewModelFactory
 import com.grana3d.mlpro.domain.ScanMode
 import com.grana3d.mlpro.domain.Shipment
@@ -89,6 +98,7 @@ import com.grana3d.mlpro.ui.components.MlStatusPill
 import com.grana3d.mlpro.ui.components.MlTextField
 import com.grana3d.mlpro.ui.components.MlThumbnail
 import com.grana3d.mlpro.ui.components.MlTone
+import com.grana3d.mlpro.ui.theme.DarkColors
 import com.grana3d.mlpro.ui.theme.MlTheme
 import com.grana3d.mlpro.util.Beep
 import com.grana3d.mlpro.util.vibrateError
@@ -352,6 +362,14 @@ fun TerminalScreen(
                 },
                 onClose = vm::closeScanner,
                 onQrDetected = vm::onQrDetected,
+                continuous = state.continuousScan,
+                onToggleContinuous = { vm.setContinuousScan(!state.continuousScan) },
+                isTorchOn = state.isTorchOn,
+                onToggleTorch = vm::toggleTorch,
+                scanCard = state.scanCard,
+                packedCount = state.packedCount,
+                totalCount = state.totalCount,
+                continuousCount = state.continuousCount,
             )
         }
     }
@@ -902,7 +920,19 @@ private fun TerminalScannerOverlay(
     onOpenAppSettings: () -> Unit,
     onClose: () -> Unit,
     onQrDetected: (String) -> Unit,
+    continuous: Boolean,
+    onToggleContinuous: () -> Unit,
+    isTorchOn: Boolean,
+    onToggleTorch: () -> Unit,
+    scanCard: ScanCardUi?,
+    packedCount: Int,
+    totalCount: Int,
+    continuousCount: Int,
 ) {
+    val colors = MlTheme.colors
+    // Sobre el preview negro el texto usa los tokens oscuros: legible en ambos modos.
+    val overPreview = DarkColors.ink
+    val overPreviewMuted = DarkColors.inkMuted
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -913,53 +943,130 @@ private fun TerminalScannerOverlay(
                 modifier = Modifier.fillMaxSize(),
                 isActive = isActive,
                 onQrDetected = onQrDetected,
+                // En ráfaga se acepta 1 paquete/seg: el servidor deduplica la
+                // relectura QR + barra de la misma etiqueta.
+                cooldownMs = if (continuous) 1200L else Constants.SCAN_COOLDOWN_MS,
+                isTorchOn = isTorchOn,
             )
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Barra superior: título, contador tabular y cierre de 48.dp.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Escanear paquete",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = (-0.4).sp,
-                        color = Color.White,
+                        color = overPreview,
                     )
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Apuntá al código de barras o QR de la etiqueta",
-                        fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.75f),
+                        text = "$packedCount/$totalCount empaquetados",
+                        style = MlTheme.type.title.copy(fontFeatureSettings = "tnum"),
+                        color = overPreview,
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                MlButton(
-                    text = "Cerrar",
+                IconButton(
                     onClick = onClose,
-                    variant = MlButtonVariant.Danger,
-                    icon = Icons.Outlined.Close,
-                )
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = colors.brand,
+                        contentColor = colors.brandInk,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Cerrar escáner",
+                    )
+                }
             }
 
-            Spacer(Modifier.weight(1f))
+            // Fila de controles: ráfaga + linterna (sólo con permiso de cámara).
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Switch(
+                    checked = continuous,
+                    onCheckedChange = { onToggleContinuous() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = colors.brandInk,
+                        checkedTrackColor = colors.brand,
+                    ),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (continuous) "Ráfaga ON" else "Ráfaga OFF",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = overPreview,
+                )
+                if (continuous) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "$continuousCount leídas",
+                        style = MlTheme.type.body.copy(fontFeatureSettings = "tnum"),
+                        color = overPreviewMuted,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                if (hasCameraPermission) {
+                    IconButton(
+                        onClick = onToggleTorch,
+                        modifier = Modifier.size(48.dp),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = colors.muted,
+                            contentColor = colors.ink,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = if (isTorchOn) {
+                                Icons.Outlined.FlashlightOff
+                            } else {
+                                Icons.Outlined.FlashlightOn
+                            },
+                            contentDescription = if (isTorchOn) {
+                                "Apagar linterna"
+                            } else {
+                                "Encender linterna"
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Marco de escaneo centrado: no lo tapa ningún banner.
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                ScanFrameCorners()
+            }
+
+            if (scanCard != null) {
+                ScannerResultBanner(card = scanCard)
+                Spacer(Modifier.height(12.dp))
+            }
 
             if (!hasCameraPermission) {
-                MlCard {
+                MlCard(modifier = Modifier.padding(horizontal = 20.dp)) {
                     Text(
                         text = "Necesitamos la cámara",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MlTheme.colors.ink,
+                        color = colors.ink,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = "Sin permiso de cámara no podemos leer las etiquetas. Podés habilitarlo desde los ajustes del sistema.",
                         fontSize = 13.sp,
-                        color = MlTheme.colors.inkMuted,
+                        color = colors.inkMuted,
                     )
                     Spacer(Modifier.height(12.dp))
                     MlButton(
@@ -976,16 +1083,102 @@ private fun TerminalScannerOverlay(
                         fillWidth = true,
                     )
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             Text(
-                text = "Al detectar el código cerramos la cámara y mostramos el resultado con color, sonido y vibración.",
+                text = if (continuous) {
+                    "Ráfaga: apuntá etiqueta tras etiqueta sin cerrar la cámara."
+                } else {
+                    "Al detectar el código cerramos la cámara y mostramos el resultado con color, sonido y vibración."
+                },
                 fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.7f),
+                color = overPreviewMuted,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
             )
+        }
+    }
+}
+
+/** Marco de escaneo de 280.dp: sólo las 4 esquinas en color `brand`. */
+@Composable
+private fun ScanFrameCorners(modifier: Modifier = Modifier) {
+    val brand = MlTheme.colors.brand
+    Canvas(modifier = modifier.size(280.dp)) {
+        val edge = 44.dp.toPx()
+        val stroke = 5.dp.toPx()
+        val w = size.width
+        val h = size.height
+        // Superior izquierda.
+        drawLine(brand, Offset(0f, 0f), Offset(edge, 0f), stroke, StrokeCap.Round)
+        drawLine(brand, Offset(0f, 0f), Offset(0f, edge), stroke, StrokeCap.Round)
+        // Superior derecha.
+        drawLine(brand, Offset(w, 0f), Offset(w - edge, 0f), stroke, StrokeCap.Round)
+        drawLine(brand, Offset(w, 0f), Offset(w, edge), stroke, StrokeCap.Round)
+        // Inferior izquierda.
+        drawLine(brand, Offset(0f, h), Offset(edge, h), stroke, StrokeCap.Round)
+        drawLine(brand, Offset(0f, h), Offset(0f, h - edge), stroke, StrokeCap.Round)
+        // Inferior derecha.
+        drawLine(brand, Offset(w, h), Offset(w - edge, h), stroke, StrokeCap.Round)
+        drawLine(brand, Offset(w, h), Offset(w, h - edge), stroke, StrokeCap.Round)
+    }
+}
+
+/**
+ * Último resultado dentro del escáner: compacto (1-2 líneas) y debajo del marco
+ * para no taparlo. Mismo código de color que la tarjeta grande.
+ */
+@Composable
+private fun ScannerResultBanner(card: ScanCardUi, modifier: Modifier = Modifier) {
+    val colors = MlTheme.colors
+    val container = when (card.kind) {
+        ScanCardKind.Packed -> colors.successSoft
+        ScanCardKind.Identified -> colors.accentSoft
+        ScanCardKind.AlreadyPacked, ScanCardKind.Duplicate, ScanCardKind.Ambiguous -> colors.warningSoft
+        ScanCardKind.CarrierMismatch, ScanCardKind.NotFound, ScanCardKind.Error -> colors.dangerSoft
+    }
+    val accent = when (card.kind) {
+        ScanCardKind.Packed -> colors.success
+        ScanCardKind.Identified -> colors.accent
+        ScanCardKind.AlreadyPacked, ScanCardKind.Duplicate, ScanCardKind.Ambiguous -> colors.warning
+        ScanCardKind.CarrierMismatch, ScanCardKind.NotFound, ScanCardKind.Error -> colors.danger
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(container)
+            .border(width = 2.dp, color = accent, shape = RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(accent),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = card.headline,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (card.message.isNotBlank()) {
+                Text(
+                    text = card.message,
+                    fontSize = 13.sp,
+                    color = colors.inkMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
