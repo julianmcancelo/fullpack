@@ -37,11 +37,23 @@ async function getShipments(query = {}) {
         note: '',
       };
 
+      let shipStatus = o.shipping.status || 'ready_to_ship';
+      if (o.tags && Array.isArray(o.tags)) {
+        if (o.tags.includes('delivered')) {
+          shipStatus = 'delivered';
+        } else if (o.tags.includes('not_delivered') && shipStatus !== 'shipped') {
+          shipStatus = 'ready_to_ship';
+        }
+      }
+      if (o.status === 'cancelled') {
+        shipStatus = 'cancelled';
+      }
+
       shipmentsList.push({
         id: o.shipping.id,
         order_id: o.id,
         order_date: o.date_created,
-        status: o.shipping.status || o.status,
+        status: shipStatus,
         substatus: o.shipping.substatus || '',
         logistic_type: o.shipping.logistic_type || 'default',
         tracking_number: o.shipping.tracking_number || null,

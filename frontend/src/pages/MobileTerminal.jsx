@@ -6,6 +6,7 @@ import {
   CheckCircle2, 
   Truck, 
   AlertCircle, 
+  AlertTriangle,
   RefreshCw, 
   Volume2, 
   VolumeX, 
@@ -15,17 +16,16 @@ import {
   MapPin,
   Search,
   History,
-  Flashlight,
-  SwitchCamera,
   Layers,
   Check,
   RotateCcw,
   Database,
-  ExternalLink
+  ExternalLink,
+  Undo2
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
-import { playSuccessBeep, playErrorBeep } from '../utils/audio';
+import { playSuccessBeep, playWarningBeep, playErrorBeep } from '../utils/audio';
 import { api } from '../services/api';
 
 export default function MobileTerminal({ connection }) {
@@ -45,6 +45,8 @@ export default function MobileTerminal({ connection }) {
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   
   const html5QrCodeRef = useRef(null);
+  const lastScannedCodeRef = useRef('');
+  const lastScannedTimeRef = useRef(0);
 
   const loadData = async () => {
     try {
@@ -78,7 +80,6 @@ export default function MobileTerminal({ connection }) {
         await stopCamera();
       }
 
-      // Support QR and all common 1D barcodes used on shipping labels (Code 128, EAN 13, etc.)
       const formats = [
         Html5QrcodeSupportedFormats.QR_CODE,
         Html5QrcodeSupportedFormats.CODE_128,
@@ -96,8 +97,8 @@ export default function MobileTerminal({ connection }) {
         qrbox: (viewfinderWidth, viewfinderHeight) => {
           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
           return {
-            width: Math.floor(minEdge * 0.8),
-            height: Math.floor(minEdge * 0.6),
+            width: Math.floor(minEdge * 0.85),
+            height: Math.floor(minEdge * 0.65),
           };
         },
         aspectRatio: 1.0,
@@ -114,7 +115,7 @@ export default function MobileTerminal({ connection }) {
       setScanning(true);
     } catch (err) {
       console.warn("Camera start failed:", err);
-      setCameraError("No se pudo acceder a la cámara trasera. Verificá los permisos del navegador en tu celular.");
+      setCameraError("No se pudo iniciar la cámara trasera. Asegurate de dar permisos de cámara en tu navegador.");
       setScanning(false);
     }
   };
@@ -135,54 +136,81 @@ export default function MobileTerminal({ connection }) {
   };
 
   const processScannedCode = async (rawCode) => {
-    if (!rawCode || isProcessingScan) return;
+    if (!rawCode) return;
+    const clean = rawCode.trim();
+
+    // Prevent duplicate scan spamming of the exact same code within 3 seconds
+    const now = Date.now();
+    if (clean === lastScannedCodeRef.current && (now - lastScannedTimeRef.current) < 3000) {
+      return;
+    }
+    lastScannedCodeRef.current = clean;
+    lastScannedTimeRef.current = now;
+
+    if (isProcessingScan) return;
     setIsProcessingScan(true);
 
     try {
-      const res = await api.scanShipment(rawCode, autoPackOnScan);
+      const res = await api.scanShipment(clean, autoPackOnScan);
 
       if (res.found && res.shipment) {
-        if (soundEnabled) playSuccessBeep();
-        if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
-        confetti({ particleCount: 45, spread: 70, origin: { y: 0.65 } });
+        // CASE 1: PACKAGE WAS ALREADY PACKED PREVIOUSLY!
+        if (res.alreadyPacked) {
+          if (soundEnabled) playWarningBeep(); // Distinct warning tone
+          if (navigator.vibrate) navigator.vibrate([180, 100, 180]); // Double warning pulse
 
-        // Update shipment in local state
-        setShipments(prev =>
-          prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
-        );
+          setLastScanned({
+            status: 'ALREADY_PACKED',
+            shipment: res.shipment,
+            message: `¡ATENCIÓN! Este paquete ya había sido marcado como empaquetado previamente.`,
+            timestamp: new Date().toLocaleTimeString('es-AR'),
+          });
+        } 
+        // CASE 2: BRAND NEW PACKAGE PACKED!
+        else {
+          if (soundEnabled) playSuccessBeep(); // Bright ding-ding
+          if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
+          confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
 
-        setLastScanned({
-          success: true,
-          shipment: res.shipment,
-          alreadyPacked: res.alreadyPacked,
-          message: res.message,
-          timestamp: new Date().toLocaleTimeString('es-AR'),
-        });
-      } else {
+          // Update local state
+          setShipments(prev =>
+            prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
+          );
+
+          setLastScanned({
+            status: 'NEWLY_PACKED',
+            shipment: res.shipment,
+            message: `¡Paquete verificado y empaquetado con éxito!`,
+            timestamp: new Date().toLocaleTimeString('es-AR'),
+          });
+        }
+      } 
+      // CASE 3: CODE NOT FOUND
+      else {
         if (soundEnabled) playErrorBeep();
-        if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
 
         setLastScanned({
-          success: false,
-          code: res.scannedCode || rawCode,
-          message: res.message || `Código "${rawCode}" no encontrado en envíos activos.`,
+          status: 'NOT_FOUND',
+          code: res.scannedCode || clean,
+          message: `Código "${clean}" no corresponde a ningún envío activo pendiente.`,
           timestamp: new Date().toLocaleTimeString('es-AR'),
         });
       }
 
-      // Reload scan logs in background
+      // Refresh scan audit logs
       api.getScanLogs().then(r => setScanLogs(r.logs || [])).catch(() => {});
     } catch (err) {
       if (soundEnabled) playErrorBeep();
       setLastScanned({
-        success: false,
-        message: err.message || 'Error al procesar el código.',
+        status: 'ERROR',
+        message: err.message || 'Error al procesar el escaneo.',
         timestamp: new Date().toLocaleTimeString('es-AR'),
       });
     } finally {
       setTimeout(() => {
         setIsProcessingScan(false);
-      }, 1200); // 1.2s debounce to prevent double-scanning
+      }, 1000);
     }
   };
 
@@ -191,6 +219,40 @@ export default function MobileTerminal({ connection }) {
     if (!manualCode.trim()) return;
     processScannedCode(manualCode);
     setManualCode('');
+  };
+
+  const handleUnpackShipment = async (shipmentId) => {
+    try {
+      await api.updateShipmentPacking(shipmentId, {
+        packed: false,
+        qualityChecked: false,
+      });
+
+      setShipments(prev =>
+        prev.map(s =>
+          s.id === shipmentId
+            ? {
+                ...s,
+                packing: {
+                  ...(s.packing || {}),
+                  packed: false,
+                  qualityChecked: false,
+                },
+              }
+            : s
+        )
+      );
+
+      if (lastScanned && lastScanned.shipment?.id === shipmentId) {
+        setLastScanned(prev => ({
+          ...prev,
+          status: 'UNPACKED',
+          message: `El paquete #${shipmentId} ha sido desmarcado y devuelto a pendientes.`,
+        }));
+      }
+    } catch (err) {
+      alert(`Error al desmarcar: ${err.message}`);
+    }
   };
 
   const handleTogglePacking = async (shipmentId, currentPackedState) => {
@@ -373,14 +435,14 @@ export default function MobileTerminal({ connection }) {
                 <div className="text-center p-4">
                   <QrCode className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-50" />
                   <p className="text-xs text-slate-400 font-bold">Cámara en espera</p>
-                  <p className="text-[11px] text-slate-500">Tocá "Abrir Cámara" para escanear etiquetas</p>
+                  <p className="text-[11px] text-slate-500">Tocá "Abrir Cámara" para enfocar etiquetas</p>
                 </div>
               )}
 
               {scanning && (
                 <div className="absolute top-2 left-2 right-2 flex justify-between items-center pointer-events-none">
                   <span className="px-2 py-0.5 rounded-full bg-slate-950/80 text-[10px] font-bold text-yellow-300 border border-yellow-400/40">
-                    🟢 Escaneando en vivo...
+                    🟢 Lector QR / Barras Activo
                   </span>
                 </div>
               )}
@@ -427,48 +489,67 @@ export default function MobileTerminal({ connection }) {
             </button>
           </form>
 
-          {/* Scanned Package Result Card */}
+          {/* DYNAMIC SCANNED RESULT FEEDBACK CARD */}
           {lastScanned && (
             <div 
-              className={`p-4 rounded-3xl border shadow-md animate-in zoom-in-95 space-y-3 ${
-                lastScanned.success
+              className={`p-4 rounded-3xl border shadow-lg animate-in zoom-in-95 space-y-3 ${
+                lastScanned.status === 'NEWLY_PACKED'
                   ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
+                  : lastScanned.status === 'ALREADY_PACKED'
+                  ? 'bg-amber-500/15 dark:bg-amber-950/40 border-amber-400 dark:border-amber-700 text-amber-950 dark:text-amber-100'
                   : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
               }`}
             >
+              {/* Header result */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-2.5">
-                  {lastScanned.success ? (
+                  {lastScanned.status === 'NEWLY_PACKED' && (
                     <div className="p-2 bg-emerald-500 text-white rounded-2xl shadow-sm">
                       <CheckCircle2 className="w-5 h-5" />
                     </div>
-                  ) : (
+                  )}
+                  {lastScanned.status === 'ALREADY_PACKED' && (
+                    <div className="p-2 bg-amber-500 text-slate-950 rounded-2xl shadow-sm">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                  )}
+                  {lastScanned.status === 'NOT_FOUND' && (
                     <div className="p-2 bg-rose-500 text-white rounded-2xl shadow-sm">
                       <AlertCircle className="w-5 h-5" />
                     </div>
                   )}
+
                   <div>
                     <h3 className="font-extrabold text-xs text-slate-900 dark:text-white">
-                      {lastScanned.success ? '¡Paquete Confirmado!' : 'Código No Encontrado'}
+                      {lastScanned.status === 'NEWLY_PACKED' && '¡Nuevo Paquete Empaquetado!'}
+                      {lastScanned.status === 'ALREADY_PACKED' && '⚠️ Paquete Ya Empaquetado Previamente'}
+                      {lastScanned.status === 'NOT_FOUND' && 'Código No Encontrado'}
                     </h3>
                     <p className="text-[11px] text-slate-500">{lastScanned.timestamp}</p>
                   </div>
                 </div>
 
-                {lastScanned.success && (
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500 text-white shadow-xs">
-                    EMPAQUETADO OK
-                  </span>
-                )}
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black shadow-xs ${
+                  lastScanned.status === 'NEWLY_PACKED'
+                    ? 'bg-emerald-500 text-white'
+                    : lastScanned.status === 'ALREADY_PACKED'
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'bg-rose-500 text-white'
+                }`}>
+                  {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
+                  {lastScanned.status === 'ALREADY_PACKED' && 'YA LEÍDO'}
+                  {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
+                </span>
               </div>
 
+              {/* Message text */}
               <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
                 {lastScanned.message}
               </p>
 
-              {/* Scanned Shipment Details */}
+              {/* Scanned Shipment Details & Actions */}
               {lastScanned.shipment && (
-                <div className="bg-white/90 dark:bg-slate-900/90 p-3.5 rounded-2xl border border-emerald-200 dark:border-slate-800 space-y-2">
+                <div className="bg-white/95 dark:bg-slate-900/95 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-500">Envío #{lastScanned.shipment.id}</span>
                     <span className="font-black text-slate-900 dark:text-white">Orden #{lastScanned.shipment.order_id}</span>
@@ -495,7 +576,7 @@ export default function MobileTerminal({ connection }) {
                     </span>
                   </div>
 
-                  {/* Quick label print button */}
+                  {/* Action Buttons */}
                   <div className="pt-2 flex gap-2">
                     <a
                       href={api.downloadLabelUrl(lastScanned.shipment.id, 'pdf')}
@@ -506,6 +587,16 @@ export default function MobileTerminal({ connection }) {
                       <Printer className="w-3.5 h-3.5" />
                       <span>Imprimir Etiqueta PDF</span>
                     </a>
+
+                    {/* Button to undo packing if desired */}
+                    <button
+                      onClick={() => handleUnpackShipment(lastScanned.shipment.id)}
+                      className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center space-x-1 border border-rose-200 dark:border-rose-900/50"
+                      title="Desmarcar este empaque"
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      <span>Desmarcar</span>
+                    </button>
                   </div>
                 </div>
               )}

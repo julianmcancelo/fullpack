@@ -22,7 +22,11 @@ import {
   X,
   FileCheck2,
   Calendar,
-  QrCode
+  QrCode,
+  Archive,
+  Layers,
+  Send,
+  Boxes
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
@@ -41,6 +45,7 @@ export default function ShipmentsManager({ connection }) {
   const [noteDraft, setNoteDraft] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [error, setError] = useState(null);
+  const [manifestModalOpen, setManifestModalOpen] = useState(false);
 
   const loadShipments = async () => {
     try {
@@ -156,6 +161,22 @@ export default function ShipmentsManager({ connection }) {
     }
   };
 
+  const handleBulkPrintLabels = () => {
+    if (selectedShipmentIds.length === 0) return;
+    // Open labels for all selected shipments
+    selectedShipmentIds.forEach((id) => {
+      window.open(api.downloadLabelUrl(id, labelFormat), '_blank');
+      api.updateShipmentPacking(id, { printed: true });
+    });
+    setShipments((prev) =>
+      prev.map((s) =>
+        selectedShipmentIds.includes(s.id)
+          ? { ...s, packing: { ...(s.packing || {}), printed: true } }
+          : s
+      )
+    );
+  };
+
   const handleShipmentPackedByScanner = (shipmentId) => {
     setShipments((prev) =>
       prev.map((s) =>
@@ -166,20 +187,16 @@ export default function ShipmentsManager({ connection }) {
     );
   };
 
-  const handlePrintManifest = () => {
-    window.print();
-  };
-
   const getLogisticBadge = (type) => {
     switch (type) {
       case 'self_service':
-        return { label: '🚀 FLEX (En el día)', bg: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800' };
+        return { label: '⚡ FLEX (En el día)', bg: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800' };
       case 'cross_docking':
-        return { label: '📦 Colecta ML', bg: 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800' };
+        return { label: '🚚 Colecta ML', bg: 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800' };
       case 'fulfillment':
         return { label: '⚡ FULL (Depósito)', bg: 'bg-blue-100 dark:bg-blue-950 text-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-800' };
       case 'drop_off':
-        return { label: '🏢 Correo / Sucursal', bg: 'bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-800' };
+        return { label: '📮 Correo / Sucursal', bg: 'bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-800' };
       default:
         return { label: 'Mercado Envíos', bg: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700' };
     }
@@ -195,6 +212,9 @@ export default function ShipmentsManager({ connection }) {
       minute: '2-digit',
     });
   };
+
+  const pendingCount = shipments.filter(s => s.status === 'ready_to_ship' && !s.packing?.packed).length;
+  const packedCount = shipments.filter(s => s.packing?.packed).length;
 
   return (
     <div className="space-y-6">
@@ -212,12 +232,12 @@ export default function ShipmentsManager({ connection }) {
         <div>
           <div className="flex items-center space-x-2">
             <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Mesa de Empaque & Logística</h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold">
+            <span className="px-2.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 text-xs font-black shadow-xs">
               {shipments.length} paquetes
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Escáner QR, control de calidad, etiquetas impresas y checklist de embalaje.
+            Preparación, etiquetas térmicas, control de calidad y archivo de entregas.
           </p>
         </div>
 
@@ -226,7 +246,7 @@ export default function ShipmentsManager({ connection }) {
           {/* QR Scanner Trigger Button */}
           <button
             onClick={() => setScannerOpen(true)}
-            className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-500 hover:to-yellow-500 text-slate-950 font-black rounded-xl text-xs flex items-center space-x-2 shadow-md transition"
+            className="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black rounded-xl text-xs flex items-center space-x-2 shadow-md transition"
           >
             <QrCode className="w-4 h-4" />
             <span>Escanear QR / Barra</span>
@@ -239,7 +259,7 @@ export default function ShipmentsManager({ connection }) {
               className={`px-2.5 py-1 rounded-lg transition ${
                 labelFormat === 'pdf' ? 'bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950' : 'text-slate-600 dark:text-slate-400'
               }`}
-              title="Etiqueta PDF para hojas A4 o 10x15"
+              title="Etiqueta PDF para hojas A4 o estándar"
             >
               PDF
             </button>
@@ -248,20 +268,20 @@ export default function ShipmentsManager({ connection }) {
               className={`px-2.5 py-1 rounded-lg transition ${
                 labelFormat === 'zpl' ? 'bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950' : 'text-slate-600 dark:text-slate-400'
               }`}
-              title="Formato Térmico ZPL para Zebra / Xprinter"
+              title="Formato Térmico ZPL para impresoras Zebra de 10x15cm"
             >
-              ZPL Térmico
+              ZPL Térmica
             </button>
           </div>
 
           {/* Manifiesto / Hoja de ruta */}
           <button
-            onClick={handlePrintManifest}
+            onClick={() => setManifestModalOpen(true)}
             className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs"
-            title="Imprimir hoja de ruta para chofer de Flex/Colecta"
+            title="Generar manifiesto de entrega para chofer"
           >
             <FileCheck2 className="w-4 h-4 text-slate-500" />
-            <span className="hidden sm:inline">Hoja de Ruta</span>
+            <span className="hidden sm:inline">Manifiesto de Despacho</span>
           </button>
 
           <button
@@ -282,9 +302,9 @@ export default function ShipmentsManager({ connection }) {
         </div>
       )}
 
-      {/* Bulk Toolbar for Packing */}
+      {/* Bulk Toolbar for Packing & Labels */}
       {selectedShipmentIds.length > 0 && (
-        <div className="bg-slate-900 dark:bg-slate-950 text-white p-3 sm:p-4 rounded-2xl shadow-lg border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
+        <div className="bg-slate-900 dark:bg-slate-950 text-white p-3.5 sm:p-4 rounded-2xl shadow-xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center space-x-2 text-xs">
             <CheckSquare className="w-4 h-4 text-yellow-400" />
             <span className="font-bold">{selectedShipmentIds.length} envíos seleccionados</span>
@@ -292,11 +312,19 @@ export default function ShipmentsManager({ connection }) {
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleBulkPrintLabels}
+              className="px-3.5 py-1.5 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black rounded-xl text-xs flex items-center space-x-1.5 transition shadow-sm"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Imprimir {selectedShipmentIds.length} Etiquetas</span>
+            </button>
+
+            <button
               onClick={handleBulkMarkPacked}
               className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 transition"
             >
               <PackageCheck className="w-3.5 h-3.5" />
-              <span>Marcar Empaquetados & Listos</span>
+              <span>Marcar Empaquetados</span>
             </button>
 
             <button
@@ -309,26 +337,55 @@ export default function ShipmentsManager({ connection }) {
         </div>
       )}
 
-      {/* Primary Status Tabs */}
-      <div className="border-b border-slate-200 dark:border-slate-800 flex items-center space-x-6 overflow-x-auto">
-        {[
-          { id: 'ready_to_ship', label: 'Por Despachar (En Mesa de Empaque)' },
-          { id: 'shipped', label: 'En Camino / En Tránsito' },
-          { id: 'delivered', label: 'Entregados con Éxito' },
-          { id: 'all', label: 'Todos los Envíos' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setStatusTab(tab.id)}
-            className={`pb-3 text-xs md:text-sm font-bold whitespace-nowrap transition relative ${
-              statusTab === tab.id
-                ? 'text-slate-900 dark:text-yellow-400 border-b-2 border-yellow-400 -mb-[2px]'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Primary Status Tabs (Separación clara de Operativos vs Entregados/Archivados) */}
+      <div className="border-b border-slate-200 dark:border-slate-800 flex items-center space-x-4 sm:space-x-8 overflow-x-auto">
+        <button
+          onClick={() => setStatusTab('ready_to_ship')}
+          className={`pb-3 text-xs md:text-sm font-bold whitespace-nowrap transition flex items-center space-x-2 ${
+            statusTab === 'ready_to_ship'
+              ? 'text-slate-900 dark:text-yellow-400 border-b-2 border-yellow-400 -mb-[2px] font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Boxes className="w-4 h-4" />
+          <span>Por Despachar (Mesa de Empaque)</span>
+        </button>
+
+        <button
+          onClick={() => setStatusTab('shipped')}
+          className={`pb-3 text-xs md:text-sm font-bold whitespace-nowrap transition flex items-center space-x-2 ${
+            statusTab === 'shipped'
+              ? 'text-slate-900 dark:text-yellow-400 border-b-2 border-yellow-400 -mb-[2px] font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          <span>En Camino / Despachados</span>
+        </button>
+
+        <button
+          onClick={() => setStatusTab('delivered')}
+          className={`pb-3 text-xs md:text-sm font-bold whitespace-nowrap transition flex items-center space-x-2 ${
+            statusTab === 'delivered'
+              ? 'text-slate-900 dark:text-yellow-400 border-b-2 border-yellow-400 -mb-[2px] font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Archive className="w-4 h-4 text-emerald-500" />
+          <span>Entregados & Archivados</span>
+        </button>
+
+        <button
+          onClick={() => setStatusTab('all')}
+          className={`pb-3 text-xs md:text-sm font-bold whitespace-nowrap transition flex items-center space-x-2 ${
+            statusTab === 'all'
+              ? 'text-slate-900 dark:text-yellow-400 border-b-2 border-yellow-400 -mb-[2px] font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Historial Completo</span>
+        </button>
       </div>
 
       {/* Secondary Packing & Logistics Filters */}
@@ -346,27 +403,29 @@ export default function ShipmentsManager({ connection }) {
           />
         </form>
 
-        {/* Filter by Packing State */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { id: 'all', label: 'Todos' },
-            { id: 'unprinted', label: 'Sin Imprimir' },
-            { id: 'printed', label: 'Impresos' },
-            { id: 'packed', label: 'Empaquetados' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setPackingFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
-                packingFilter === tab.id
-                  ? 'bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950 font-extrabold'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {/* Filter by Packing State (Only relevant for ready_to_ship) */}
+        {statusTab === 'ready_to_ship' && (
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0">
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'unprinted', label: 'Sin Imprimir' },
+              { id: 'printed', label: 'Impresos' },
+              { id: 'packed', label: 'Empaquetados' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setPackingFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+                  packingFilter === tab.id
+                    ? 'bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950 font-extrabold'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Logistic Type Selector */}
         <select
@@ -384,7 +443,7 @@ export default function ShipmentsManager({ connection }) {
       </div>
 
       {/* Select All Checkbox Header */}
-      {shipments.length > 0 && (
+      {shipments.length > 0 && statusTab === 'ready_to_ship' && (
         <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 px-2">
           <button
             onClick={handleToggleSelectAll}
@@ -413,13 +472,16 @@ export default function ShipmentsManager({ connection }) {
             const packing = shipment.packing || {};
             const itemsList = shipment.items || [];
             const isSelected = selectedShipmentIds.includes(shipment.id);
+            const isDelivered = shipment.status === 'delivered';
 
             return (
               <div
                 key={shipment.id}
-                className={`bg-white dark:bg-slate-900 rounded-2xl border shadow-sm p-5 hover:border-slate-300 dark:hover:border-slate-700 transition ${
-                  packing.packed
-                    ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10'
+                className={`bg-white dark:bg-slate-900 rounded-3xl border shadow-sm p-5 hover:border-slate-300 dark:hover:border-slate-700 transition ${
+                  isDelivered
+                    ? 'border-slate-200 dark:border-slate-800 opacity-90'
+                    : packing.packed
+                    ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/20 dark:bg-emerald-950/10'
                     : packing.printed
                     ? 'border-blue-200 dark:border-blue-900/60 bg-blue-50/10 dark:bg-blue-950/10'
                     : 'border-slate-200/80 dark:border-slate-800'
@@ -429,16 +491,18 @@ export default function ShipmentsManager({ connection }) {
                   
                   {/* Left: Checkbox + Package Details */}
                   <div className="flex items-start space-x-3.5 min-w-0 flex-1">
-                    <button
-                      onClick={() => handleToggleSelectItem(shipment.id)}
-                      className="mt-1 p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    >
-                      {isSelected ? (
-                        <CheckSquare className="w-4 h-4 text-yellow-500" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
+                    {!isDelivered && (
+                      <button
+                        onClick={() => handleToggleSelectItem(shipment.id)}
+                        className="mt-1 p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-yellow-500" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       
@@ -446,35 +510,49 @@ export default function ShipmentsManager({ connection }) {
                         <span className="font-extrabold text-sm text-slate-900 dark:text-white">
                           Orden #{shipment.order_id}
                         </span>
+                        
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${logistic.bg}`}>
                           {logistic.label}
                         </span>
 
-                        {/* Printed Status Tag */}
-                        {packing.printed ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center space-x-1">
-                            <Printer className="w-3 h-3 inline" />
-                            <span>Etiqueta Impresa</span>
+                        {isDelivered ? (
+                          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center space-x-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>ENTREGADO AL COMPRADOR</span>
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                            Pendiente Imprimir
-                          </span>
-                        )}
+                          <>
+                            {/* Printed Status Tag */}
+                            {packing.printed ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center space-x-1">
+                                <Printer className="w-3 h-3 inline" />
+                                <span>Etiqueta Impresa</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                Pendiente Imprimir
+                              </span>
+                            )}
 
-                        {/* Packed Status Tag */}
-                        {packing.packed && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1">
-                            <CheckCircle2 className="w-3 h-3 inline" />
-                            <span>Empaquetado & Listo</span>
-                          </span>
+                            {/* Packed Status Tag */}
+                            {packing.packed && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1">
+                                <CheckCircle2 className="w-3 h-3 inline" />
+                                <span>Empaquetado & Listo</span>
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
 
                       {/* Items title */}
-                      <p className="text-xs text-slate-800 dark:text-slate-200 font-bold mt-1.5 line-clamp-1">
-                        {itemsList.map((it) => `${it.quantity}x ${it.item?.title || 'Producto'}`).join(' + ')}
-                      </p>
+                      <div className="mt-2 space-y-1">
+                        {itemsList.map((it, idx) => (
+                          <p key={idx} className="text-xs text-slate-800 dark:text-slate-200 font-bold line-clamp-1">
+                            <span className="text-yellow-600 dark:text-yellow-400 font-black">[{it.quantity}x]</span> {it.item?.title || 'Producto'} {it.item?.seller_sku ? `(SKU: ${it.item.seller_sku})` : ''}
+                          </p>
+                        ))}
+                      </div>
 
                       {/* Recipient & Tracking */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-500 dark:text-slate-400">
@@ -488,7 +566,7 @@ export default function ShipmentsManager({ connection }) {
                           </>
                         )}
                         <span>•</span>
-                        <span>Fecha: {formatDate(shipment.order_date)}</span>
+                        <span>Fecha de Venta: {formatDate(shipment.order_date)}</span>
                       </div>
 
                       {/* Address */}
@@ -516,72 +594,82 @@ export default function ShipmentsManager({ connection }) {
                   {/* Right: Operational Checklist & Label Actions */}
                   <div className="flex flex-col sm:flex-row lg:flex-col items-start lg:items-end justify-between gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
                     
-                    {/* Checklist buttons */}
-                    <div className="flex items-center space-x-2 text-xs">
-                      
-                      {/* Quality check toggle */}
-                      <button
-                        onClick={() => handleToggleChecklist(shipment, 'qualityChecked')}
-                        className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center space-x-1 transition ${
-                          packing.qualityChecked
-                            ? 'bg-emerald-100 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
-                        title="Control de calidad del producto"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>{packing.qualityChecked ? 'Calidad OK' : 'Control Calidad'}</span>
-                      </button>
+                    {!isDelivered ? (
+                      <>
+                        {/* Checklist buttons */}
+                        <div className="flex items-center space-x-2 text-xs">
+                          
+                          {/* Quality check toggle */}
+                          <button
+                            onClick={() => handleToggleChecklist(shipment, 'qualityChecked')}
+                            className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center space-x-1 transition ${
+                              packing.qualityChecked
+                                ? 'bg-emerald-100 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                            }`}
+                            title="Control de calidad del producto"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>{packing.qualityChecked ? 'Calidad OK' : 'Control Calidad'}</span>
+                          </button>
 
-                      {/* Packed toggle */}
-                      <button
-                        onClick={() => handleToggleChecklist(shipment, 'packed')}
-                        className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center space-x-1 transition ${
-                          packing.packed
-                            ? 'bg-emerald-500 border-emerald-600 text-white'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
-                        title="Marcar paquete como sellado y empaquetado"
-                      >
-                        <PackageCheck className="w-3.5 h-3.5" />
-                        <span>{packing.packed ? 'Empaquetado' : 'Marcar Empaque'}</span>
-                      </button>
+                          {/* Packed toggle */}
+                          <button
+                            onClick={() => handleToggleChecklist(shipment, 'packed')}
+                            className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center space-x-1 transition ${
+                              packing.packed
+                                ? 'bg-emerald-500 border-emerald-600 text-white'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                            }`}
+                            title="Marcar paquete como sellado y empaquetado"
+                          >
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            <span>{packing.packed ? 'Empaquetado' : 'Marcar Empaque'}</span>
+                          </button>
 
-                      {/* Add note */}
-                      <button
-                        onClick={() => {
-                          setActiveNoteModal(shipment);
-                          setNoteDraft(packing.note || '');
-                        }}
-                        className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
-                        title="Agregar nota de empaque"
-                      >
-                        <Tag className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                          {/* Add note */}
+                          <button
+                            onClick={() => {
+                              setActiveNoteModal(shipment);
+                              setNoteDraft(packing.note || '');
+                            }}
+                            className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800"
+                            title="Agregar nota de empaque"
+                          >
+                            <Tag className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
 
-                    {/* Print Label Action */}
-                    <div className="flex items-center space-x-2 w-full sm:w-auto">
-                      <a
-                        href={api.downloadLabelUrl(shipment.id, labelFormat)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => {
-                          api.updateShipmentPacking(shipment.id, { printed: true });
-                          setShipments((prev) =>
-                            prev.map((s) =>
-                              s.id === shipment.id
-                                ? { ...s, packing: { ...(s.packing || {}), printed: true } }
-                                : s
-                            )
-                          );
-                        }}
-                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-xs transition flex items-center justify-center space-x-2 shadow-xs"
-                      >
-                        <Printer className="w-4 h-4" />
-                        <span>Imprimir Etiqueta ({labelFormat.toUpperCase()})</span>
-                      </a>
-                    </div>
+                        {/* Print Label Action */}
+                        <div className="flex items-center space-x-2 w-full sm:w-auto">
+                          <a
+                            href={api.downloadLabelUrl(shipment.id, labelFormat)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                              api.updateShipmentPacking(shipment.id, { printed: true });
+                              setShipments((prev) =>
+                                prev.map((s) =>
+                                  s.id === shipment.id
+                                    ? { ...s, packing: { ...(s.packing || {}), printed: true } }
+                                    : s
+                                )
+                              );
+                            }}
+                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-xs transition flex items-center justify-center space-x-2 shadow-xs"
+                          >
+                            <Printer className="w-4 h-4" />
+                            <span>Imprimir Etiqueta ({labelFormat.toUpperCase()})</span>
+                          </a>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-right">
+                        <span className="text-[11px] font-bold text-slate-400">
+                          Envío completado y archivado
+                        </span>
+                      </div>
+                    )}
 
                   </div>
 
@@ -590,12 +678,85 @@ export default function ShipmentsManager({ connection }) {
             );
           })
         ) : (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 shadow-sm">
-            <PackageCheck className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-500" />
-            <p className="text-xs">No hay envíos que coincidan con los filtros de empaque seleccionados.</p>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 shadow-sm">
+            <PackageCheck className="w-10 h-10 mx-auto mb-2 opacity-40 text-emerald-500" />
+            <h3 className="font-bold text-slate-700 dark:text-slate-300 text-sm">No hay envíos en esta sección</h3>
+            <p className="text-xs mt-1">Todos los paquetes están al día con los filtros seleccionados.</p>
           </div>
         )}
       </div>
+
+      {/* Manifest Modal */}
+      {manifestModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center space-x-2">
+                <FileCheck2 className="w-5 h-5 text-yellow-500" />
+                <span>Manifiesto de Despacho & Hoja de Ruta</span>
+              </h3>
+              <button onClick={() => setManifestModalOpen(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="py-4 overflow-y-auto space-y-4 flex-1 text-xs">
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <div>
+                  <p className="font-extrabold text-slate-900 dark:text-white">Vendedor: @GRANA3DOK</p>
+                  <p className="text-slate-500 text-[11px]">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
+                </div>
+                <div className="text-right">
+                  <span className="px-2.5 py-1 rounded-full bg-yellow-400 text-slate-950 font-black text-xs">
+                    {shipments.length} Bultos
+                  </span>
+                </div>
+              </div>
+
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] text-slate-400">
+                    <th className="py-2">Orden #</th>
+                    <th className="py-2">Destinatario</th>
+                    <th className="py-2">Tipo</th>
+                    <th className="py-2">Productos</th>
+                    <th className="py-2 text-right">Firma Chofer</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[11px]">
+                  {shipments.map((s) => (
+                    <tr key={s.id} className="py-2">
+                      <td className="py-2 font-mono font-bold">#{s.order_id}</td>
+                      <td className="py-2">{s.buyer?.first_name || s.buyer?.nickname}</td>
+                      <td className="py-2 uppercase font-bold text-[10px]">{s.logistic_type}</td>
+                      <td className="py-2 truncate max-w-[160px]">
+                        {s.items?.map(it => `${it.quantity}x ${it.item?.title}`).join(', ')}
+                      </td>
+                      <td className="py-2 text-right text-slate-300">__________</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end space-x-2">
+              <button
+                onClick={() => setManifestModalOpen(false)}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-5 py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black rounded-xl text-xs flex items-center space-x-1.5 shadow-sm"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Imprimir Manifiesto</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Note Modal */}
       {activeNoteModal && (

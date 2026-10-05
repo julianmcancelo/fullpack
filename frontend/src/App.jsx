@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import ConnectionBanner from './components/ConnectionBanner';
 import CommandPalette from './components/CommandPalette';
 import MobileBottomNav from './components/MobileBottomNav';
 import BarcodeScannerModal from './components/BarcodeScannerModal';
+import NewSaleNotification from './components/NewSaleNotification';
 import Dashboard from './pages/Dashboard';
 import StockManager from './pages/StockManager';
 import OrdersManager from './pages/OrdersManager';
@@ -14,6 +15,8 @@ import FeeCalculator from './pages/FeeCalculator';
 import MobileTerminal from './pages/MobileTerminal';
 import Settings from './pages/Settings';
 import { api } from './services/api';
+import { playCashRegisterSound } from './utils/audio';
+import confetti from 'canvas-confetti';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,12 +27,24 @@ export default function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [shipments, setShipments] = useState([]);
+  
+  // Real-time new sale listener state
+  const [newSaleAlert, setNewSaleAlert] = useState(null);
+  const knownOrderIdsRef = useRef(new Set());
+  const initialOrdersLoadedRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth_success')) {
       setActiveTab('settings');
       window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Request browser notification permission if available
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
     }
   }, []);
 
@@ -75,9 +90,72 @@ export default function App() {
     refreshAll();
   }, []);
 
+  // Background Polling for Live New Sales (every 15 seconds)
+  useEffect(() => {
+    if (!connection?.connected) return;
+
+    const checkNewOrders = async () => {
+      try {
+        const res = await api.getOrders({ limit: 10 });
+        const orders = res.results || [];
+
+        if (!initialOrdersLoadedRef.current) {
+          // Initialize known orders set
+          orders.forEach(o => knownOrderIdsRef.current.add(String(o.id)));
+          initialOrdersLoadedRef.current = true;
+          return;
+        }
+
+        // Check for any newly incoming order not in known set
+        const brandNewOrders = orders.filter(o => !knownOrderIdsRef.current.has(String(o.id)));
+
+        if (brandNewOrders.length > 0) {
+          const latestOrder = brandNewOrders[0];
+          
+          // Add all to known set
+          brandNewOrders.forEach(o => knownOrderIdsRef.current.add(String(o.id)));
+
+          // Trigger celebratory sale feedback
+          playCashRegisterSound();
+          if (navigator.vibrate) navigator.vibrate([150, 100, 200, 100, 300]);
+          confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+
+          // Show in-app banner
+          setNewSaleAlert(latestOrder);
+
+          // Browser Push Notification
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            const item = (latestOrder.order_items && latestOrder.order_items[0]?.item) || {};
+            new Notification('🎉 ¡Nueva Venta en Mercado Libre!', {
+              body: `${item.title || 'Producto'} - $${(latestOrder.total_amount || 0).toLocaleString('es-AR')} ARS (Comprador: ${latestOrder.buyer?.nickname || 'Cliente'})`,
+              icon: '/favicon.svg',
+            });
+          }
+
+          // Automatically reload stats and shipments
+          loadDashboardStats();
+        }
+      } catch (e) {
+        // Silent polling error
+      }
+    };
+
+    // Run first check then interval
+    checkNewOrders();
+    const interval = setInterval(checkNewOrders, 15000);
+    return () => clearInterval(interval);
+  }, [connection?.connected]);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-yellow-400 selection:text-slate-950">
       
+      {/* Live New Sale Celebration Toast */}
+      <NewSaleNotification
+        sale={newSaleAlert}
+        onClose={() => setNewSaleAlert(null)}
+        onViewOrders={() => setActiveTab('orders')}
+      />
+
       {/* Universal Command Palette (Ctrl+K) */}
       <CommandPalette
         isOpen={commandOpen}
