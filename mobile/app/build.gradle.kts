@@ -23,6 +23,24 @@ android {
         // no se duplica acá para que no queden dos valores distintos en el APK.
     }
 
+    // Firma release: clave en ~/.android/mlpro-release.jks (fuera del repo).
+    // Credenciales por propiedades -PMLPRO_* o variables de entorno MLPRO_*.
+    signingConfigs {
+        create("release") {
+            val ksPath = (findProperty("MLPRO_STORE_FILE") as String?)
+                ?: System.getenv("MLPRO_STORE_FILE")
+                ?: "${System.getProperty("user.home")}/.android/mlpro-release.jks"
+            storeFile = file(ksPath)
+            storePassword = (findProperty("MLPRO_STORE_PASSWORD") as String?)
+                ?: System.getenv("MLPRO_STORE_PASSWORD")
+            keyAlias = (findProperty("MLPRO_KEY_ALIAS") as String?)
+                ?: System.getenv("MLPRO_KEY_ALIAS")
+                ?: "mlpro"
+            keyPassword = (findProperty("MLPRO_KEY_PASSWORD") as String?)
+                ?: System.getenv("MLPRO_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -31,6 +49,7 @@ android {
             // Sin ofuscación por ahora: las reglas quedan listas en proguard-rules.pro.
             isMinifyEnabled = false
             isShrinkResources = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
