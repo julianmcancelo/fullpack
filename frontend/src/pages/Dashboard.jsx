@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   DollarSign, 
   Package, 
@@ -14,7 +14,8 @@ import {
   BarChart3,
   CreditCard,
   CheckCircle2,
-  ShoppingCart
+  ShoppingCart,
+  RefreshCw
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -91,6 +92,25 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
   // Widget "Últimas ventas": ya viene del backend en stats.recentOrders.
   const recentOrders = Array.isArray(stats?.recentOrders) ? stats.recentOrders : [];
 
+  // Hora local de la última sincronización (solo presentación).
+  const [lastSync, setLastSync] = useState(null);
+  useEffect(() => {
+    if (stats) setLastSync(new Date());
+  }, [stats]);
+
+  const handleRefresh = () => {
+    if (onRefresh) onRefresh();
+  };
+
+  const formatSyncTime = (date) => {
+    if (!date) return '';
+    return new Date(date).toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleString('es-AR', {
@@ -115,15 +135,32 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
       <div className="page-head">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="page-title">Panel de Control & KPIs</h1>
+            <h1 className="page-title text-balance">Panel de Control & KPIs</h1>
             <span className="badge badge-success">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
               API EN VIVO
             </span>
           </div>
-          <p className="page-sub">
+          <p className="page-sub text-pretty">
             {subtitle}
+            {lastSync && (
+              <>
+                {' '}· <span className="tabular font-semibold">Actualizado {formatSyncTime(lastSync)}</span>
+              </>
+            )}
           </p>
+        </div>
+
+        <div className="toolbar">
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="btn btn-outline btn-sm"
+            title="Actualizar los datos del panel"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand-600' : ''}`} />
+            <span>{loading ? 'Actualizando…' : 'Actualizar'}</span>
+          </button>
         </div>
       </div>
 
@@ -293,6 +330,10 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               </div>
               <p className="empty-title">Sin ventas registradas en los últimos 7 días</p>
               <p className="empty-text">Cuando se concreten ventas, acá verás la evolución diaria de tu facturación.</p>
+              <button onClick={handleRefresh} className="btn btn-outline btn-sm mt-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Reintentar</span>
+              </button>
             </div>
           )}
         </div>
@@ -366,6 +407,10 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
                 </div>
                 <p className="empty-title">Todo despachado</p>
                 <p className="empty-text">No hay envíos pendientes de despacho por el momento.</p>
+                <button onClick={handleRefresh} className="btn btn-outline btn-sm mt-2">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Reintentar</span>
+                </button>
               </div>
             )}
           </div>
@@ -436,6 +481,10 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
                 </div>
                 <p className="empty-title">Stock bajo control</p>
                 <p className="empty-text">¡Excelente! No tienes publicaciones con stock crítico.</p>
+                <button onClick={handleRefresh} className="btn btn-outline btn-sm mt-2">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Reintentar</span>
+                </button>
               </div>
             )}
           </div>
@@ -495,6 +544,10 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               </div>
               <p className="empty-title">Sin ventas recientes</p>
               <p className="empty-text">Cuando se concreten ventas, acá verás las últimas con su monto, comprador y hora.</p>
+              <button onClick={handleRefresh} className="btn btn-outline btn-sm mt-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Reintentar</span>
+              </button>
             </div>
           )}
         </div>

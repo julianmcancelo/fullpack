@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { MessageSquare, X, Reply } from 'lucide-react';
 
+// Auto-dismiss de 8 s (el cierre manual siempre queda visible).
+const AUTO_DISMISS_MS = 8000;
+
 export default function NewQuestionNotification({ question, onClose, onViewQuestions }) {
+  useEffect(() => {
+    if (!question || !onClose) return undefined;
+    const timer = setTimeout(onClose, AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [question, onClose]);
+
   if (!question) return null;
 
   const itemTitle =
@@ -12,7 +21,11 @@ export default function NewQuestionNotification({ question, onClose, onViewQuest
     : null;
 
   return (
-    <div className="fixed bottom-20 right-4 left-4 z-50 animate-slide-down sm:left-auto sm:w-96 md:bottom-6">
+    <div
+      className="fixed bottom-20 right-4 left-4 z-[60] animate-slide-down sm:left-auto sm:w-96 md:bottom-6"
+      role="status"
+      aria-live="polite"
+    >
       <div className="card card-accent overflow-hidden border-accent/40 shadow-pop">
         <div className="flex items-start justify-between gap-3 p-4">
           <div className="flex min-w-0 items-start gap-3">

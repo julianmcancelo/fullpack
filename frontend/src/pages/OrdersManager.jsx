@@ -22,11 +22,24 @@ import { api } from '../services/api';
 // Tamaño de página de órdenes (ventana canónica del dashboard) para "Cargar más".
 const ORDERS_PAGE_SIZE = 100;
 
+// Filtros persistidos en este navegador (solo presentación, no cambian la consulta).
+const ORDERS_FILTER_KEY = 'mlpro:filtros:orders';
+const VALID_ORDER_STATUS = ['all', 'paid', 'cancelled'];
+
+function readOrderStatusFilter() {
+  try {
+    const saved = window.localStorage.getItem(ORDERS_FILTER_KEY);
+    return VALID_ORDER_STATUS.includes(saved) ? saved : 'all';
+  } catch {
+    return 'all';
+  }
+}
+
 export default function OrdersManager({ connection }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(readOrderStatusFilter);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [error, setError] = useState(null);
   const [lastSync, setLastSync] = useState(null);
@@ -40,6 +53,15 @@ export default function OrdersManager({ connection }) {
   const statusFilterRef = useRef(statusFilter);
   searchRef.current = search;
   statusFilterRef.current = statusFilter;
+
+  // Persiste el filtro de estado (se valida al leer).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ORDERS_FILTER_KEY, statusFilter);
+    } catch {
+      // Sin almacenamiento disponible: el filtro sigue funcionando en memoria.
+    }
+  }, [statusFilter]);
 
   // Construye los params igual que siempre (lógica de datos intacta);
   // solo suma `offset` cuando se pagina con "Cargar más".
@@ -197,8 +219,8 @@ export default function OrdersManager({ connection }) {
       {/* Cabecera y acciones */}
       <div className="page-head">
         <div>
-          <h1 className="page-title">Centro de Ventas y Órdenes</h1>
-          <p className="page-sub">
+          <h1 className="page-title text-balance">Centro de Ventas y Órdenes</h1>
+          <p className="page-sub text-pretty">
             Historial de ventas, comisiones de Mercado Libre, cobros y datos del comprador.
           </p>
         </div>
@@ -294,15 +316,15 @@ export default function OrdersManager({ connection }) {
         {loading ? (
           <div className="card card-pad" aria-busy="true">
             <div className="flex items-center gap-3.5">
-              <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+              <div className="skeleton skeleton-shimmer h-11 w-11 shrink-0 rounded-xl" />
               <div className="min-w-0 flex-1 space-y-2">
-                <div className="skeleton h-3.5 w-40 max-w-full" />
-                <div className="skeleton h-3 w-56 max-w-full" />
-                <div className="skeleton h-3 w-32 max-w-full" />
+                <div className="skeleton skeleton-shimmer h-3.5 w-40 max-w-full" />
+                <div className="skeleton skeleton-shimmer h-3 w-56 max-w-full" />
+                <div className="skeleton skeleton-shimmer h-3 w-32 max-w-full" />
               </div>
               <div className="hidden shrink-0 space-y-2 sm:block">
-                <div className="skeleton h-4 w-24" />
-                <div className="skeleton h-3 w-20" />
+                <div className="skeleton skeleton-shimmer h-4 w-24" />
+                <div className="skeleton skeleton-shimmer h-3 w-20" />
               </div>
             </div>
             <p className="mt-4 text-xs text-ink-subtle">Consultando órdenes en Mercado Libre...</p>
@@ -333,7 +355,7 @@ export default function OrdersManager({ connection }) {
 
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-display text-sm font-extrabold text-ink">
+                          <span className="tabular font-display text-sm font-extrabold text-ink">
                             Orden #{order.id}
                           </span>
 
@@ -362,7 +384,7 @@ export default function OrdersManager({ connection }) {
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-subtle">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" aria-hidden="true" />
-                            <span>{formatDate(order.date_created)}</span>
+                            <span className="tabular">{formatDate(order.date_created)}</span>
                           </span>
                           <span aria-hidden="true">•</span>
                           <span className="flex items-center gap-1.5 text-ink-muted">
@@ -552,6 +574,10 @@ export default function OrdersManager({ connection }) {
               </div>
               <p className="empty-title">Sin ventas para mostrar</p>
               <p className="empty-text">No se encontraron ventas con los filtros aplicados.</p>
+              <button onClick={() => loadOrders(false)} className="btn btn-outline btn-sm mt-2">
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Reintentar</span>
+              </button>
             </div>
           </div>
         )}

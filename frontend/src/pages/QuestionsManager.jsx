@@ -110,7 +110,7 @@ export default function QuestionsManager({ connection, highlightId }) {
       <div className="page-head">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="page-title">Preguntas de Compradores</h1>
+            <h1 className="page-title text-balance">Preguntas de Compradores</h1>
             {unansweredCount > 0 && (
               <span className="badge badge-warning">
                 <Clock className="h-3 w-3" />
@@ -118,7 +118,7 @@ export default function QuestionsManager({ connection, highlightId }) {
               </span>
             )}
           </div>
-          <p className="page-sub">
+          <p className="page-sub text-pretty">
             Responde las dudas de tus compradores en tiempo real para aumentar tus conversiones.
           </p>
         </div>
@@ -366,6 +366,10 @@ export default function QuestionsManager({ connection, highlightId }) {
                 Cuando un comprador te consulte, la pregunta va a aparecer acá para que puedas
                 responderla al instante.
               </p>
+              <button onClick={() => loadQuestions()} className="btn btn-outline btn-sm mt-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Reintentar</span>
+              </button>
             </div>
           </div>
         )}

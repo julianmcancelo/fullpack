@@ -219,6 +219,9 @@ export default function MobileTerminal({ connection }) {
   const [activeChecklistShipment, setActiveChecklistShipment] = useState(null);
   const [checkedItemsMap, setCheckedItemsMap] = useState({});
 
+  // Aviso de error no bloqueante (reemplaza los alert nativos).
+  const [actionError, setActionError] = useState(null);
+
   // Filter States: 'all_active', 'flex', 'today', 'past', 'tomorrow', 'shipped', 'all'
   const [dateFilter, setDateFilter] = useState('all_active');
   const [statusFilter, setStatusFilter] = useState('pending'); // 'pending', 'packed', 'all'
@@ -608,7 +611,7 @@ export default function MobileTerminal({ connection }) {
       setChecklistModalOpen(false);
       setActiveChecklistShipment(null);
     } catch (err) {
-      alert(`Error al confirmar empaque: ${err.message}`);
+      setActionError(`Error al confirmar empaque: ${err.message}`);
     }
   };
 
@@ -646,7 +649,7 @@ export default function MobileTerminal({ connection }) {
 
       if (voiceEnabled) speakSpanish(`Paquete devuelto a pendientes`);
     } catch (err) {
-      alert(`Error al desmarcar: ${err.message}`);
+      setActionError(`Error al desmarcar: ${err.message}`);
     }
   };
 
@@ -679,7 +682,7 @@ export default function MobileTerminal({ connection }) {
         confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
       }
     } catch (err) {
-      alert(`Error al actualizar empaque: ${err.message}`);
+      setActionError(`Error al actualizar empaque: ${err.message}`);
     }
   };
 
@@ -709,7 +712,7 @@ export default function MobileTerminal({ connection }) {
         if (voiceEnabled) speakSpanish(`Verificado`);
       }
     } catch (err) {
-      alert(`Error al verificar despacho: ${err.message}`);
+      setActionError(`Error al verificar despacho: ${err.message}`);
     }
   };
 
@@ -743,7 +746,7 @@ export default function MobileTerminal({ connection }) {
         if (voiceEnabled) speakSpanish(`Marcado en camino`);
       }
     } catch (err) {
-      alert(`Error al actualizar estado: ${err.message}`);
+      setActionError(`Error al actualizar estado: ${err.message}`);
     }
   };
 
@@ -779,7 +782,7 @@ export default function MobileTerminal({ connection }) {
       if (voiceEnabled) speakSpanish(`Despacho confirmado con éxito`);
       confetti({ particleCount: 70, spread: 90, origin: { y: 0.6 } });
     } catch (err) {
-      alert(`Error al confirmar despacho masivo: ${err.message}`);
+      setActionError(`Error al confirmar despacho masivo: ${err.message}`);
     }
   };
 
@@ -943,17 +946,17 @@ export default function MobileTerminal({ connection }) {
       <div className="mx-auto w-full max-w-xl select-none space-y-4">
 
         {/* 1. TOP HEADER & AUDIO CONTROLS */}
-        <div className="page-head flex-wrap gap-2">
+        <div className="page-head">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink shadow-glow">
               <Smartphone className="h-6 w-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="page-title text-lg font-black tracking-tight">Centro de Depósito y Despacho</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="page-title text-balance">Centro de Depósito y Despacho</h1>
                 <span className="badge badge-brand text-[10px] uppercase font-extrabold">Almacén</span>
               </div>
-              <p className="page-sub flex items-center gap-2 mt-0.5">
+              <p className="page-sub flex flex-wrap items-center gap-2">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
                 {connection?.nickname ? (
                   <>
@@ -967,32 +970,56 @@ export default function MobileTerminal({ connection }) {
           </div>
 
           {/* Controls toolbar */}
-          <div className="flex items-center gap-1.5">
+          <div className="toolbar">
             <button
               onClick={loadData}
-              className="btn btn-icon btn-outline h-9 w-9"
+              className="btn btn-icon btn-outline"
               title="Recargar despachos"
+              aria-label="Recargar despachos"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand' : ''}`} />
             </button>
 
             <button
               onClick={() => setVoiceEnabled(!voiceEnabled)}
-              className={`btn btn-icon h-9 w-9 ${voiceEnabled ? 'btn-soft text-brand-ink bg-brand' : 'btn-outline'}`}
+              className={`btn btn-icon ${voiceEnabled ? 'btn-soft text-brand-ink bg-brand' : 'btn-outline'}`}
               title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
+              aria-label={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
             >
               {voiceEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
             </button>
 
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`btn btn-icon h-9 w-9 ${soundEnabled ? 'btn-soft text-brand-ink bg-brand' : 'btn-outline'}`}
+              className={`btn btn-icon ${soundEnabled ? 'btn-soft text-brand-ink bg-brand' : 'btn-outline'}`}
               title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
+              aria-label={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
             >
               {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </button>
           </div>
         </div>
+
+        {/* Aviso de error no bloqueante */}
+        {actionError && (
+          <div
+            className="flex items-start justify-between gap-3 rounded-2xl border border-danger/30 bg-danger-soft px-4 py-3 text-xs font-semibold text-danger"
+            role="alert"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words">{actionError}</span>
+            </span>
+            <button
+              onClick={() => setActionError(null)}
+              className="btn btn-ghost btn-icon-sm shrink-0"
+              title="Cerrar aviso"
+              aria-label="Cerrar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* 2. REAL PROGRESS HERO CARD */}
         <div className="card card-pad bg-gradient-to-br from-card to-muted/40 border border-line-strong shadow-sm space-y-4">
@@ -1192,7 +1219,7 @@ export default function MobileTerminal({ connection }) {
         {/* ETAPA 1: LISTA DE EMPAQUE (PREPARACIÓN Y ARMADO DE PAQUETES) */}
         {/* ========================================================================= */}
         {activeTab === 'shipments' && (
-          <div className="space-y-3 animate-in fade-in-50 duration-200">
+          <div className="space-y-3 animate-fade-in">
 
             {/* A. DATE & LOGISTICS CHIP SELECTOR */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
@@ -1433,10 +1460,10 @@ export default function MobileTerminal({ connection }) {
                       <div className="pt-2.5 flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-display font-extrabold text-sm text-ink">
+                            <span className="tabular font-display font-extrabold text-sm text-ink">
                               Orden #{s.order_id}
                             </span>
-                            <span className="text-[11px] font-mono text-ink-subtle">
+                            <span className="tabular text-[11px] font-mono text-ink-subtle">
                               (Envío #{s.id})
                             </span>
                           </div>
@@ -1578,22 +1605,26 @@ export default function MobileTerminal({ connection }) {
                   );
                 })
               ) : (
-                <div className="card p-10 text-center text-ink-muted space-y-3">
-                  <PackageOpen className="h-10 w-10 mx-auto text-brand opacity-60" />
-                  <h3 className="font-display font-bold text-sm text-ink">No hay paquetes con este filtro</h3>
-                  <p className="text-xs text-ink-subtle max-w-xs mx-auto">
-                    Probá cambiando la pestaña de fechas o el estado a "Todos".
-                  </p>
-                  <button
-                    onClick={() => {
-                      setDateFilter('all_active');
-                      setStatusFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="btn btn-outline btn-sm mx-auto mt-2"
-                  >
-                    Restablecer filtros
-                  </button>
+                <div className="card">
+                  <div className="empty">
+                    <div className="empty-icon">
+                      <PackageOpen className="h-6 w-6" />
+                    </div>
+                    <p className="empty-title">No hay paquetes con este filtro</p>
+                    <p className="empty-text">
+                      Probá cambiando la pestaña de fechas o el estado a "Todos".
+                    </p>
+                    <button
+                      onClick={() => {
+                        setDateFilter('all_active');
+                        setStatusFilter('all');
+                        setSearchQuery('');
+                      }}
+                      className="btn btn-outline btn-sm mt-2"
+                    >
+                      Restablecer filtros
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1605,7 +1636,7 @@ export default function MobileTerminal({ connection }) {
         {/* ETAPA 2: CONTROL DE DESPACHO / SALIDA A TRANSPORTE (HANDOVER) */}
         {/* ========================================================================= */}
         {activeTab === 'dispatch' && (
-          <div className="space-y-4 animate-in fade-in-50 duration-200">
+          <div className="space-y-4 animate-fade-in">
             
             {/* Header & Carrier Selector */}
             <div className="card card-pad p-4 space-y-3 bg-gradient-to-br from-card to-blue-50/20 dark:to-blue-950/20 border border-blue-200 dark:border-blue-900/60">
@@ -1776,9 +1807,18 @@ export default function MobileTerminal({ connection }) {
                   );
                 })
               ) : (
-                <div className="card p-10 text-center text-ink-muted space-y-2">
-                  <Truck className="h-8 w-8 mx-auto text-ink-subtle opacity-50" />
-                  <p className="text-xs font-bold text-ink">No hay despachos para este transporte</p>
+                <div className="card">
+                  <div className="empty">
+                    <div className="empty-icon">
+                      <Truck className="h-6 w-6" />
+                    </div>
+                    <p className="empty-title">No hay despachos para este transporte</p>
+                    <p className="empty-text">Probá con otro transporte o recargá los datos.</p>
+                    <button onClick={() => loadData()} className="btn btn-outline btn-sm mt-2">
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Reintentar</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1790,7 +1830,7 @@ export default function MobileTerminal({ connection }) {
         {/* TAB: ESCÁNER INTELIGENTE ANTI-SPAM Y SELECTOR DE ACCIÓN */}
         {/* ========================================================================= */}
         {activeTab === 'scanner' && (
-          <div className="space-y-4 animate-in fade-in-50 duration-200">
+          <div className="space-y-4 animate-fade-in">
             
             {/* Lector de cámara & Selector de Comportamiento */}
             <div className="card card-pad p-4 space-y-3">
@@ -1981,7 +2021,7 @@ export default function MobileTerminal({ connection }) {
               <button
                 type="submit"
                 disabled={!manualCode.trim() || isProcessingScan}
-                className="btn btn-primary px-5 text-xs font-black disabled:opacity-50"
+                className="btn btn-primary px-5 text-xs font-black disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Verificar
               </button>
@@ -1990,7 +2030,7 @@ export default function MobileTerminal({ connection }) {
             {/* DYNAMIC SCANNED RESULT FEEDBACK CARD */}
             {lastScanned && (
               <div 
-                className={`p-4 rounded-3xl border shadow-xl animate-in zoom-in-95 space-y-3 ${
+                className={`p-4 rounded-3xl border shadow-xl animate-fade-in space-y-3 ${
                   lastScanned.status === 'CARRIER_MISMATCH'
                     ? 'bg-rose-600 text-white border-rose-700 ring-4 ring-rose-500/50 animate-bounce'
                     : lastScanned.status === 'NEWLY_PACKED' || lastScanned.status === 'DISPATCH_VERIFIED'
@@ -2141,7 +2181,7 @@ export default function MobileTerminal({ connection }) {
         {/* TAB: AUDITORÍA DE ESCANEOS */}
         {/* ========================================================================= */}
         {activeTab === 'history' && (
-          <div className="space-y-3 animate-in fade-in-50 duration-200">
+          <div className="space-y-3 animate-fade-in">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-black text-ink uppercase tracking-wider flex items-center space-x-1.5">
                 <History className="w-4 h-4 text-purple-500" />
@@ -2149,8 +2189,9 @@ export default function MobileTerminal({ connection }) {
               </span>
               <button
                 onClick={loadData}
-                className="btn btn-icon btn-outline h-7 w-7"
+                className="btn btn-icon-sm btn-outline"
                 title="Actualizar registro"
+                aria-label="Actualizar registro"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
@@ -2207,15 +2248,24 @@ export default function MobileTerminal({ connection }) {
                       </div>
                     </div>
 
-                    <span className="text-[10px] text-ink-subtle font-semibold shrink-0 ml-2">
+                    <span className="text-[10px] text-ink-subtle font-semibold tabular shrink-0 ml-2">
                       {new Date(log.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
                   </div>
                 ))
               ) : (
-                <div className="card p-8 text-center text-ink-muted text-xs">
-                  <History className="w-8 h-8 mx-auto mb-2 opacity-40 text-ink-subtle" />
-                  <p>Aún no hay escaneos registrados hoy.</p>
+                <div className="card">
+                  <div className="empty">
+                    <div className="empty-icon">
+                      <History className="h-6 w-6" />
+                    </div>
+                    <p className="empty-title">Sin escaneos por el momento</p>
+                    <p className="empty-text">Aún no hay escaneos registrados hoy.</p>
+                    <button onClick={() => loadData()} className="btn btn-outline btn-sm mt-2">
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Reintentar</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2236,19 +2286,19 @@ export default function MobileTerminal({ connection }) {
       {/* MODAL: CHECKLIST INTERACTIVO DE EMPAQUE (CONTROL ÍTEM POR ÍTEM) */}
       {/* ========================================================================= */}
       {checklistModalOpen && activeChecklistShipment && (
-        <div className="modal-backdrop z-50 flex items-center justify-center p-3 bg-black/75 backdrop-blur-sm animate-in fade-in-50">
-          <div className="modal-box w-full max-w-lg bg-card border border-line shadow-2xl rounded-3xl p-5 space-y-4 max-h-[92vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-2xl bg-emerald-500 text-white shadow-md">
+        <div className="overlay" role="dialog" aria-modal="true" aria-label="Verificación de contenido">
+          <div className="modal modal-lg">
+
+            <div className="modal-head">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="rounded-2xl bg-emerald-500 p-2.5 text-white shadow-md">
                   <ClipboardList className="h-5 w-5" />
                 </div>
-                <div>
-                  <h3 className="font-display font-black text-base text-ink">
+                <div className="min-w-0">
+                  <h3 className="modal-title">
                     Verificación de Contenido
                   </h3>
-                  <p className="text-xs text-ink-muted">
+                  <p className="modal-sub tabular">
                     Orden #{activeChecklistShipment.order_id} • Envío #{activeChecklistShipment.id}
                   </p>
                 </div>
@@ -2256,11 +2306,15 @@ export default function MobileTerminal({ connection }) {
 
               <button
                 onClick={() => setChecklistModalOpen(false)}
-                className="btn btn-icon btn-outline h-8 w-8"
+                className="modal-close"
+                title="Cerrar verificación"
+                aria-label="Cerrar verificación"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
+
+            <div className="modal-body space-y-4">
 
             {/* Recipient & Destination Info */}
             <div className="p-3 bg-muted/60 rounded-2xl border border-line flex items-center justify-between gap-2 text-xs">
@@ -2354,7 +2408,9 @@ export default function MobileTerminal({ connection }) {
             </div>
 
             {/* Checklist Action Buttons */}
-            <div className="pt-3 border-t border-line flex gap-2">
+            </div>
+
+            <div className="modal-foot">
               <button
                 onClick={handleConfirmChecklist}
                 className="btn btn-primary flex-1 py-3 text-xs font-black flex items-center justify-center gap-2 shadow-md"
@@ -2379,28 +2435,31 @@ export default function MobileTerminal({ connection }) {
       {/* MODAL: MANIFIESTO DE ENTREGA Y REMITO PARA CHOFER */}
       {/* ========================================================================= */}
       {manifestModalOpen && (
-        <div className="modal-backdrop z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm animate-in fade-in-50">
-          <div className="modal-box w-full max-w-2xl bg-card border border-line shadow-2xl rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div>
-                <h3 className="font-display font-black text-base text-ink flex items-center gap-2">
+        <div className="overlay" role="dialog" aria-modal="true" aria-label="Manifiesto de despacho">
+          <div className="modal modal-xl">
+
+            <div className="modal-head">
+              <div className="min-w-0">
+                <h3 className="modal-title flex items-center gap-2">
                   <FileText className="h-5 w-5 text-brand" />
                   <span>Manifiesto de Despacho y Entrega a Chofer</span>
                 </h3>
-                <p className="text-xs text-ink-muted mt-0.5">
+                <p className="modal-sub">
                   Remito oficial para firma del transporte y constancia de salida de depósito.
                 </p>
               </div>
 
               <button
                 onClick={() => setManifestModalOpen(false)}
-                className="btn btn-icon btn-outline h-8 w-8"
+                className="modal-close"
+                title="Cerrar manifiesto"
+                aria-label="Cerrar manifiesto"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
+            <div className="modal-body space-y-4">
             {/* Transport & Driver metadata inputs */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-muted/60 p-3 rounded-2xl border border-line text-xs">
               <div>
@@ -2411,11 +2470,11 @@ export default function MobileTerminal({ connection }) {
               </div>
               <div>
                 <label className="font-bold text-ink-subtle block text-[10px] uppercase">Fecha y Hora</label>
-                <p className="font-black text-ink mt-0.5">{new Date().toLocaleDateString('es-AR')} - {currentTime}</p>
+                <p className="tabular font-black text-ink mt-0.5">{new Date().toLocaleDateString('es-AR')} - {currentTime}</p>
               </div>
               <div>
                 <label className="font-bold text-ink-subtle block text-[10px] uppercase">Total Paquetes</label>
-                <p className="font-black text-emerald-600 dark:text-emerald-400 mt-0.5 text-sm">{dispatchStageShipments.length} bultos</p>
+                <p className="tabular font-black text-emerald-600 dark:text-emerald-400 mt-0.5 text-sm">{dispatchStageShipments.length} bultos</p>
               </div>
 
               <div className="col-span-2 sm:col-span-3 grid grid-cols-2 gap-2 pt-2 border-t border-line/60">
@@ -2460,7 +2519,7 @@ export default function MobileTerminal({ connection }) {
                         <span className="font-bold text-ink block">{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</span>
                         <span className="text-[10px] text-ink-muted">{s.receiver_address?.city?.name || 'CABA / GBA'}</span>
                       </td>
-                      <td className="p-2 text-center font-black">
+                      <td className="p-2 text-center font-black tabular">
                         {(s.items || []).reduce((acc, it) => acc + (it.quantity || 1), 0)}
                       </td>
                       <td className="p-2 text-center">
@@ -2492,17 +2551,19 @@ export default function MobileTerminal({ connection }) {
             </div>
 
             {/* Modal Actions */}
-            <div className="flex justify-end gap-2 pt-2">
+            </div>
+
+            <div className="modal-foot">
               <button
                 onClick={() => window.print()}
-                className="btn btn-primary text-xs font-black py-2.5 px-4 flex items-center gap-1.5"
+                className="btn btn-primary btn-sm"
               >
                 <Printer className="h-4 w-4" />
                 <span>Imprimir Manifiesto</span>
               </button>
               <button
                 onClick={() => setManifestModalOpen(false)}
-                className="btn btn-outline text-xs font-bold py-2.5 px-4"
+                className="btn btn-outline btn-sm"
               >
                 Cerrar
               </button>

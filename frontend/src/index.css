@@ -285,7 +285,12 @@
   .btn {
     @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold
            transition-all duration-200 ease-spring active:scale-98
-           disabled:pointer-events-none disabled:opacity-50;
+           disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  /* Estado deshabilitado uniforme: misma opacidad y cursor en todo el sistema. */
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
   .btn-xs {
     @apply gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px];
@@ -572,6 +577,24 @@
     background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.55), transparent);
     animation: shimmer 1.6s infinite;
   }
+  /* Variante explícita de shimmer para skeletons (misma animación, nombre del sistema). */
+  .skeleton-shimmer {
+    @apply skeleton;
+  }
+  .skeleton-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.55), transparent);
+    animation: shimmer 1.6s infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton::after,
+    .skeleton-shimmer::after {
+      animation: none;
+    }
+  }
   .progress {
     @apply h-2 w-full overflow-hidden rounded-full bg-muted;
   }
@@ -654,6 +677,16 @@
   }
   .duration-300.animate-in {
     animation-duration: 0.3s;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Keyframes del sistema (el shimmer de skeletons vive acá para que
+   `.skeleton::after` y `.skeleton-shimmer::after` siempre lo encuentren).
+   -------------------------------------------------------------------------- */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
   }
 }
 

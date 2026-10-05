@@ -32,13 +32,35 @@ import { celebrate } from '../utils/celebrate';
 import { api } from '../services/api';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
+// Filtros persistidos en este navegador (solo presentación, no cambian la consulta).
+const SHIPMENTS_FILTER_KEY = 'mlpro:filtros:shipments';
+const VALID_STATUS_TAB = ['ready_to_ship', 'shipped', 'delivered', 'all'];
+const VALID_LOGISTIC = ['all', 'self_service', 'cross_docking', 'fulfillment', 'drop_off'];
+const VALID_PACKING = ['all', 'unprinted', 'printed', 'packed'];
+
+function readShipmentsFilters() {
+  const defaults = { statusTab: 'ready_to_ship', logisticFilter: 'all', packingFilter: 'all' };
+  try {
+    const raw = window.localStorage.getItem(SHIPMENTS_FILTER_KEY);
+    if (!raw) return defaults;
+    const saved = JSON.parse(raw);
+    return {
+      statusTab: VALID_STATUS_TAB.includes(saved?.statusTab) ? saved.statusTab : defaults.statusTab,
+      logisticFilter: VALID_LOGISTIC.includes(saved?.logisticFilter) ? saved.logisticFilter : defaults.logisticFilter,
+      packingFilter: VALID_PACKING.includes(saved?.packingFilter) ? saved.packingFilter : defaults.packingFilter,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
 export default function ShipmentsManager({ connection }) {
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusTab, setStatusTab] = useState('ready_to_ship'); // ready_to_ship, shipped, delivered, all
-  const [logisticFilter, setLogisticFilter] = useState('all');
-  const [packingFilter, setPackingFilter] = useState('all'); // all, unprinted, printed, packed
+  const [statusTab, setStatusTab] = useState(() => readShipmentsFilters().statusTab); // ready_to_ship, shipped, delivered, all
+  const [logisticFilter, setLogisticFilter] = useState(() => readShipmentsFilters().logisticFilter);
+  const [packingFilter, setPackingFilter] = useState(() => readShipmentsFilters().packingFilter); // all, unprinted, printed, packed
   const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
   const [labelFormat, setLabelFormat] = useState('pdf'); // pdf, zpl
   const [activeNoteModal, setActiveNoteModal] = useState(null);
@@ -155,6 +177,18 @@ export default function ShipmentsManager({ connection }) {
       second: '2-digit',
     });
   };
+
+  // Persiste los filtros de estado, logística y empaque (se validan al leer).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SHIPMENTS_FILTER_KEY,
+        JSON.stringify({ statusTab, logisticFilter, packingFilter })
+      );
+    } catch {
+      // Sin almacenamiento disponible: los filtros siguen funcionando en memoria.
+    }
+  }, [statusTab, logisticFilter, packingFilter]);
 
   useEffect(() => {
     loadShipments();
@@ -354,10 +388,10 @@ export default function ShipmentsManager({ connection }) {
       <div className="page-head">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="page-title">Mesa de Empaque & Logística</h1>
+            <h1 className="page-title text-balance">Mesa de Empaque & Logística</h1>
             <span className="badge badge-neutral tabular">{shipments.length} paquetes</span>
           </div>
-          <p className="page-sub">
+          <p className="page-sub text-pretty">
             Pendientes por empaquetar:{' '}
             <strong className="tabular font-extrabold text-warning">{pendingCount}</strong>
             <span className="mx-2 text-ink-subtle">·</span>
@@ -611,13 +645,13 @@ export default function ShipmentsManager({ connection }) {
               <p className="help">Consultando envíos y logística de Mercado Libre…</p>
               {[0, 1, 2].map((row) => (
                 <div key={row} className="flex items-start gap-3">
-                  <div className="skeleton h-8 w-8 rounded-lg" />
+                  <div className="skeleton skeleton-shimmer h-8 w-8 rounded-lg" />
                   <div className="min-w-0 flex-1 space-y-2">
-                    <div className="skeleton h-4 w-40" />
-                    <div className="skeleton h-3 w-full max-w-md" />
-                    <div className="skeleton h-3 w-2/3" />
+                    <div className="skeleton skeleton-shimmer h-4 w-40" />
+                    <div className="skeleton skeleton-shimmer h-3 w-full max-w-md" />
+                    <div className="skeleton skeleton-shimmer h-3 w-2/3" />
                   </div>
-                  <div className="skeleton hidden h-9 w-44 rounded-xl sm:block" />
+                  <div className="skeleton skeleton-shimmer hidden h-9 w-44 rounded-xl sm:block" />
                 </div>
               ))}
             </div>
@@ -912,6 +946,10 @@ export default function ShipmentsManager({ connection }) {
               </div>
               <h3 className="empty-title">No hay envíos en esta sección</h3>
               <p className="empty-text">Todos los paquetes están al día con los filtros seleccionados.</p>
+              <button onClick={() => loadShipments()} className="btn btn-outline btn-sm mt-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Reintentar</span>
+              </button>
             </div>
           </div>
         )}

@@ -270,10 +270,10 @@ export default function StockManager({ connection, onRefreshData }) {
       <div className="page-head">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="page-title">Gestión de Stock y Publicaciones</h1>
+            <h1 className="page-title text-balance">Gestión de Stock y Publicaciones</h1>
             <span className="badge badge-brand tabular">{items.length} productos</span>
           </div>
-          <p className="page-sub">
+          <p className="page-sub text-pretty">
             Sincronización bidireccional directa con Mercado Libre. Editá precios, stock y estados en vivo.
           </p>
         </div>
@@ -686,6 +686,10 @@ export default function StockManager({ connection, onRefreshData }) {
                       </div>
                       <p className="empty-title">Sin publicaciones</p>
                       <p className="empty-text">No se encontraron publicaciones con los filtros seleccionados.</p>
+                      <button onClick={loadItems} className="btn btn-outline btn-sm mt-2">
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span>Reintentar</span>
+                      </button>
                     </div>
                   </td>
                 </tr>

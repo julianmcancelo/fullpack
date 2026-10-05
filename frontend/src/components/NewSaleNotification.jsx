@@ -1,14 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ShoppingBag, X, ExternalLink, Sparkles, DollarSign } from 'lucide-react';
 
+// Auto-dismiss de 8 s (el cierre manual siempre queda visible).
+const AUTO_DISMISS_MS = 8000;
+
 export default function NewSaleNotification({ sale, onClose, onViewOrders }) {
+  useEffect(() => {
+    if (!sale || !onClose) return undefined;
+    const timer = setTimeout(onClose, AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [sale, onClose]);
+
   if (!sale) return null;
 
   const item = (sale.order_items && sale.order_items[0]?.item) || {};
   const amount = (sale.total_amount || 0).toLocaleString('es-AR');
 
   return (
-    <div className="fixed top-4 right-4 left-4 z-50 animate-slide-down sm:left-auto sm:w-96">
+    <div
+      className="fixed top-4 right-4 left-4 z-[60] animate-slide-down sm:left-auto sm:w-96"
+      role="status"
+      aria-live="polite"
+    >
       <div className="card card-accent overflow-hidden border-brand/40 shadow-pop">
         <div className="flex items-start justify-between gap-3 p-4">
           <div className="flex min-w-0 items-start gap-3">

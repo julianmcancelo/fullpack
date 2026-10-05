@@ -308,8 +308,8 @@ export default function Settings({
       {/* ---------------- Header ---------------- */}
       <div className="page-head">
         <div className="min-w-0">
-          <h1 className="page-title">Ajustes</h1>
-          <p className="page-sub">
+          <h1 className="page-title text-balance">Ajustes</h1>
+          <p className="page-sub text-pretty">
             Conexión con Mercado Libre, celular vinculado, cuenta y apariencia. Todo en un solo
             lugar.
           </p>

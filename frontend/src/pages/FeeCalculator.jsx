@@ -51,8 +51,8 @@ export default function FeeCalculator() {
       {/* Header */}
       <div className="page-head">
         <div>
-          <h1 className="page-title">Calculadora de Rentabilidad & Comisiones ML</h1>
-          <p className="page-sub">
+          <h1 className="page-title text-balance">Calculadora de Rentabilidad & Comisiones ML</h1>
+          <p className="page-sub text-pretty">
             Calcula con precisión tus márgenes de ganancia reales, comisiones de Mercado Libre y costos de envío.
           </p>
         </div>
@@ -217,7 +217,7 @@ export default function FeeCalculator() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <span className="kpi-label">Resumen de Liquidación</span>
-                <p className="kpi-value text-3xl">{formatMoney(grossProfit)}</p>
+                <p className="kpi-value tabular text-3xl">{formatMoney(grossProfit)}</p>
                 <p className="mt-2 text-xs text-ink-muted">Ganancia limpia de bolsillo por unidad</p>
               </div>
               <div className="kpi-icon kpi-icon-success shrink-0">
