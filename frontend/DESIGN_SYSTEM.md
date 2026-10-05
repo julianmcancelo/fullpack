@@ -38,12 +38,11 @@ siguiendo la misma convención.
 `amber-*`, `blue-*` para color de UI, y cualquier hex suelto. Existen sólo por
 compatibilidad con el marcado viejo.
 
-> **Excepción — superficies permanentemente oscuras.** El hero de la landing
-> (`bg-ink-gradient`) es siempre oscuro, aunque el tema sea claro. Ahí los tokens
-> temáticos se invierten y pierden contraste, así que se usan colores fijos claros
-> (`text-brand-300`, `text-emerald-300`, `text-sky-300`, `border-white/10`,
-> `bg-white/[0.04]`) y la rejilla `surface-grid-light`. Es la única excepción
-> admitida; cualquier otra superficie debe ser temática.
+> **Superficie fija en claro — `.force-light`.** La landing pública se ve siempre
+> en claro, aunque la app esté en modo oscuro. En lugar de hardcodear colores, el
+> contenedor raíz lleva la clase `.force-light`, que vuelve a declarar los tokens
+> del tema claro para ese subárbol: todo lo de adentro sigue usando las mismas
+> clases del sistema (`bg-app`, `bg-card`, `text-ink`, `.card`, `.btn`…).
 
 Sombras: `shadow-xs`, `shadow-card`, `shadow-card-hover`, `shadow-pop`,
 `shadow-modal`, `shadow-glow` (amarillo), `shadow-glow-accent` (azul).

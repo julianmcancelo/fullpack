@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   QrCode, 
   Camera, 
@@ -6,34 +6,99 @@ import {
   CheckCircle2, 
   Truck, 
   AlertCircle, 
-  AlertTriangle,
+  AlertTriangle, 
   RefreshCw, 
   Volume2, 
   VolumeX, 
-  Smartphone,
-  Printer,
-  Sparkles,
-  MapPin,
-  Search,
-  History,
-  Layers,
-  Check,
-  RotateCcw,
-  Database,
-  ExternalLink,
-  Undo2,
-  Mic,
-  MicOff,
-  Clock,
-  Boxes
+  Smartphone, 
+  Printer, 
+  MapPin, 
+  Search, 
+  History, 
+  Layers, 
+  Check, 
+  Database, 
+  Undo2, 
+  Mic, 
+  MicOff, 
+  Clock, 
+  Zap, 
+  Calendar, 
+  CalendarCheck, 
+  Flame, 
+  PackageOpen, 
+  CheckCircle, 
+  Send, 
+  Tag 
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
 import { playSuccessBeep, playWarningBeep, playErrorBeep, speakSpanish } from '../utils/audio';
 import { api } from '../services/api';
 
+// Helper: classify shipment by logistic urgency & date (Hoy vs Mañana)
+const getShipmentMeta = (s) => {
+  const isFlex = s.logistic_type === 'self_service';
+  const isColecta = s.logistic_type === 'cross_docking';
+  const isCorreo = s.logistic_type === 'drop_off' || s.logistic_type === 'xd_drop_off' || s.logistic_type === 'default';
+
+  let dateCategory = 'today'; // 'today', 'tomorrow', 'other'
+  const isPacked = Boolean(s.packing?.packed);
+
+  if (s.order_date) {
+    try {
+      const orderDate = new Date(s.order_date);
+      const now = new Date();
+      
+      const orderDayStr = orderDate.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+      const todayStr = now.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+      
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+      if (orderDayStr === todayStr || isFlex) {
+        dateCategory = 'today';
+      } else if (orderDayStr === tomorrowStr) {
+        dateCategory = 'tomorrow';
+      } else {
+        const diffHours = (now - orderDate) / (1000 * 60 * 60);
+        if (diffHours <= 26) {
+          dateCategory = 'today';
+        } else if (diffHours <= 50) {
+          dateCategory = 'tomorrow';
+        } else {
+          dateCategory = 'today';
+        }
+      }
+    } catch {
+      dateCategory = isFlex ? 'today' : 'today';
+    }
+  }
+
+  // Priority score for warehouse sorting (Flex hoy = top 1, Colecta hoy = 2, Mañana = 3, Packed = 4)
+  let priority = 3;
+  if (!isPacked) {
+    if (isFlex) priority = 1;
+    else if (dateCategory === 'today') priority = 2;
+    else priority = 3;
+  } else {
+    priority = 4;
+  }
+
+  return {
+    isFlex,
+    isColecta,
+    isCorreo,
+    dateCategory,
+    isPacked,
+    priority,
+    logisticLabel: isFlex ? 'FLEX EN EL DÍA' : isColecta ? 'COLECTA' : isCorreo ? 'CORREO / PUNTO' : 'ESTÁNDAR',
+  };
+};
+
 export default function MobileTerminal({ connection }) {
-  const [activeTab, setActiveTab] = useState('scanner'); // 'scanner', 'shipments', 'history'
+  const [activeTab, setActiveTab] = useState('shipments'); // Default directly to 'shipments'
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -46,12 +111,24 @@ export default function MobileTerminal({ connection }) {
   const [manualCode, setManualCode] = useState('');
   const [scanLogs, setScanLogs] = useState([]);
   const [dbStatus, setDbStatus] = useState(null);
-  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'packed'
   const [isProcessingScan, setIsProcessingScan] = useState(false);
-  
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+  // Filter States
+  const [dateFilter, setDateFilter] = useState('all_urgent'); // 'all_urgent', 'flex', 'today', 'tomorrow', 'all'
+  const [statusFilter, setStatusFilter] = useState('pending'); // 'pending', 'packed', 'all'
+
   const html5QrCodeRef = useRef(null);
   const lastScannedCodeRef = useRef('');
   const lastScannedTimeRef = useRef(0);
+
+  // Live ticking clock in Argentina time
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const loadData = async () => {
     try {
@@ -144,7 +221,6 @@ export default function MobileTerminal({ connection }) {
     if (!rawCode) return;
     const clean = rawCode.trim();
 
-    // Prevent duplicate scan spamming of the exact same code within 3 seconds
     const now = Date.now();
     if (clean === lastScannedCodeRef.current && (now - lastScannedTimeRef.current) < 3000) {
       return;
@@ -159,10 +235,6 @@ export default function MobileTerminal({ connection }) {
       const res = await api.scanShipment(clean, autoPackOnScan);
 
       if (res.found && res.shipment) {
-        const firstItem = (res.shipment.items && res.shipment.items[0]?.item) || {};
-        const firstItemTitle = firstItem.title || 'Producto';
-
-        // CASE 1: PACKAGE WAS ALREADY PACKED PREVIOUSLY!
         if (res.alreadyPacked) {
           if (soundEnabled) playWarningBeep();
           if (voiceEnabled) speakSpanish(`Atención, paquete ya leído previamente`);
@@ -180,15 +252,12 @@ export default function MobileTerminal({ connection }) {
             message: `¡ATENCIÓN! Este paquete ya había sido empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
             timestamp: new Date().toLocaleTimeString('es-AR'),
           });
-        } 
-        // CASE 2: BRAND NEW PACKAGE PACKED!
-        else {
+        } else {
           if (soundEnabled) playSuccessBeep();
           if (voiceEnabled) speakSpanish(`Paquete verificado con éxito`);
           if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
           confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
 
-          // Update local state
           setShipments(prev =>
             prev.map(s => (s.id === res.shipment.id ? res.shipment : s))
           );
@@ -201,9 +270,7 @@ export default function MobileTerminal({ connection }) {
             timestamp: new Date().toLocaleTimeString('es-AR'),
           });
         }
-      } 
-      // CASE 3: CODE NOT FOUND
-      else {
+      } else {
         if (soundEnabled) playErrorBeep();
         if (voiceEnabled) speakSpanish(`Código no encontrado`);
         if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
@@ -216,7 +283,6 @@ export default function MobileTerminal({ connection }) {
         });
       }
 
-      // Refresh scan audit logs
       api.getScanLogs().then(r => setScanLogs(r.logs || [])).catch(() => {});
     } catch (err) {
       if (soundEnabled) playErrorBeep();
@@ -308,55 +374,152 @@ export default function MobileTerminal({ connection }) {
     }
   };
 
-  // Metrics
-  const packedCount = shipments.filter(s => s.packing?.packed).length;
-  const pendingCount = shipments.length - packedCount;
-  const progressPercent = shipments.length > 0 ? Math.round((packedCount / shipments.length) * 100) : 0;
+  // Enriched & Grouped Metrics Computation
+  const {
+    enrichedShipments,
+    totalCount,
+    packedCount,
+    pendingCount,
+    progressPercent,
+    flexTotal,
+    flexPending,
+    colectaTotal,
+    colectaPending,
+    todayTotal,
+    todayPending,
+    tomorrowTotal,
+    tomorrowPending,
+  } = useMemo(() => {
+    let flexTot = 0;
+    let flexPend = 0;
+    let colTot = 0;
+    let colPend = 0;
+    let todTot = 0;
+    let todPend = 0;
+    let tomTot = 0;
+    let tomPend = 0;
+    let packedTot = 0;
 
-  // Filtered list
-  const filteredShipments = shipments.filter(s => {
-    const isPacked = Boolean(s.packing?.packed);
-    if (filterStatus === 'pending' && isPacked) return false;
-    if (filterStatus === 'packed' && !isPacked) return false;
+    const enriched = shipments.map(s => {
+      const meta = getShipmentMeta(s);
+      if (meta.isPacked) packedTot++;
+      
+      if (meta.isFlex) {
+        flexTot++;
+        if (!meta.isPacked) flexPend++;
+      } else if (meta.isColecta) {
+        colTot++;
+        if (!meta.isPacked) colPend++;
+      }
 
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      String(s.order_id).includes(q) ||
-      String(s.id).includes(q) ||
-      s.buyer?.first_name?.toLowerCase().includes(q) ||
-      s.buyer?.nickname?.toLowerCase().includes(q) ||
-      s.items?.some(it => 
-        it.item?.title?.toLowerCase().includes(q) || 
-        it.item?.seller_sku?.toLowerCase().includes(q)
-      )
-    );
-  });
+      if (meta.dateCategory === 'today') {
+        todTot++;
+        if (!meta.isPacked) todPend++;
+      } else if (meta.dateCategory === 'tomorrow') {
+        tomTot++;
+        if (!meta.isPacked) tomPend++;
+      }
+
+      return { ...s, meta };
+    });
+
+    // Sort: Flex pending first, then today pending, then tomorrow pending, then packed
+    enriched.sort((a, b) => a.meta.priority - b.meta.priority);
+
+    const total = shipments.length;
+    const progress = total > 0 ? Math.round((packedTot / total) * 100) : 0;
+
+    return {
+      enrichedShipments: enriched,
+      totalCount: total,
+      packedCount: packedTot,
+      pendingCount: total - packedTot,
+      progressPercent: progress,
+      flexTotal: flexTot,
+      flexPending: flexPend,
+      colectaTotal: colTot,
+      colectaPending: colPend,
+      todayTotal: todTot,
+      todayPending: todPend,
+      tomorrowTotal: tomTot,
+      tomorrowPending: tomPend,
+    };
+  }, [shipments]);
+
+  // Filtered List calculation
+  const displayedShipments = useMemo(() => {
+    return enrichedShipments.filter(s => {
+      // 1. Status Filter
+      if (statusFilter === 'pending' && s.meta.isPacked) return false;
+      if (statusFilter === 'packed' && !s.meta.isPacked) return false;
+
+      // 2. Date / Urgency Filter
+      if (dateFilter === 'flex') {
+        if (!s.meta.isFlex) return false;
+      } else if (dateFilter === 'today') {
+        if (s.meta.dateCategory !== 'today') return false;
+      } else if (dateFilter === 'tomorrow') {
+        if (s.meta.dateCategory !== 'tomorrow') return false;
+      } else if (dateFilter === 'all_urgent') {
+        if (s.meta.dateCategory !== 'today' && s.meta.dateCategory !== 'tomorrow' && !s.meta.isFlex) return false;
+      }
+
+      // 3. Search text query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesId = String(s.id).includes(q) || String(s.order_id).includes(q);
+        const matchesTracking = s.tracking_number && String(s.tracking_number).toLowerCase().includes(q);
+        const matchesBuyer = (s.buyer?.first_name && s.buyer.first_name.toLowerCase().includes(q)) ||
+                             (s.buyer?.last_name && s.buyer.last_name.toLowerCase().includes(q)) ||
+                             (s.buyer?.nickname && s.buyer.nickname.toLowerCase().includes(q));
+        const matchesItems = s.items && s.items.some(it => 
+          (it.item?.title && it.item.title.toLowerCase().includes(q)) ||
+          (it.item?.seller_sku && it.item.seller_sku.toLowerCase().includes(q))
+        );
+        return matchesId || matchesTracking || matchesBuyer || matchesItems;
+      }
+
+      return true;
+    });
+  }, [enrichedShipments, statusFilter, dateFilter, searchQuery]);
 
   return (
     <div className="page pb-24">
-      <div className="mx-auto w-full max-w-lg select-none space-y-4">
+      <div className="mx-auto w-full max-w-xl select-none space-y-4">
 
-        {/* Encabezado de la terminal */}
-        <div className="page-head">
+        {/* 1. TOP HEADER & AUDIO CONTROLS */}
+        <div className="page-head flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink shadow-glow">
-              <Smartphone className="h-5 w-5" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink shadow-glow">
+              <Smartphone className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="page-title">Terminal Móvil de Empaque</h1>
-              <p className="page-sub flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <h1 className="page-title text-lg font-black tracking-tight">Terminal de Empaque</h1>
+                <span className="badge badge-brand text-[10px] uppercase font-extrabold">Depósito</span>
+              </div>
+              <p className="page-sub flex items-center gap-2 mt-0.5">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
-                <span>Lector en depósito @GRANA3DOK</span>
+                <span className="font-semibold text-ink-muted">@GRANA3DOK</span>
+                <span className="text-ink-subtle">•</span>
+                <span className="tabular font-mono text-[11px] font-bold text-ink-muted">{currentTime}</span>
               </p>
             </div>
           </div>
 
-          {/* Controles de sonido y voz */}
-          <div className="toolbar">
+          {/* Controls toolbar */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={loadData}
+              className="btn btn-icon btn-outline h-9 w-9"
+              title="Recargar despachos"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand' : ''}`} />
+            </button>
+
             <button
               onClick={() => setVoiceEnabled(!voiceEnabled)}
-              className={`btn btn-icon ${voiceEnabled ? 'btn-soft' : 'btn-outline'}`}
+              className={`btn btn-icon h-9 w-9 ${voiceEnabled ? 'btn-soft text-brand-ink bg-brand' : 'btn-outline'}`}
               title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
             >
               {voiceEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
@@ -364,7 +527,7 @@ export default function MobileTerminal({ connection }) {
 
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`btn btn-icon ${soundEnabled ? 'btn-soft' : 'btn-outline'}`}
+              className={`btn btn-icon h-9 w-9 ${soundEnabled ? 'btn-soft text-brand-ink bg-brand' : 'btn-outline'}`}
               title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
             >
               {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
@@ -372,69 +535,523 @@ export default function MobileTerminal({ connection }) {
           </div>
         </div>
 
-        {/* Progreso de empaque */}
-        <div className="card card-pad space-y-3">
-          <div className="flex items-end justify-between gap-3">
+        {/* 2. LOGISTICS DASHBOARD & PROGRESS HERO CARD */}
+        <div className="card card-pad bg-gradient-to-br from-card to-muted/40 border border-line-strong shadow-sm space-y-4">
+          
+          {/* Progress Bar & Big KPI */}
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle">Paquetes empaquetados</p>
-              <p className="mt-1.5 font-display text-3xl font-extrabold leading-none text-ink">
-                <span className="tabular">{packedCount}</span>
-                <span className="ml-1 text-sm font-bold text-ink-muted">
-                  / <span className="tabular">{shipments.length}</span> paquetes
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-black uppercase tracking-wider text-ink-subtle">
+                  Progreso de Despacho
+                </p>
+                {flexPending > 0 && (
+                  <span className="badge badge-warning text-[10px] font-black animate-pulse">
+                    ⚡ {flexPending} FLEX URGENTE
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-3xl font-extrabold text-ink tabular">
+                  {packedCount}
                 </span>
+                <span className="text-sm font-bold text-ink-muted">
+                  / <span className="tabular">{totalCount}</span> paquetes listos
+                </span>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-brand/20 border border-brand/40 text-brand-ink dark:text-brand font-black text-sm">
+                <span className="tabular">{progressPercent}%</span>
+              </div>
+              <p className="text-[10px] font-bold text-ink-subtle mt-1">
+                {pendingCount === 0 ? '🎉 Todo empaquetado' : `Faltan ${pendingCount} paquetes`}
               </p>
             </div>
-            <span className="badge badge-brand">
-              <span className="tabular">{progressPercent}%</span> Completado
-            </span>
           </div>
 
-          <div className="progress">
-            <div className="progress-bar" style={{ width: `${progressPercent}%` }} />
+          {/* Animated Progress Bar */}
+          <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted border border-line">
+            <div 
+              className="h-full bg-gradient-to-r from-yellow-400 via-amber-400 to-emerald-500 transition-all duration-500 ease-spring"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
+
+          {/* Urgent Dispatch Breakdown Pills */}
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            
+            {/* Flex Hoy */}
+            <button
+              onClick={() => {
+                setDateFilter('flex');
+                setActiveTab('shipments');
+              }}
+              className={`p-2.5 rounded-2xl border text-left transition-all ${
+                dateFilter === 'flex' 
+                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 shadow-xs ring-2 ring-emerald-500/30' 
+                  : 'border-line bg-card hover:bg-muted'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                  <Zap className="h-3 w-3 fill-emerald-500 text-emerald-500" />
+                  Flex Hoy
+                </span>
+                <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${flexPending > 0 ? 'bg-amber-400 text-slate-950' : 'bg-emerald-200 text-emerald-900'}`}>
+                  {flexPending} pend.
+                </span>
+              </div>
+              <p className="mt-1 font-display text-lg font-black text-ink tabular">
+                {flexTotal} <span className="text-[11px] font-normal text-ink-muted">total</span>
+              </p>
+            </button>
+
+            {/* Colecta / Correo Hoy */}
+            <button
+              onClick={() => {
+                setDateFilter('today');
+                setActiveTab('shipments');
+              }}
+              className={`p-2.5 rounded-2xl border text-left transition-all ${
+                dateFilter === 'today' 
+                  ? 'border-brand bg-brand-soft shadow-xs ring-2 ring-brand/30' 
+                  : 'border-line bg-card hover:bg-muted'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-ink uppercase tracking-wider flex items-center gap-1">
+                  <Truck className="h-3 w-3 text-ink-subtle" />
+                  Hoy
+                </span>
+                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-muted text-ink-muted">
+                  {todayPending} pend.
+                </span>
+              </div>
+              <p className="mt-1 font-display text-lg font-black text-ink tabular">
+                {todayTotal} <span className="text-[11px] font-normal text-ink-muted">total</span>
+              </p>
+            </button>
+
+            {/* Despacho Mañana */}
+            <button
+              onClick={() => {
+                setDateFilter('tomorrow');
+                setActiveTab('shipments');
+              }}
+              className={`p-2.5 rounded-2xl border text-left transition-all ${
+                dateFilter === 'tomorrow' 
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/40 shadow-xs ring-2 ring-purple-500/30' 
+                  : 'border-line bg-card hover:bg-muted'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-purple-700 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                  <Calendar className="h-3 w-3 text-purple-500" />
+                  Mañana
+                </span>
+                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-muted text-ink-muted">
+                  {tomorrowPending} pend.
+                </span>
+              </div>
+              <p className="mt-1 font-display text-lg font-black text-ink tabular">
+                {tomorrowTotal} <span className="text-[11px] font-normal text-ink-muted">total</span>
+              </p>
+            </button>
+
+          </div>
+
         </div>
 
-        {/* Selector de pestañas */}
-        <div className="segmented grid w-full grid-cols-3 gap-1">
+        {/* 3. MAIN NAVIGATION TABS */}
+        <div className="segmented grid w-full grid-cols-3 gap-1 p-1 bg-muted rounded-2xl border border-line">
           <button
-            onClick={() => setActiveTab('scanner')}
-            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'scanner' ? 'segmented-btn-active' : ''}`}
+            onClick={() => setActiveTab('shipments')}
+            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold ${activeTab === 'shipments' ? 'segmented-btn-active bg-card text-ink shadow-xs' : 'text-ink-muted'}`}
           >
-            <QrCode className="h-4 w-4" />
-            <span>Escanear</span>
+            <Layers className="h-4 w-4 text-brand" />
+            <span>Lista Envíos <span className="tabular font-black">({pendingCount})</span></span>
           </button>
 
           <button
-            onClick={() => setActiveTab('shipments')}
-            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'shipments' ? 'segmented-btn-active' : ''}`}
+            onClick={() => {
+              setActiveTab('scanner');
+              if (!scanning) startCamera();
+            }}
+            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold ${activeTab === 'scanner' ? 'segmented-btn-active bg-card text-ink shadow-xs' : 'text-ink-muted'}`}
           >
-            <Layers className="h-4 w-4" />
-            <span>Envíos <span className="tabular">({pendingCount})</span></span>
+            <QrCode className="h-4 w-4 text-emerald-500" />
+            <span>Escanear Lector</span>
           </button>
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'history' ? 'segmented-btn-active' : ''}`}
+            className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold ${activeTab === 'history' ? 'segmented-btn-active bg-card text-ink shadow-xs' : 'text-ink-muted'}`}
           >
-            <History className="h-4 w-4" />
-            <span>Historial</span>
+            <History className="h-4 w-4 text-purple-500" />
+            <span>Historial ({scanLogs.length})</span>
           </button>
         </div>
 
-        {/* TAB 1: SCANNER */}
+        {/* ========================================================================= */}
+        {/* TAB 1: LISTA DE ENVÍOS (HOY / MAÑANA / FLEX / PENDIENTES) */}
+        {/* ========================================================================= */}
+        {activeTab === 'shipments' && (
+          <div className="space-y-3 animate-in fade-in-50 duration-200">
+
+            {/* A. DATE & LOGISTICS CHIP SELECTOR */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              <button
+                onClick={() => setDateFilter('all_urgent')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'all_urgent'
+                    ? 'bg-ink text-bg shadow-xs'
+                    : 'bg-card border border-line text-ink-muted hover:bg-muted'
+                }`}
+              >
+                <Flame className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                <span>Hoy y Mañana</span>
+                <span className="badge badge-neutral text-[10px] tabular">
+                  {todayTotal + tomorrowTotal}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setDateFilter('flex')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'flex'
+                    ? 'bg-emerald-500 text-white shadow-xs'
+                    : 'bg-card border border-line text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                }`}
+              >
+                <Zap className="h-3.5 w-3.5 fill-current" />
+                <span>Solo Flex ({flexTotal})</span>
+              </button>
+
+              <button
+                onClick={() => setDateFilter('today')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'today'
+                    ? 'bg-brand text-brand-ink shadow-xs'
+                    : 'bg-card border border-line text-ink-muted hover:bg-muted'
+                }`}
+              >
+                <CalendarCheck className="h-3.5 w-3.5" />
+                <span>Despacho Hoy ({todayTotal})</span>
+              </button>
+
+              <button
+                onClick={() => setDateFilter('tomorrow')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'tomorrow'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-card border border-line text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40'
+                }`}
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Mañana ({tomorrowTotal})</span>
+              </button>
+
+              <button
+                onClick={() => setDateFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition-all flex items-center gap-1.5 ${
+                  dateFilter === 'all'
+                    ? 'bg-ink text-bg shadow-xs'
+                    : 'bg-card border border-line text-ink-muted hover:bg-muted'
+                }`}
+              >
+                <span>Todos ({totalCount})</span>
+              </button>
+            </div>
+
+            {/* B. STATUS FILTER PILLS & SEARCH */}
+            <div className="card card-pad p-3 space-y-2.5">
+              
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setStatusFilter('pending')}
+                    className={`px-3 py-1 rounded-xl text-xs font-black transition ${
+                      statusFilter === 'pending'
+                        ? 'bg-amber-400 text-slate-950 shadow-xs'
+                        : 'bg-muted text-ink-muted hover:bg-muted/80'
+                    }`}
+                  >
+                    ⏳ Pendientes ({pendingCount})
+                  </button>
+
+                  <button
+                    onClick={() => setStatusFilter('packed')}
+                    className={`px-3 py-1 rounded-xl text-xs font-black transition ${
+                      statusFilter === 'packed'
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'bg-muted text-ink-muted hover:bg-muted/80'
+                    }`}
+                  >
+                    ✅ Empaquetados ({packedCount})
+                  </button>
+
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-black transition ${
+                      statusFilter === 'all'
+                        ? 'bg-ink text-bg'
+                        : 'bg-muted text-ink-muted hover:bg-muted/80'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                </div>
+
+                <span className="text-[11px] font-bold text-ink-subtle">
+                  Mostrando <b className="text-ink">{displayedShipments.length}</b>
+                </span>
+              </div>
+
+              {/* Live Search */}
+              <div className="relative">
+                <Search className="h-4 w-4 text-ink-subtle absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filtrar por orden, cliente, SKU o producto..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input pl-9 text-xs py-2 h-9 bg-muted/60"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-ink-subtle hover:text-ink"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+            </div>
+
+            {/* C. SHIPMENT CARDS STREAM */}
+            <div className="space-y-3 pt-1">
+              {loading ? (
+                <div className="card p-10 text-center text-ink-muted space-y-3">
+                  <RefreshCw className="h-8 w-8 animate-spin mx-auto text-brand" />
+                  <p className="text-xs font-bold">Cargando despachos en tiempo real...</p>
+                </div>
+              ) : displayedShipments.length > 0 ? (
+                displayedShipments.map((s) => {
+                  const meta = s.meta;
+                  const isPacked = meta.isPacked;
+                  const itemsList = s.items || [];
+                  const totalUnits = itemsList.reduce((acc, it) => acc + (it.quantity || 1), 0);
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`card card-pad p-4 transition-all duration-200 border-2 ${
+                        isPacked
+                          ? 'border-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/20 opacity-80 hover:opacity-100'
+                          : meta.isFlex
+                          ? 'border-amber-400 bg-amber-500/5 dark:bg-amber-950/20 shadow-md ring-1 ring-amber-400/30'
+                          : 'border-line hover:border-line-strong'
+                      }`}
+                    >
+                      {/* Top Badges Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-2.5">
+                        
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {/* Logistic Priority Tag */}
+                          {meta.isFlex ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-[11px] font-black shadow-xs animate-pulse">
+                              <Zap className="h-3 w-3 fill-slate-950" />
+                              FLEX EN EL DÍA
+                            </span>
+                          ) : meta.isColecta ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-[11px] font-bold shadow-xs">
+                              <Truck className="h-3 w-3" />
+                              COLECTA
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-purple-600 text-white text-[11px] font-bold shadow-xs">
+                              <Send className="h-3 w-3" />
+                              CORREO
+                            </span>
+                          )}
+
+                          {/* Date delivery context */}
+                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black border ${
+                            meta.dateCategory === 'today'
+                              ? 'bg-brand/20 border-brand/40 text-brand-ink dark:text-brand'
+                              : 'bg-muted border-line text-ink-muted'
+                          }`}>
+                            {meta.dateCategory === 'today' ? '📅 Despachar Hoy' : '📦 Despacho Mañana'}
+                          </span>
+                        </div>
+
+                        {/* Status badge */}
+                        <div className="flex items-center gap-1.5">
+                          {isPacked ? (
+                            <span className="badge badge-success text-[10px] font-black gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              Empaquetado
+                            </span>
+                          ) : (
+                            <span className="badge badge-warning text-[10px] font-black gap-1">
+                              <Clock className="h-3 w-3" />
+                              Pendiente
+                            </span>
+                          )}
+                        </div>
+
+                      </div>
+
+                      {/* Shipment & Order Identification */}
+                      <div className="pt-2.5 flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-display font-extrabold text-sm text-ink">
+                              Orden #{s.order_id}
+                            </span>
+                            <span className="text-[11px] font-mono text-ink-subtle">
+                              (Envío #{s.id})
+                            </span>
+                          </div>
+                          
+                          <p className="text-xs text-ink-muted mt-0.5 flex items-center gap-1">
+                            <span>Comprador:</span>
+                            <b className="font-bold text-ink">
+                              {s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname || 'Cliente'}
+                            </b>
+                            {s.receiver_address?.city?.name && (
+                              <span className="text-[11px] text-ink-subtle flex items-center gap-0.5">
+                                • <MapPin className="h-3 w-3 text-ink-subtle inline" />
+                                {s.receiver_address.city.name}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-ink-subtle block">Unidades</span>
+                          <span className="font-display text-base font-extrabold text-ink tabular">
+                            {totalUnits} {totalUnits === 1 ? 'unidad' : 'unidades'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Ordered Items with BIG VISUAL QUANTITY PILL */}
+                      <div className="space-y-2 pt-2.5">
+                        {itemsList.map((it, idx) => (
+                          <div 
+                            key={idx} 
+                            className="p-3 rounded-2xl bg-muted/60 border border-line flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-ink line-clamp-2 leading-tight">
+                                {it.item?.title || 'Producto Mercado Libre'}
+                              </p>
+                              {it.item?.seller_sku ? (
+                                <p className="text-[11px] font-mono font-bold text-brand-ink dark:text-brand mt-1 flex items-center gap-1">
+                                  <Tag className="h-3 w-3" />
+                                  SKU: {it.item.seller_sku}
+                                </p>
+                              ) : (
+                                <p className="text-[10px] font-mono text-ink-subtle mt-0.5">
+                                  Item #{it.item?.id || ''}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* HUGE HIGH-CONTRAST QUANTITY BADGE */}
+                            <div className="flex flex-col items-center justify-center px-3.5 py-2 rounded-xl bg-yellow-400 text-slate-950 font-display font-black text-base shadow-xs text-center shrink-0 border border-yellow-500">
+                              <span>x{it.quantity || 1}</span>
+                              <span className="text-[8px] uppercase tracking-wider font-extrabold leading-none">CANTIDAD</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Action Buttons Toolbar */}
+                      <div className="mt-3.5 pt-3 border-t border-line flex items-center justify-between gap-2">
+                        <a
+                          href={api.downloadLabelUrl(s.id, 'pdf')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-outline btn-sm font-bold flex items-center gap-1.5 px-3 py-2 text-xs"
+                          title="Descargar o imprimir etiqueta de Mercado Envíos"
+                        >
+                          <Printer className="h-3.5 w-3.5 text-ink-subtle" />
+                          <span>Etiqueta PDF</span>
+                        </a>
+
+                        <button
+                          onClick={() => handleTogglePacking(s.id, isPacked)}
+                          className={`btn btn-sm flex-1 font-extrabold py-2 text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all ${
+                            isPacked
+                              ? 'btn-outline text-danger hover:bg-danger-soft'
+                              : meta.isFlex
+                              ? 'btn-primary bg-amber-400 text-slate-950 hover:bg-amber-500 border-amber-500 ring-2 ring-amber-400/40'
+                              : 'btn-primary'
+                          }`}
+                        >
+                          {isPacked ? (
+                            <>
+                              <Undo2 className="h-3.5 w-3.5" />
+                              <span>Desmarcar Empaque</span>
+                            </>
+                          ) : (
+                            <>
+                              <PackageCheck className="h-4 w-4" />
+                              <span>Listo para Despacho</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="card p-10 text-center text-ink-muted space-y-3">
+                  <PackageOpen className="h-10 w-10 mx-auto text-brand opacity-60" />
+                  <h3 className="font-display font-bold text-sm text-ink">No hay paquetes con este filtro</h3>
+                  <p className="text-xs text-ink-subtle max-w-xs mx-auto">
+                    Probá cambiando la pestaña de fechas (Hoy / Mañana) o el estado a "Todos".
+                  </p>
+                  <button
+                    onClick={() => {
+                      setDateFilter('all_urgent');
+                      setStatusFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="btn btn-outline btn-sm mx-auto mt-2"
+                  >
+                    Restablecer filtros
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: ESCÁNER CON CÁMARA O PISTOLA */}
+        {/* ========================================================================= */}
         {activeTab === 'scanner' && (
-          <div className="space-y-4">
+          <div className="space-y-4 animate-in fade-in-50 duration-200">
+            
             {/* Lector de cámara */}
-            <div className="card space-y-3 p-4">
+            <div className="card card-pad p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-ink">
-                  <Camera className="h-4 w-4 text-ink-subtle" />
-                  <span>Cámara de Celular</span>
+                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-ink">
+                  <Camera className="h-4 w-4 text-brand" />
+                  <span>Lector de Etiquetas y QR</span>
                 </span>
 
                 <span className={`badge ${scanning ? 'badge-success' : 'badge-neutral'}`}>
                   <span className={`h-2 w-2 rounded-full ${scanning ? 'bg-success animate-pulse-ring' : 'bg-ink-subtle'}`} aria-hidden="true" />
-                  {scanning ? 'Leyendo' : 'En espera'}
+                  {scanning ? 'Escaneando en vivo' : 'Cámara en pausa'}
                 </span>
               </div>
 
@@ -452,34 +1069,34 @@ export default function MobileTerminal({ connection }) {
 
                 {scanning && (
                   <div className="pointer-events-none absolute left-2 right-2 top-2 flex items-center justify-between">
-                    <span className="badge badge-solid gap-1.5 backdrop-blur">
+                    <span className="badge badge-solid gap-1.5 backdrop-blur bg-black/70 text-white border-0">
                       <span className="h-2 w-2 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
-                      Lector QR / Barras Activo
+                      Lector Óptico Activo
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Acción principal: encender o apagar el lector */}
+              {/* Botón principal de control de cámara */}
               <button
                 onClick={scanning ? stopCamera : startCamera}
-                className={`btn btn-lg btn-block py-5 text-base ${scanning ? 'btn-danger-soft' : 'btn-primary'}`}
+                className={`btn btn-lg btn-block py-4 text-base font-extrabold ${scanning ? 'btn-danger-soft text-danger' : 'btn-primary'}`}
               >
-                <Camera className="h-6 w-6" />
-                <span>{scanning ? 'Apagar Cámara' : 'Abrir Cámara'}</span>
+                <Camera className="h-5 w-5" />
+                <span>{scanning ? 'Pausar Cámara' : 'Iniciar Escaneo de Cámara'}</span>
               </button>
 
-              {/* Empaquetado automático al leer */}
-              <div className="flex items-center justify-between text-xs">
+              {/* Toggle de empaque automático */}
+              <div className="flex items-center justify-between text-xs pt-1">
                 <label className="flex cursor-pointer items-center gap-2.5">
                   <input
                     type="checkbox"
                     checked={autoPackOnScan}
                     onChange={(e) => setAutoPackOnScan(e.target.checked)}
-                    className="check h-5 w-5"
+                    className="check h-4 w-4"
                   />
                   <span className="font-bold text-ink-muted">
-                    Marcar "Empaquetado" automáticamente al leer
+                    Marcar como "Empaquetado" al detectar código
                   </span>
                 </label>
               </div>
@@ -492,380 +1109,228 @@ export default function MobileTerminal({ connection }) {
               )}
             </div>
 
-            {/* Entrada manual (pistola láser / teclado) */}
-            <form onSubmit={handleManualSubmit} className="card space-y-3 border-dashed border-line-strong p-4">
-              <p className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wider text-ink-subtle">
-                <QrCode className="h-4 w-4" />
-                <span>Ingreso manual del código</span>
-              </p>
-
+            {/* Input Manual o Pistola Láser USB / Bluetooth */}
+            <form onSubmit={handleManualSubmit} className="flex gap-2">
               <input
                 type="text"
-                placeholder="O ingresá el código de envío / SKU..."
+                placeholder="O ingresá el código de barras / orden..."
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                className="input py-4 text-center font-mono text-lg tracking-widest"
+                className="input flex-1 text-xs py-2.5 font-mono"
               />
-
               <button
                 type="submit"
                 disabled={!manualCode.trim() || isProcessingScan}
-                className="btn btn-accent btn-lg btn-block py-4"
+                className="btn btn-primary px-5 text-xs font-black disabled:opacity-50"
               >
-                <Check className="h-5 w-5" />
-                <span>Verificar</span>
+                Verificar
               </button>
             </form>
 
-          {/* Tarjeta de resultado del escaneo */}
-          {lastScanned && (
-            <div className="card card-accent animate-pop overflow-hidden">
-              {/* Cabecera de estado */}
-              <div className={`flex items-start gap-3 border-b p-5 ${
-                lastScanned.status === 'NEWLY_PACKED'
-                  ? 'border-success/30 bg-success-soft text-success'
-                  : lastScanned.status === 'ALREADY_PACKED'
-                  ? 'border-warning/30 bg-warning-soft text-warning'
-                  : 'border-danger/30 bg-danger-soft text-danger'
-              }`}>
-                {lastScanned.status === 'NEWLY_PACKED' && (
-                  <CheckCircle2 className="h-8 w-8 shrink-0" />
-                )}
-                {lastScanned.status === 'ALREADY_PACKED' && (
-                  <AlertTriangle className="h-8 w-8 shrink-0 animate-pulse" />
-                )}
-                {lastScanned.status === 'NOT_FOUND' && (
-                  <AlertCircle className="h-8 w-8 shrink-0" />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-display text-base font-extrabold leading-tight text-current">
-                    {lastScanned.status === 'NEWLY_PACKED' && '¡Nuevo Paquete Empaquetado!'}
-                    {lastScanned.status === 'ALREADY_PACKED' && '¡ATENCIÓN: PAQUETE YA LEÍDO!'}
-                    {lastScanned.status === 'NOT_FOUND' && 'Código No Encontrado'}
-                    {lastScanned.status === 'UNPACKED' && 'Paquete Desmarcado'}
-                  </h3>
-                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold opacity-80">
-                    <Clock className="inline h-3 w-3" />
-                    <span className="tabular">{lastScanned.timestamp}</span>
-                    {lastScanned.scanCount > 1 && (
-                      <span className="font-extrabold">
-                        • Lectura #<span className="tabular">{lastScanned.scanCount}</span>
-                      </span>
+            {/* DYNAMIC SCANNED RESULT FEEDBACK CARD */}
+            {lastScanned && (
+              <div 
+                className={`p-4 rounded-3xl border shadow-xl animate-in zoom-in-95 space-y-3 ${
+                  lastScanned.status === 'NEWLY_PACKED'
+                    ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-400/40'
+                    : lastScanned.status === 'ALREADY_PACKED'
+                    ? 'bg-amber-500/15 dark:bg-amber-950/50 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 ring-2 ring-amber-400/40'
+                    : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    {lastScanned.status === 'NEWLY_PACKED' && (
+                      <div className="p-2.5 bg-emerald-500 text-white rounded-2xl shadow-md">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
                     )}
-                  </p>
+                    {lastScanned.status === 'ALREADY_PACKED' && (
+                      <div className="p-2.5 bg-amber-500 text-slate-950 rounded-2xl shadow-md animate-pulse">
+                        <AlertTriangle className="w-6 h-6" />
+                      </div>
+                    )}
+                    {lastScanned.status === 'NOT_FOUND' && (
+                      <div className="p-2.5 bg-rose-500 text-white rounded-2xl shadow-md">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                    )}
+
+                    <div>
+                      <h3 className="font-extrabold text-sm text-ink">
+                        {lastScanned.status === 'NEWLY_PACKED' && '✅ ¡Nuevo Paquete Empaquetado!'}
+                        {lastScanned.status === 'ALREADY_PACKED' && '⚠️ ¡ATENCIÓN: PAQUETE YA LEÍDO!'}
+                        {lastScanned.status === 'NOT_FOUND' && '❌ Código No Encontrado'}
+                        {lastScanned.status === 'UNPACKED' && '↩️ Paquete Desmarcado'}
+                      </h3>
+                      <p className="text-[11px] text-ink-muted flex items-center space-x-1 mt-0.5">
+                        <Clock className="w-3 h-3 inline" />
+                        <span>{lastScanned.timestamp}</span>
+                        {lastScanned.scanCount > 1 && (
+                          <span className="font-bold text-amber-600 dark:text-amber-400">
+                            • Lectura #{lastScanned.scanCount}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black shadow-xs ${
+                    lastScanned.status === 'NEWLY_PACKED'
+                      ? 'bg-emerald-500 text-white'
+                      : lastScanned.status === 'ALREADY_PACKED'
+                      ? 'bg-amber-500 text-slate-950'
+                      : 'bg-rose-500 text-white'
+                  }`}>
+                    {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
+                    {lastScanned.status === 'ALREADY_PACKED' && 'DUPLICADO'}
+                    {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
+                    {lastScanned.status === 'UNPACKED' && 'PENDIENTE'}
+                  </span>
                 </div>
 
-                <span className="badge badge-solid shrink-0">
-                  {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
-                  {lastScanned.status === 'ALREADY_PACKED' && 'DUPLICADO'}
-                  {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
-                  {lastScanned.status === 'UNPACKED' && 'PENDIENTE'}
-                </span>
-              </div>
-
-              <div className="space-y-4 p-5">
-                {/* Mensaje del resultado */}
-                <p className="text-sm font-extrabold leading-snug text-ink">
+                <p className="text-xs font-bold text-ink">
                   {lastScanned.message}
                 </p>
 
-                {/* Paquete activo */}
                 {lastScanned.shipment && (
-                  <div className="overflow-hidden rounded-2xl border border-line bg-muted">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle">Orden</span>
-                        <span className="font-display text-lg font-extrabold tabular text-ink">#{lastScanned.shipment.order_id}</span>
-                      </div>
-                      <span className="badge badge-neutral">
-                        {lastScanned.shipment.logistic_type === 'self_service' ? 'FLEX' : lastScanned.shipment.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
-                      </span>
+                  <div className="bg-card p-3.5 rounded-2xl border border-line space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-ink-muted">Envío #{lastScanned.shipment.id}</span>
+                      <span className="font-black text-ink">Orden #{lastScanned.shipment.order_id}</span>
                     </div>
 
-                    <div className="px-4">
-                      <div className="flex items-center justify-between border-b border-line py-2.5">
-                        <span className="text-xs font-bold text-ink-subtle">Envío</span>
-                        <span className="text-xs font-extrabold tabular text-ink">#{lastScanned.shipment.id}</span>
-                      </div>
-                      <div className="flex items-center justify-between border-b border-line py-2.5">
-                        <span className="text-xs font-bold text-ink-subtle">Comprador</span>
-                        <span className="text-right text-xs font-extrabold text-ink">
-                          {lastScanned.shipment.buyer?.first_name ? `${lastScanned.shipment.buyer.first_name} ${lastScanned.shipment.buyer.last_name || ''}` : lastScanned.shipment.buyer?.nickname}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-xs font-bold text-ink-subtle">Destino</span>
-                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-ink">
-                          <MapPin className="h-3.5 w-3.5 text-ink-subtle" />
-                          {lastScanned.shipment.receiver_address?.city?.name || 'Mercado Envíos'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Artículos con la cantidad bien visible */}
-                    <div className="space-y-2 border-t border-line p-3">
+                    <div className="space-y-2 pt-1">
                       {(lastScanned.shipment.items || []).map((it, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card p-3">
+                        <div key={idx} className="p-2.5 rounded-2xl bg-muted border border-line flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="line-clamp-1 text-sm font-bold text-ink">
+                            <p className="text-xs font-bold text-ink line-clamp-1">
                               {it.item?.title || 'Producto'}
                             </p>
                             {it.item?.seller_sku && (
-                              <p className="font-mono text-[10px] text-ink-subtle">
-                                SKU: <b className="text-ink-muted">{it.item.seller_sku}</b>
+                              <p className="text-[10px] font-mono text-ink-muted">
+                                SKU: <b>{it.item.seller_sku}</b>
                               </p>
                             )}
                           </div>
 
-                          {/* Cantidad gigante para evitar errores en el depósito */}
-                          <div className="shrink-0 rounded-xl bg-brand px-3 py-1.5 text-center text-base font-extrabold tabular text-brand-ink shadow-xs">
+                          <div className="px-3 py-1.5 rounded-xl bg-yellow-400 text-slate-950 font-black text-sm shrink-0 shadow-xs text-center">
                             x{it.quantity}
                           </div>
                         </div>
                       ))}
                     </div>
 
-                    {/* Acciones del paquete */}
-                    <div className="flex flex-col gap-2 border-t border-line p-3 sm:flex-row">
+                    <div className="pt-2 flex gap-2">
                       <a
                         href={api.downloadLabelUrl(lastScanned.shipment.id, 'pdf')}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="btn btn-outline btn-block flex-1"
+                        className="btn btn-primary flex-1 text-xs font-black py-2.5 flex items-center justify-center gap-1.5"
                       >
-                        <Printer className="h-4 w-4" />
+                        <Printer className="w-4 h-4" />
                         <span>Imprimir Etiqueta PDF</span>
                       </a>
 
-                      {/* Devolver el paquete a pendientes */}
                       <button
                         onClick={() => handleUnpackShipment(lastScanned.shipment.id)}
-                        className="btn btn-danger-soft btn-block sm:w-auto"
+                        className="btn btn-outline text-danger text-xs font-bold px-3 py-2.5"
                         title="Desmarcar este empaque y devolverlo a pendientes"
                       >
-                        <Undo2 className="h-4 w-4" />
+                        <Undo2 className="w-3.5 h-3.5" />
                         <span>Desmarcar</span>
                       </button>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
 
-        {/* TAB 2: SHIPMENTS LIST */}
-        {activeTab === 'shipments' && (
-          <div className="space-y-3">
-            {/* Filtros de estado */}
-            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-              <button
-                onClick={() => setFilterStatus('all')}
-                className={`btn btn-sm shrink-0 tabular ${filterStatus === 'all' ? 'btn-dark' : 'btn-outline'}`}
-              >
-                Todos ({shipments.length})
-              </button>
+          </div>
+        )}
 
+        {/* ========================================================================= */}
+        {/* TAB 3: AUDITORÍA DE ESCANEOS */}
+        {/* ========================================================================= */}
+        {activeTab === 'history' && (
+          <div className="space-y-3 animate-in fade-in-50 duration-200">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-black text-ink uppercase tracking-wider flex items-center space-x-1.5">
+                <History className="w-4 h-4 text-purple-500" />
+                <span>Auditoría de Escaneos Hoy</span>
+              </span>
               <button
-                onClick={() => setFilterStatus('pending')}
-                className={`btn btn-sm shrink-0 tabular ${filterStatus === 'pending' ? 'border border-warning/30 bg-warning-soft text-warning' : 'btn-outline'}`}
+                onClick={loadData}
+                className="btn btn-icon btn-outline h-7 w-7"
+                title="Actualizar registro"
               >
-                Pendientes ({pendingCount})
-              </button>
-
-              <button
-                onClick={() => setFilterStatus('packed')}
-                className={`btn btn-sm shrink-0 tabular ${filterStatus === 'packed' ? 'border border-success/30 bg-success-soft text-success' : 'btn-outline'}`}
-              >
-                Empaquetados ({packedCount})
+                <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* Buscador */}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
-              <input
-                type="text"
-                placeholder="Buscar por orden, cliente o producto..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input input-search py-3"
-              />
-            </div>
-
-            {/* Cola de paquetes */}
-            <div className="space-y-2.5">
-              {loading ? (
-                <div className="card card-pad space-y-3">
-                  <div className="skeleton h-4 w-40" />
-                  <div className="skeleton h-12 w-full" />
-                  <div className="skeleton h-4 w-24" />
-                  <p className="text-center text-xs font-bold text-ink-subtle">Cargando despachos...</p>
-                </div>
-              ) : filteredShipments.length > 0 ? (
-                filteredShipments.map((s) => {
-                  const isPacked = Boolean(s.packing?.packed);
-                  const itemsList = s.items || [];
-
-                  return (
-                    <div
-                      key={s.id}
-                      className="card card-hover p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-display text-sm font-extrabold tabular text-ink">
-                              Orden #{s.order_id}
-                            </span>
-                            <span className="badge badge-neutral">
-                              {s.logistic_type === 'self_service' ? 'FLEX' : s.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
-                            </span>
-                            <span className={`badge ${isPacked ? 'badge-success' : 'badge-warning'}`}>
-                              {isPacked ? 'Empaquetado' : 'Pendiente'}
-                            </span>
-                          </div>
-
-                          <div className="mt-2 space-y-1">
-                            {itemsList.map((it, idx) => (
-                              <p key={idx} className="line-clamp-1 text-xs font-bold text-ink-muted">
-                                <span className="font-extrabold tabular text-ink">[{it.quantity}x]</span> {it.item?.title || 'Artículo'}
-                              </p>
-                            ))}
-                          </div>
-
-                          <p className="mt-1.5 text-[11px] text-ink-subtle">
-                            Comprador: <b className="text-ink-muted">{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</b>
-                          </p>
-                        </div>
-
-                        {isPacked && (
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-success/30 bg-success-soft text-success">
-                            <Check className="h-4 w-4" />
+            <div className="space-y-2">
+              {scanLogs.length > 0 ? (
+                scanLogs.map((log, idx) => (
+                  <div
+                    key={log.id || idx}
+                    className="card p-3 border border-line shadow-xs flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className={`p-1.5 rounded-xl shrink-0 ${
+                        log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED'
+                          ? 'bg-emerald-500 text-white'
+                          : log.action === 'DUPLICATE_SCAN'
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-muted text-ink-muted'
+                      }`}>
+                        <QrCode className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-extrabold text-ink truncate">
+                            {log.barcode}
                           </span>
-                        )}
-                      </div>
-
-                      {/* Acciones del paquete */}
-                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
-                        <a
-                          href={api.downloadLabelUrl(s.id, 'pdf')}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-outline"
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                          <span>Etiqueta</span>
-                        </a>
-
-                        <button
-                          onClick={() => handleTogglePacking(s.id, isPacked)}
-                          className={`btn btn-lg ${isPacked ? 'btn-danger-soft' : 'btn-success'}`}
-                        >
-                          <PackageCheck className="h-4 w-4" />
-                          <span>{isPacked ? 'Desmarcar' : 'Listo para Despacho'}</span>
-                        </button>
+                          {(log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED') && (
+                            <span className="badge badge-success text-[9px] font-black">
+                              EMPACADO
+                            </span>
+                          )}
+                          {log.action === 'DUPLICATE_SCAN' && (
+                            <span className="badge badge-warning text-[9px] font-black">
+                              DUPLICADO (#{log.details?.scanCount || 2})
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-ink-subtle truncate">
+                          {log.details?.title || log.details?.buyer || log.action}
+                        </p>
                       </div>
                     </div>
-                  );
-                })
-              ) : (
-                <div className="card">
-                  <div className="empty">
-                    <div className="empty-icon">
-                      <Boxes className="h-6 w-6" />
-                    </div>
-                    <p className="empty-title">No se encontraron paquetes con ese filtro</p>
-                    <p className="empty-text">Cambiá el estado del filtro o limpiá la búsqueda para ver todos los envíos disponibles.</p>
+
+                    <span className="text-[10px] text-ink-subtle font-semibold shrink-0 ml-2">
+                      {new Date(log.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
                   </div>
+                ))
+              ) : (
+                <div className="card p-8 text-center text-ink-muted text-xs">
+                  <History className="w-8 h-8 mx-auto mb-2 opacity-40 text-ink-subtle" />
+                  <p>Aún no hay escaneos registrados hoy.</p>
                 </div>
               )}
             </div>
           </div>
         )}
 
-      {/* TAB 3: SCAN HISTORY (NEON DB AUDIT) */}
-      {activeTab === 'history' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
-              <History className="w-4 h-4 text-emerald-500" />
-              <span>Auditoría de Escaneos</span>
-            </span>
-            <button
-              onClick={loadData}
-              className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-              title="Actualizar registro"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {scanLogs.length > 0 ? (
-              scanLogs.map((log, idx) => (
-                <div
-                  key={log.id || idx}
-                  className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <div className={`p-1.5 rounded-xl ${
-                      log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED'
-                        ? 'bg-emerald-500 text-white'
-                        : log.action === 'DUPLICATE_SCAN'
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                    }`}>
-                      <QrCode className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="font-extrabold text-slate-900 dark:text-white">
-                          {log.barcode}
-                        </span>
-                        {(log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED') && (
-                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                            NUEVO EMPAQUE
-                          </span>
-                        )}
-                        {log.action === 'DUPLICATE_SCAN' && (
-                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
-                            YA LEÍDO (#{log.details?.scanCount || 2})
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-slate-500">
-                        {log.details?.title || log.details?.buyer || log.action}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="text-[10px] text-slate-400 font-semibold shrink-0">
-                    {new Date(log.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="p-8 text-center text-slate-400 text-xs bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-                <History className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
-                <p>Aún no hay escaneos registrados hoy.</p>
-              </div>
-            )}
-          </div>
+        {/* Database connection footer badge */}
+        <div className="pt-2 text-center">
+          <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-muted border border-line text-[10px] font-bold text-ink-muted">
+            <Database className="w-3 h-3 text-emerald-500" />
+            <span>Base de datos: {dbStatus?.provider || 'Neon PostgreSQL'}</span>
+          </span>
         </div>
-      )}
 
-      {/* Database connection footer badge */}
-      <div className="pt-2 text-center">
-        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-[10px] font-bold text-slate-600 dark:text-slate-400">
-          <Database className="w-3 h-3 text-emerald-500" />
-          <span>Base de datos: {dbStatus?.provider || 'Neon PostgreSQL'}</span>
-        </span>
       </div>
-
     </div>
-  </div>
   );
 }

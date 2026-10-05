@@ -15,7 +15,11 @@
    1. TOKENS
    -------------------------------------------------------------------------- */
 @layer base {
-  :root {
+  /* Light palette. `.force-light` re-declares it on a subtree so a permanently
+     light surface (the public landing page) keeps these values even when the
+     rest of the app is in dark mode. */
+  :root,
+  .force-light {
     color-scheme: light;
 
     /* Surfaces */
@@ -587,17 +591,10 @@
    -------------------------------------------------------------------------- */
 @layer utilities {
   .text-gradient-brand {
-    @apply bg-gradient-to-r from-brand-600 via-brand-400 to-brand-600 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-brand-800 via-brand-700 to-brand-800 bg-clip-text text-transparent;
   }
   .surface-grid {
     @apply bg-grid-line bg-grid;
-  }
-  /* Grid for permanent dark surfaces (hero sections), independent of theme */
-  .surface-grid-light {
-    background-image:
-      linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px);
-    background-size: 34px 34px;
   }
   .no-scrollbar {
     scrollbar-width: none;

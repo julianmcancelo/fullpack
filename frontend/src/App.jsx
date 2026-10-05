@@ -157,13 +157,15 @@ export default function App() {
   // If user is not logged in, display the minimalist Landing Gate
   if (!currentUser) {
     return (
-      <>
+      /* Locked to the light palette: the public entry point always looks light,
+         including the login modal that opens on top of it. */
+      <div className="force-light">
         <LandingGate
           onOpenLogin={() => setLoginModalOpen(true)}
           onOpenRequestAccess={() => setLoginModalOpen(true)}
         />
         <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
-      </>
+      </div>
     );
   }
 
