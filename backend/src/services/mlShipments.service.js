@@ -27,6 +27,28 @@ async function getShipments(query = {}) {
   const shipmentsList = [];
   const packingMeta = getPackingMetadata();
 
+  // Extract unique shipment IDs to fetch official live status from /shipments in parallel chunks
+  const shipmentIds = orders.map(o => o.shipping && o.shipping.id).filter(Boolean);
+  const liveShipmentsMap = {};
+
+  // Fetch in concurrency-controlled chunks of 10
+  for (let i = 0; i < shipmentIds.length; i += 10) {
+    const chunk = shipmentIds.slice(i, i + 10);
+    await Promise.all(
+      chunk.map(async (sId) => {
+        try {
+          const sRes = await axios.get(`${ML_API_BASE}/shipments/${sId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 4000,
+          });
+          liveShipmentsMap[String(sId)] = sRes.data;
+        } catch {
+          // Fallback gracefully if single shipment query fails
+        }
+      })
+    );
+  }
+
   for (const o of orders) {
     if (o.shipping && o.shipping.id) {
       const sId = String(o.shipping.id);
@@ -37,31 +59,47 @@ async function getShipments(query = {}) {
         note: '',
       };
 
-      let shipStatus = o.shipping.status || 'ready_to_ship';
-      if (o.tags && Array.isArray(o.tags)) {
-        if (o.tags.includes('delivered')) {
-          shipStatus = 'delivered';
-        } else if (o.tags.includes('not_delivered') && shipStatus !== 'shipped') {
-          shipStatus = 'ready_to_ship';
-        }
-      }
+      const liveShipment = liveShipmentsMap[sId] || {};
+
+      // Priority of status:
+      // 1. Local user manual override in packing metadata (if marked delivered / shipped manually)
+      // 2. Official live Mercado Libre shipment status (/shipments/:id)
+      // 3. Order status & order tags
+      // 4. Default fallback
+      let shipStatus = meta.statusOverride || liveShipment.status || o.shipping.status || 'ready_to_ship';
+
+      // Check order cancellation
       if (o.status === 'cancelled') {
         shipStatus = 'cancelled';
+      } else if (!meta.statusOverride) {
+        // Tag sync if not overridden
+        if (o.tags && Array.isArray(o.tags)) {
+          if (o.tags.includes('delivered')) {
+            shipStatus = 'delivered';
+          }
+        }
       }
+
+      const substatus = liveShipment.substatus || o.shipping.substatus || '';
+      const logisticType = liveShipment.logistic_type || o.shipping.logistic_type || 'default';
+      const trackingNumber = liveShipment.tracking_number || o.shipping.tracking_number || null;
+      const receiverAddress = liveShipment.receiver_address || o.shipping.receiver_address || {};
 
       shipmentsList.push({
         id: o.shipping.id,
         order_id: o.id,
         order_date: o.date_created,
         status: shipStatus,
-        substatus: o.shipping.substatus || '',
-        logistic_type: o.shipping.logistic_type || 'default',
-        tracking_number: o.shipping.tracking_number || null,
-        receiver_address: o.shipping.receiver_address || {},
+        substatus,
+        logistic_type: logisticType,
+        tracking_number: trackingNumber,
+        receiver_address: receiverAddress,
         buyer: o.buyer,
         items: o.order_items,
         total_amount: o.total_amount,
-        shipping_mode: o.shipping.shipping_mode,
+        shipping_mode: liveShipment.mode || o.shipping.shipping_mode,
+        shipping_option: liveShipment.shipping_option || null,
+        status_history: liveShipment.status_history || null,
         // Internal packing & operational metadata
         packing: meta,
       });

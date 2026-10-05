@@ -133,6 +133,35 @@ export default function ShipmentsManager({ connection }) {
     }
   };
 
+  const handleManualStatusChange = async (shipmentId, newStatus) => {
+    try {
+      await api.updateShipmentPacking(shipmentId, {
+        statusOverride: newStatus,
+      });
+
+      setShipments((prev) =>
+        prev.map((s) =>
+          s.id === shipmentId
+            ? {
+                ...s,
+                status: newStatus,
+                packing: {
+                  ...(s.packing || {}),
+                  statusOverride: newStatus,
+                },
+              }
+            : s
+        )
+      );
+
+      if (newStatus === 'delivered') {
+        confetti({ particleCount: 40, spread: 60, origin: { y: 0.8 } });
+      }
+    } catch (err) {
+      console.error('Error updating shipment status override:', err);
+    }
+  };
+
   const handleToggleSelectAll = () => {
     if (selectedShipmentIds.length === shipments.length) {
       setSelectedShipmentIds([]);
@@ -644,8 +673,23 @@ export default function ShipmentsManager({ connection }) {
                     </div>
                   </div>
 
-                  {/* Right: Operational Actions & Print Button */}
+                    {/* Right: Operational Actions & Print Button */}
                   <div className="flex shrink-0 flex-col gap-2.5 border-t border-line pt-3 lg:items-end lg:border-t-0 lg:pt-0">
+
+                    {/* Quick State Changer */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-extrabold uppercase text-ink-subtle">Estado:</span>
+                      <select
+                        value={shipment.status}
+                        onChange={(e) => handleManualStatusChange(shipment.id, e.target.value)}
+                        className="select select-sm py-0.5 text-xs font-bold"
+                        title="Cambiar estado del envío manualmente"
+                      >
+                        <option value="ready_to_ship">Por Despachar</option>
+                        <option value="shipped">En Camino</option>
+                        <option value="delivered">Entregado</option>
+                      </select>
+                    </div>
 
                     {!isDelivered ? (
                       <>
@@ -712,10 +756,18 @@ export default function ShipmentsManager({ connection }) {
                         </a>
                       </>
                     ) : (
-                      <div className="py-2 lg:text-right">
-                        <span className="help font-bold">
-                          Envío entregado y archivado
+                      <div className="flex items-center gap-2 py-1 lg:text-right">
+                        <span className="badge badge-success text-[11px] font-bold">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Entregado & Archivado
                         </span>
+                        <button
+                          onClick={() => handleManualStatusChange(shipment.id, 'ready_to_ship')}
+                          className="btn btn-ghost btn-xs text-xs font-bold text-ink-muted hover:text-ink"
+                          title="Devolver a pendientes de despacho si fue un error"
+                        >
+                          Mover a pendientes
+                        </button>
                       </div>
                     )}
                   </div>

@@ -152,16 +152,17 @@ router.get('/:id/label', async (req, res) => {
   }
 });
 
-// PUT /api/shipments/:id/packing (Update packing checklist: printed, packed, qualityChecked, note)
+// PUT /api/shipments/:id/packing (Update packing checklist: printed, packed, qualityChecked, note, statusOverride)
 router.put('/:id/packing', (req, res) => {
   try {
-    const { printed, packed, qualityChecked, note } = req.body;
+    const { printed, packed, qualityChecked, note, statusOverride } = req.body;
     const nowIso = new Date().toISOString();
     const updated = updatePackingMetadata(req.params.id, {
       ...(printed !== undefined ? { printed: Boolean(printed), ...(printed ? { printedAt: nowIso } : {}) } : {}),
       ...(packed !== undefined ? { packed: Boolean(packed), ...(packed ? { packedAt: nowIso } : {}) } : {}),
       ...(qualityChecked !== undefined ? { qualityChecked: Boolean(qualityChecked) } : {}),
       ...(note !== undefined ? { note } : {}),
+      ...(statusOverride !== undefined ? { statusOverride } : {}),
     });
     res.json({ success: true, packing: updated });
   } catch (err) {
@@ -169,7 +170,7 @@ router.put('/:id/packing', (req, res) => {
   }
 });
 
-// POST /api/shipments/batch-packing (Bulk mark as printed or packed)
+// POST /api/shipments/batch-packing (Bulk mark as printed or packed or update statusOverride)
 router.post('/batch-packing', (req, res) => {
   try {
     const { shipmentIds, updates } = req.body;

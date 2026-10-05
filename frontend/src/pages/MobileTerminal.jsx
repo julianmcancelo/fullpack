@@ -435,6 +435,37 @@ export default function MobileTerminal({ connection }) {
     }
   };
 
+  const handleStatusOverride = async (shipmentId, newStatus) => {
+    try {
+      await api.updateShipmentPacking(shipmentId, {
+        statusOverride: newStatus,
+      });
+
+      setShipments(prev =>
+        prev.map(s =>
+          s.id === shipmentId
+            ? {
+                ...s,
+                status: newStatus,
+                packing: {
+                  ...(s.packing || {}),
+                  statusOverride: newStatus,
+                },
+              }
+            : s
+        )
+      );
+
+      if (newStatus === 'delivered') {
+        if (soundEnabled) playSuccessBeep();
+        if (voiceEnabled) speakSpanish(`Entregado y archivado`);
+        confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+      }
+    } catch (err) {
+      alert(`Error al actualizar estado: ${err.message}`);
+    }
+  };
+
   // Enriched & Grouped Metrics Computation
   const {
     enrichedShipments,
@@ -1079,22 +1110,40 @@ export default function MobileTerminal({ connection }) {
                       </div>
 
                       {/* Action Buttons Toolbar */}
-                      <div className="mt-3.5 pt-3 border-t border-line flex items-center justify-between gap-2">
-                        <a
-                          href={api.downloadLabelUrl(s.id, 'pdf')}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-outline btn-sm font-bold flex items-center gap-1.5 px-3 py-2 text-xs"
-                          title="Descargar o imprimir etiqueta de Mercado Envíos"
-                        >
-                          <Printer className="h-3.5 w-3.5 text-ink-subtle" />
-                          <span>Etiqueta PDF</span>
-                        </a>
+                      <div className="mt-3.5 pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <a
+                            href={api.downloadLabelUrl(s.id, 'pdf')}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-outline btn-sm font-bold flex items-center gap-1 px-2.5 py-1.5 text-xs"
+                            title="Descargar o imprimir etiqueta de Mercado Envíos"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-ink-subtle" />
+                            <span>PDF</span>
+                          </a>
 
-                        {meta.isShipped ? (
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60">
+                          <select
+                            value={s.status}
+                            onChange={(e) => handleStatusOverride(s.id, e.target.value)}
+                            className="select select-sm py-1 px-2 text-[11px] font-bold h-8 border-line"
+                            title="Cambiar estado del envío"
+                          >
+                            <option value="ready_to_ship">Por Despachar</option>
+                            <option value="shipped">En Camino</option>
+                            <option value="delivered">Entregado</option>
+                          </select>
+                        </div>
+
+                        {meta.isDelivered ? (
+                          <span className="badge badge-success text-xs font-bold gap-1 py-1.5 px-3">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Entregado
+                          </span>
+                        ) : meta.isShipped ? (
+                          <div className="flex items-center gap-1 text-xs font-bold text-blue-700 dark:text-blue-300 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60">
                             <Navigation className="h-3.5 w-3.5" />
-                            <span>En reparto / Colecta</span>
+                            <span>En camino</span>
                           </div>
                         ) : (
                           <button
@@ -1110,12 +1159,12 @@ export default function MobileTerminal({ connection }) {
                             {isPacked ? (
                               <>
                                 <Undo2 className="h-3.5 w-3.5" />
-                                <span>Desmarcar Empaque</span>
+                                <span>Desmarcar</span>
                               </>
                             ) : (
                               <>
                                 <PackageCheck className="h-4 w-4" />
-                                <span>Listo para Despacho</span>
+                                <span>Listo Empaque</span>
                               </>
                             )}
                           </button>
