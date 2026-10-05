@@ -27,7 +27,7 @@ router.get('/scan-logs', (req, res) => {
   }
 });
 
-// POST /api/shipments/scan (Scan barcode/QR on mobile to pack & verify)
+// POST /api/shipments/scan (Scan barcode/QR on mobile to pack & verify with duplicate alerts)
 router.post('/scan', async (req, res) => {
   try {
     const { rawCode, autoPack = true } = req.body;
@@ -37,7 +37,6 @@ router.post('/scan', async (req, res) => {
 
     const trimmed = rawCode.trim();
     // Normalize code: extract numbers or clean string
-    // Mercado Envíos barcodes usually are the shipment_id (e.g. 48168467003) or URL/JSON with shipment_id
     const numberMatch = trimmed.match(/\b\d{9,16}\b/);
     const candidateId = numberMatch ? numberMatch[0] : trimmed;
 
@@ -50,42 +49,73 @@ router.post('/scan', async (req, res) => {
       String(s.id) === candidateId ||
       String(s.order_id) === candidateId ||
       String(s.tracking_number) === candidateId ||
-      (s.order_items && s.order_items.some(it => 
+      (s.items && s.items.some(it => 
         (it.item?.id && it.item.id.toUpperCase() === candidateId.toUpperCase()) ||
         (it.item?.seller_sku && it.item.seller_sku.toUpperCase() === candidateId.toUpperCase())
       ))
     );
 
     if (matched) {
-      const wasAlreadyPacked = Boolean(matched.packing?.packed);
-      let updatedPacking = matched.packing;
+      const prevPacking = matched.packing || {};
+      const wasAlreadyPacked = Boolean(prevPacking.packed);
+      const newScanCount = (Number(prevPacking.scanCount) || 0) + 1;
+      const nowIso = new Date().toISOString();
+      const firstScannedAt = prevPacking.firstScannedAt || prevPacking.packedAt || nowIso;
 
-      if (autoPack) {
+      let updatedPacking = {
+        ...prevPacking,
+        scanCount: newScanCount,
+        lastScannedAt: nowIso,
+        firstScannedAt,
+      };
+
+      if (autoPack && !wasAlreadyPacked) {
         updatedPacking = updatePackingMetadata(String(matched.id), {
           packed: true,
           qualityChecked: true,
-          packedAt: new Date().toISOString(),
+          packedAt: nowIso,
+          firstScannedAt,
+          lastScannedAt: nowIso,
+          scanCount: newScanCount,
+        });
+      } else {
+        // Just update scan count and timestamps
+        updatedPacking = updatePackingMetadata(String(matched.id), {
+          scanCount: newScanCount,
+          lastScannedAt: nowIso,
+          firstScannedAt,
         });
       }
 
-      const firstItem = (matched.order_items && matched.order_items[0]?.item) || {};
-      await addScanLog(candidateId, String(matched.id), 'PACK_VERIFIED', {
+      const firstItem = (matched.items && matched.items[0]?.item) || {};
+      const buyerName = matched.buyer?.first_name 
+        ? `${matched.buyer.first_name} ${matched.buyer.last_name || ''}`.trim()
+        : (matched.buyer?.nickname || 'Comprador');
+
+      const actionType = wasAlreadyPacked ? 'DUPLICATE_SCAN' : 'FIRST_PACK_VERIFIED';
+
+      await addScanLog(candidateId, String(matched.id), actionType, {
         title: firstItem.title || 'Producto Mercado Libre',
-        buyer: matched.buyer?.nickname || 'Comprador',
+        buyer: buyerName,
         status: matched.status,
+        scanCount: newScanCount,
+        firstScannedAt,
       });
 
       return res.json({
         success: true,
         found: true,
         alreadyPacked: wasAlreadyPacked,
+        scanCount: newScanCount,
+        firstScannedAt,
+        lastScannedAt: nowIso,
         shipment: {
           ...matched,
           packing: updatedPacking,
         },
         message: wasAlreadyPacked 
-          ? `El paquete #${matched.id} ya estaba marcado como empaquetado.`
-          : `¡Paquete #${matched.id} verificado y marcado como EMPAQUETADO con éxito!`,
+          ? `⚠️ ATENCIÓN: El paquete #${matched.id} ya había sido empaquetado previamente (Lectura #${newScanCount}).`
+          : `✅ ¡Paquete #${matched.id} verificado y marcado como EMPAQUETADO con éxito!`,
       });
     }
 
@@ -96,7 +126,7 @@ router.post('/scan', async (req, res) => {
       success: true,
       found: false,
       scannedCode: candidateId,
-      message: `No se encontró un envío activo con el código "${candidateId}".`,
+      message: `Código "${candidateId}" no corresponde a ningún envío activo pendiente.`,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -121,12 +151,12 @@ router.get('/:id/label', async (req, res) => {
 router.put('/:id/packing', (req, res) => {
   try {
     const { printed, packed, qualityChecked, note } = req.body;
+    const nowIso = new Date().toISOString();
     const updated = updatePackingMetadata(req.params.id, {
-      ...(printed !== undefined ? { printed: Boolean(printed) } : {}),
-      ...(packed !== undefined ? { packed: Boolean(packed) } : {}),
+      ...(printed !== undefined ? { printed: Boolean(printed), ...(printed ? { printedAt: nowIso } : {}) } : {}),
+      ...(packed !== undefined ? { packed: Boolean(packed), ...(packed ? { packedAt: nowIso } : {}) } : {}),
       ...(qualityChecked !== undefined ? { qualityChecked: Boolean(qualityChecked) } : {}),
       ...(note !== undefined ? { note } : {}),
-      ...(packed ? { packedAt: new Date().toISOString() } : {}),
     });
     res.json({ success: true, packing: updated });
   } catch (err) {

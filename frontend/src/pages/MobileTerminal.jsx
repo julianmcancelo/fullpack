@@ -21,11 +21,15 @@ import {
   RotateCcw,
   Database,
   ExternalLink,
-  Undo2
+  Undo2,
+  Mic,
+  MicOff,
+  Clock,
+  Boxes
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
-import { playSuccessBeep, playWarningBeep, playErrorBeep } from '../utils/audio';
+import { playSuccessBeep, playWarningBeep, playErrorBeep, speakSpanish } from '../utils/audio';
 import { api } from '../services/api';
 
 export default function MobileTerminal({ connection }) {
@@ -34,6 +38,7 @@ export default function MobileTerminal({ connection }) {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [autoPackOnScan, setAutoPackOnScan] = useState(true);
   const [lastScanned, setLastScanned] = useState(null);
   const [cameraError, setCameraError] = useState(null);
@@ -154,21 +159,32 @@ export default function MobileTerminal({ connection }) {
       const res = await api.scanShipment(clean, autoPackOnScan);
 
       if (res.found && res.shipment) {
+        const firstItem = (res.shipment.items && res.shipment.items[0]?.item) || {};
+        const firstItemTitle = firstItem.title || 'Producto';
+
         // CASE 1: PACKAGE WAS ALREADY PACKED PREVIOUSLY!
         if (res.alreadyPacked) {
-          if (soundEnabled) playWarningBeep(); // Distinct warning tone
-          if (navigator.vibrate) navigator.vibrate([180, 100, 180]); // Double warning pulse
+          if (soundEnabled) playWarningBeep();
+          if (voiceEnabled) speakSpanish(`Atención, paquete ya leído previamente`);
+          if (navigator.vibrate) navigator.vibrate([180, 100, 180]);
+
+          const packedTimeStr = res.firstScannedAt 
+            ? new Date(res.firstScannedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            : 'anteriormente';
 
           setLastScanned({
             status: 'ALREADY_PACKED',
             shipment: res.shipment,
-            message: `¡ATENCIÓN! Este paquete ya había sido marcado como empaquetado previamente.`,
+            scanCount: res.scanCount || 2,
+            firstScannedAtStr: packedTimeStr,
+            message: `¡ATENCIÓN! Este paquete ya había sido empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
             timestamp: new Date().toLocaleTimeString('es-AR'),
           });
         } 
         // CASE 2: BRAND NEW PACKAGE PACKED!
         else {
-          if (soundEnabled) playSuccessBeep(); // Bright ding-ding
+          if (soundEnabled) playSuccessBeep();
+          if (voiceEnabled) speakSpanish(`Paquete verificado con éxito`);
           if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
           confetti({ particleCount: 50, spread: 75, origin: { y: 0.65 } });
 
@@ -180,6 +196,7 @@ export default function MobileTerminal({ connection }) {
           setLastScanned({
             status: 'NEWLY_PACKED',
             shipment: res.shipment,
+            scanCount: 1,
             message: `¡Paquete verificado y empaquetado con éxito!`,
             timestamp: new Date().toLocaleTimeString('es-AR'),
           });
@@ -188,6 +205,7 @@ export default function MobileTerminal({ connection }) {
       // CASE 3: CODE NOT FOUND
       else {
         if (soundEnabled) playErrorBeep();
+        if (voiceEnabled) speakSpanish(`Código no encontrado`);
         if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
 
         setLastScanned({
@@ -250,6 +268,8 @@ export default function MobileTerminal({ connection }) {
           message: `El paquete #${shipmentId} ha sido desmarcado y devuelto a pendientes.`,
         }));
       }
+
+      if (voiceEnabled) speakSpanish(`Paquete devuelto a pendientes`);
     } catch (err) {
       alert(`Error al desmarcar: ${err.message}`);
     }
@@ -280,6 +300,7 @@ export default function MobileTerminal({ connection }) {
 
       if (nextState) {
         if (soundEnabled) playSuccessBeep();
+        if (voiceEnabled) speakSpanish(`Listo`);
         confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
       }
     } catch (err) {
@@ -305,7 +326,7 @@ export default function MobileTerminal({ connection }) {
       String(s.id).includes(q) ||
       s.buyer?.first_name?.toLowerCase().includes(q) ||
       s.buyer?.nickname?.toLowerCase().includes(q) ||
-      s.order_items?.some(it => 
+      s.items?.some(it => 
         it.item?.title?.toLowerCase().includes(q) || 
         it.item?.seller_sku?.toLowerCase().includes(q)
       )
@@ -331,14 +352,28 @@ export default function MobileTerminal({ connection }) {
             </div>
           </div>
 
-          {/* Sound Mute/Unmute */}
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
-            title={soundEnabled ? 'Silenciar alertas' : 'Activar sonido'}
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-yellow-400" /> : <VolumeX className="w-4 h-4" />}
-          </button>
+          {/* Sound & Voice Controls */}
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => setVoiceEnabled(!voiceEnabled)}
+              className={`p-2.5 rounded-2xl border transition ${
+                voiceEnabled 
+                  ? 'bg-yellow-400/20 border-yellow-400/50 text-yellow-300' 
+                  : 'bg-slate-800/80 border-slate-700 text-slate-500'
+              }`}
+              title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
+            >
+              {voiceEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
+              title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4 text-yellow-400" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         {/* Packing Progress */}
@@ -370,7 +405,7 @@ export default function MobileTerminal({ connection }) {
           onClick={() => setActiveTab('scanner')}
           className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
             activeTab === 'scanner'
-              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs'
+              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs font-extrabold'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
           }`}
         >
@@ -382,7 +417,7 @@ export default function MobileTerminal({ connection }) {
           onClick={() => setActiveTab('shipments')}
           className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
             activeTab === 'shipments'
-              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs'
+              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs font-extrabold'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
           }`}
         >
@@ -394,7 +429,7 @@ export default function MobileTerminal({ connection }) {
           onClick={() => setActiveTab('history')}
           className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
             activeTab === 'history'
-              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs'
+              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs font-extrabold'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
           }`}
         >
@@ -492,11 +527,11 @@ export default function MobileTerminal({ connection }) {
           {/* DYNAMIC SCANNED RESULT FEEDBACK CARD */}
           {lastScanned && (
             <div 
-              className={`p-4 rounded-3xl border shadow-lg animate-in zoom-in-95 space-y-3 ${
+              className={`p-4 rounded-3xl border shadow-xl animate-in zoom-in-95 space-y-3 ${
                 lastScanned.status === 'NEWLY_PACKED'
-                  ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700'
+                  ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-400/40'
                   : lastScanned.status === 'ALREADY_PACKED'
-                  ? 'bg-amber-500/15 dark:bg-amber-950/40 border-amber-400 dark:border-amber-700 text-amber-950 dark:text-amber-100'
+                  ? 'bg-amber-500/15 dark:bg-amber-950/50 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 ring-2 ring-amber-400/40'
                   : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
               }`}
             >
@@ -504,28 +539,37 @@ export default function MobileTerminal({ connection }) {
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-2.5">
                   {lastScanned.status === 'NEWLY_PACKED' && (
-                    <div className="p-2 bg-emerald-500 text-white rounded-2xl shadow-sm">
-                      <CheckCircle2 className="w-5 h-5" />
+                    <div className="p-2.5 bg-emerald-500 text-white rounded-2xl shadow-md">
+                      <CheckCircle2 className="w-6 h-6" />
                     </div>
                   )}
                   {lastScanned.status === 'ALREADY_PACKED' && (
-                    <div className="p-2 bg-amber-500 text-slate-950 rounded-2xl shadow-sm">
-                      <AlertTriangle className="w-5 h-5" />
+                    <div className="p-2.5 bg-amber-500 text-slate-950 rounded-2xl shadow-md animate-pulse">
+                      <AlertTriangle className="w-6 h-6" />
                     </div>
                   )}
                   {lastScanned.status === 'NOT_FOUND' && (
-                    <div className="p-2 bg-rose-500 text-white rounded-2xl shadow-sm">
-                      <AlertCircle className="w-5 h-5" />
+                    <div className="p-2.5 bg-rose-500 text-white rounded-2xl shadow-md">
+                      <AlertCircle className="w-6 h-6" />
                     </div>
                   )}
 
                   <div>
-                    <h3 className="font-extrabold text-xs text-slate-900 dark:text-white">
-                      {lastScanned.status === 'NEWLY_PACKED' && '¡Nuevo Paquete Empaquetado!'}
-                      {lastScanned.status === 'ALREADY_PACKED' && '⚠️ Paquete Ya Empaquetado Previamente'}
-                      {lastScanned.status === 'NOT_FOUND' && 'Código No Encontrado'}
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                      {lastScanned.status === 'NEWLY_PACKED' && '✅ ¡Nuevo Paquete Empaquetado!'}
+                      {lastScanned.status === 'ALREADY_PACKED' && '⚠️ ¡ATENCIÓN: PAQUETE YA LEÍDO!'}
+                      {lastScanned.status === 'NOT_FOUND' && '❌ Código No Encontrado'}
+                      {lastScanned.status === 'UNPACKED' && '↩️ Paquete Desmarcado'}
                     </h3>
-                    <p className="text-[11px] text-slate-500">{lastScanned.timestamp}</p>
+                    <p className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
+                      <Clock className="w-3 h-3 inline" />
+                      <span>{lastScanned.timestamp}</span>
+                      {lastScanned.scanCount > 1 && (
+                        <span className="font-bold text-amber-600 dark:text-amber-400">
+                          • Lectura #{lastScanned.scanCount}
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </div>
 
@@ -537,8 +581,9 @@ export default function MobileTerminal({ connection }) {
                     : 'bg-rose-500 text-white'
                 }`}>
                   {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
-                  {lastScanned.status === 'ALREADY_PACKED' && 'YA LEÍDO'}
+                  {lastScanned.status === 'ALREADY_PACKED' && 'DUPLICADO'}
                   {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
+                  {lastScanned.status === 'UNPACKED' && 'PENDIENTE'}
                 </span>
               </div>
 
@@ -549,28 +594,37 @@ export default function MobileTerminal({ connection }) {
 
               {/* Scanned Shipment Details & Actions */}
               {lastScanned.shipment && (
-                <div className="bg-white/95 dark:bg-slate-900/95 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="bg-white/95 dark:bg-slate-900/95 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-500">Envío #{lastScanned.shipment.id}</span>
                     <span className="font-black text-slate-900 dark:text-white">Orden #{lastScanned.shipment.order_id}</span>
                   </div>
 
-                  {/* Items in order */}
-                  <div className="space-y-1.5 pt-1">
-                    {(lastScanned.shipment.order_items || []).map((it, idx) => (
-                      <div key={idx} className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1 flex-1 pr-2">
-                          {it.item?.title || 'Producto'}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-lg bg-yellow-400 text-slate-950 font-black text-xs shrink-0">
+                  {/* Items in order with big quantity badge */}
+                  <div className="space-y-2 pt-1">
+                    {(lastScanned.shipment.items || []).map((it, idx) => (
+                      <div key={idx} className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">
+                            {it.item?.title || 'Producto'}
+                          </p>
+                          {it.item?.seller_sku && (
+                            <p className="text-[10px] font-mono text-slate-500">
+                              SKU: <b>{it.item.seller_sku}</b>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* HUGE QUANTITY BADGE TO PREVENT WAREHOUSE MISTAKES */}
+                        <div className="px-3 py-1.5 rounded-xl bg-yellow-400 text-slate-950 font-black text-sm shrink-0 shadow-xs text-center">
                           x{it.quantity}
-                        </span>
+                        </div>
                       </div>
                     ))}
                   </div>
 
                   <div className="text-[11px] text-slate-600 dark:text-slate-400 pt-1 flex justify-between">
-                    <span>Comprador: <b>{lastScanned.shipment.buyer?.nickname || 'Cliente'}</b></span>
+                    <span>Comprador: <b>{lastScanned.shipment.buyer?.first_name ? `${lastScanned.shipment.buyer.first_name} ${lastScanned.shipment.buyer.last_name || ''}` : lastScanned.shipment.buyer?.nickname}</b></span>
                     <span className="font-bold text-slate-800 dark:text-slate-200">
                       {lastScanned.shipment.receiver_address?.city?.name || 'Mercado Envíos'}
                     </span>
@@ -582,17 +636,17 @@ export default function MobileTerminal({ connection }) {
                       href={api.downloadLabelUrl(lastScanned.shipment.id, 'pdf')}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm"
+                      className="flex-1 py-2.5 rounded-xl bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md"
                     >
-                      <Printer className="w-3.5 h-3.5" />
+                      <Printer className="w-4 h-4" />
                       <span>Imprimir Etiqueta PDF</span>
                     </a>
 
-                    {/* Button to undo packing if desired */}
+                    {/* Button to undo packing */}
                     <button
                       onClick={() => handleUnpackShipment(lastScanned.shipment.id)}
-                      className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center space-x-1 border border-rose-200 dark:border-rose-900/50"
-                      title="Desmarcar este empaque"
+                      className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center space-x-1 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50"
+                      title="Desmarcar este empaque y devolverlo a pendientes"
                     >
                       <Undo2 className="w-3.5 h-3.5" />
                       <span>Desmarcar</span>
@@ -664,7 +718,7 @@ export default function MobileTerminal({ connection }) {
             ) : filteredShipments.length > 0 ? (
               filteredShipments.map((s) => {
                 const isPacked = Boolean(s.packing?.packed);
-                const itemsList = s.order_items || [];
+                const itemsList = s.items || [];
 
                 return (
                   <div
@@ -768,7 +822,13 @@ export default function MobileTerminal({ connection }) {
                   className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs"
                 >
                   <div className="flex items-center space-x-2.5">
-                    <div className={`p-1.5 rounded-xl ${log.action === 'PACK_VERIFIED' ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                    <div className={`p-1.5 rounded-xl ${
+                      log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED'
+                        ? 'bg-emerald-500 text-white'
+                        : log.action === 'DUPLICATE_SCAN'
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}>
                       <QrCode className="w-4 h-4" />
                     </div>
                     <div>
@@ -776,9 +836,14 @@ export default function MobileTerminal({ connection }) {
                         <span className="font-extrabold text-slate-900 dark:text-white">
                           {log.barcode}
                         </span>
-                        {log.action === 'PACK_VERIFIED' && (
+                        {(log.action === 'FIRST_PACK_VERIFIED' || log.action === 'PACK_VERIFIED') && (
                           <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                            EMPAQUE OK
+                            NUEVO EMPAQUE
+                          </span>
+                        )}
+                        {log.action === 'DUPLICATE_SCAN' && (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                            YA LEÍDO (#{log.details?.scanCount || 2})
                           </span>
                         )}
                       </div>

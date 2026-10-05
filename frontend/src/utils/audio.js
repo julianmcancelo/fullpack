@@ -1,4 +1,4 @@
-// Web Audio API Synthesizer for instant warehouse and notification feedback (No external audio files needed)
+// Web Audio API Synthesizer & Speech Assistant for instant warehouse feedback
 
 function getAudioCtx() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -12,7 +12,6 @@ export function playSuccessBeep() {
     const ctx = getAudioCtx();
     if (!ctx) return;
     
-    // Two-tone bright chime (A5 -> E6)
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
@@ -39,7 +38,6 @@ export function playWarningBeep() {
     const ctx = getAudioCtx();
     if (!ctx) return;
     
-    // 3 distinct warning pulses (G4 -> G4 -> G4)
     [0, 0.1, 0.2].forEach((offset) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -93,7 +91,6 @@ export function playCashRegisterSound() {
     const ctx = getAudioCtx();
     if (!ctx) return;
 
-    // Metallic chime + coins rattle
     const freqs = [1046.5, 1318.5, 1567.98, 2093.0]; // C6, E6, G6, C7 chord
     freqs.forEach((freq, idx) => {
       const osc = ctx.createOscillator();
@@ -113,7 +110,6 @@ export function playCashRegisterSound() {
       osc.stop(startTime + 0.4);
     });
 
-    // Bell ring at the end
     const bell = ctx.createOscillator();
     const bellGain = ctx.createGain();
     bell.type = 'triangle';
@@ -126,5 +122,30 @@ export function playCashRegisterSound() {
     bell.stop(ctx.currentTime + 0.8);
   } catch (e) {
     console.warn('Sale audio failed:', e);
+  }
+}
+
+// 5. Spanish Voice Assistant (Text-to-Speech)
+export function speakSpanish(text) {
+  try {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    
+    window.speechSynthesis.cancel(); // Stop any pending utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'es-AR'; // Argentine Spanish or standard Spanish
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.9;
+
+    // Look for best Spanish voice available in browser
+    const voices = window.speechSynthesis.getVoices();
+    const spanishVoice = voices.find(v => v.lang.startsWith('es') || v.name.toLowerCase().includes('spanish'));
+    if (spanishVoice) {
+      utterance.voice = spanishVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.warn('Speech synthesis failed:', e);
   }
 }

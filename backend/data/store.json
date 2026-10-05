@@ -23,7 +23,10 @@
       "qualityChecked": true,
       "note": "",
       "packedAt": "2026-10-04T23:39:17.993Z",
-      "updatedAt": "2026-10-04T23:39:21.475Z"
+      "updatedAt": "2026-10-05T00:23:00.300Z",
+      "scanCount": 2,
+      "firstScannedAt": "2026-10-04T23:39:17.993Z",
+      "lastScannedAt": "2026-10-05T00:23:00.299Z"
     },
     "48167643408": {
       "printed": false,
@@ -57,5 +60,6 @@
       "updatedAt": "2026-10-04T23:55:05.568Z",
       "printedAt": "2026-10-04T23:55:05.568Z"
     }
-  }
+  },
+  "scanLogs": []
 }

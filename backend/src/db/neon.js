@@ -62,6 +62,9 @@ async function initNeonDb() {
           note TEXT DEFAULT '',
           printed_at TIMESTAMP,
           packed_at TIMESTAMP,
+          first_scanned_at TIMESTAMP,
+          last_scanned_at TIMESTAMP,
+          scan_count INT DEFAULT 0,
           sku VARCHAR(255),
           buyer_name VARCHAR(255),
           order_id VARCHAR(100),
@@ -77,6 +80,21 @@ async function initNeonDb() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Migration check for existing tables (ensure new columns exist)
+      await client.query(`
+        DO $$ 
+        BEGIN
+          BEGIN
+            ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS scan_count INT DEFAULT 0;
+            ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS first_scanned_at TIMESTAMP;
+            ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMP;
+          EXCEPTION WHEN OTHERS THEN
+            NULL;
+          END;
+        END $$;
+      `);
+
       isInitialized = true;
       console.log(' Base de datos Neon PostgreSQL inicializada con éxito.');
     } finally {
@@ -208,6 +226,9 @@ async function getPackingMetadataFromNeon() {
         note: row.note || '',
         printedAt: row.printed_at ? row.printed_at.toISOString() : null,
         packedAt: row.packed_at ? row.packed_at.toISOString() : null,
+        firstScannedAt: row.first_scanned_at ? row.first_scanned_at.toISOString() : null,
+        lastScannedAt: row.last_scanned_at ? row.last_scanned_at.toISOString() : null,
+        scanCount: Number(row.scan_count || 0),
         sku: row.sku || '',
         buyerName: row.buyer_name || '',
         orderId: row.order_id || '',
@@ -227,8 +248,12 @@ async function savePackingMetadataToNeon(shipmentId, data) {
   try {
     await initNeonDb();
     await p.query(
-      `INSERT INTO ml_packing_metadata (shipment_id, printed, packed, quality_checked, note, printed_at, packed_at, sku, buyer_name, order_id, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+      `INSERT INTO ml_packing_metadata (
+         shipment_id, printed, packed, quality_checked, note, 
+         printed_at, packed_at, first_scanned_at, last_scanned_at, scan_count, 
+         sku, buyer_name, order_id, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
        ON CONFLICT (shipment_id) DO UPDATE SET
          printed = EXCLUDED.printed,
          packed = EXCLUDED.packed,
@@ -236,6 +261,9 @@ async function savePackingMetadataToNeon(shipmentId, data) {
          note = EXCLUDED.note,
          printed_at = EXCLUDED.printed_at,
          packed_at = EXCLUDED.packed_at,
+         first_scanned_at = COALESCE(ml_packing_metadata.first_scanned_at, EXCLUDED.first_scanned_at),
+         last_scanned_at = EXCLUDED.last_scanned_at,
+         scan_count = EXCLUDED.scan_count,
          sku = EXCLUDED.sku,
          buyer_name = EXCLUDED.buyer_name,
          order_id = EXCLUDED.order_id,
@@ -248,6 +276,9 @@ async function savePackingMetadataToNeon(shipmentId, data) {
         data.note || '',
         data.printedAt ? new Date(data.printedAt) : null,
         data.packedAt ? new Date(data.packedAt) : null,
+        data.firstScannedAt ? new Date(data.firstScannedAt) : (data.packedAt ? new Date(data.packedAt) : null),
+        data.lastScannedAt ? new Date(data.lastScannedAt) : new Date(),
+        Number(data.scanCount || 1),
         data.sku || null,
         data.buyerName || null,
         data.orderId || null,
