@@ -73,6 +73,14 @@ export default function ShipmentsManager({ connection }) {
       }
 
       const res = await api.getShipments(params);
+      // La API responde 200 aun sin conexión a ML: en ese caso avisar,
+      // no mostrar un falso "no hay envíos".
+      if (res.connected === false) {
+        if (!isBackground) {
+          setError(res.message || 'Mercado Libre no conectado. Revisá Credenciales & Config.');
+        }
+        return;
+      }
       setShipments(res.results || []);
       setLastSync(new Date().toISOString());
     } catch (err) {

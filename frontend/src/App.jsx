@@ -75,8 +75,10 @@ export default function App() {
         api.getDashboardStats().catch(() => null),
         api.getShipments().catch(() => ({ results: [] })),
       ]);
-      if (data) setStats(data);
-      if (shipRes?.results) setShipments(shipRes.results);
+      // Si el backend falló por completo (error + ceros), se conservan los
+      // últimos datos reales en vez de pisarlos con ceros falsos.
+      if (data && !data.error) setStats(data);
+      if (shipRes?.results && shipRes.connected !== false) setShipments(shipRes.results);
       lastStatsAtRef.current = Date.now();
     } catch (err) {
       console.error('Error loading stats:', err);

@@ -144,6 +144,7 @@ async function getShipments(query = {}, options = {}) {
     results: filtered,
     total: filtered.length,
     paging: ordersData.paging,
+    connected: true,
     serverTime: new Date().toISOString(),
   };
 }

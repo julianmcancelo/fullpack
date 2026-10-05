@@ -76,6 +76,13 @@ export default function OrdersManager({ connection }) {
       const res = await api.getOrders(params);
       // El auto-refresh de 15s (más foco, visibilidad y evento ml:new-orders)
       // siempre recarga desde offset 0: resetea la lista y la paginación.
+      // La API responde 200 aun sin conexión a ML: avisar, no vaciar la lista.
+      if (res.connected === false) {
+        if (!isBackground) {
+          setError(res.message || 'Mercado Libre no conectado. Revisá Credenciales & Config.');
+        }
+        return;
+      }
       setOrders(res.results || []);
       setTotalOrders(typeof res.total === 'number' ? res.total : null);
       setLastBatchSize((res.results || []).length);
