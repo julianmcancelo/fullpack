@@ -22,7 +22,10 @@ export async function fetchApi(endpoint, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const errorMsg = data.error || data.message || `Error en la solicitud: ${response.statusText}`;
+    let errorMsg = data.error || data.message || `Error en la solicitud: ${response.statusText}`;
+    if (typeof errorMsg === 'object') {
+      errorMsg = errorMsg.message || errorMsg.error || JSON.stringify(errorMsg);
+    }
     throw new Error(errorMsg);
   }
   return data;

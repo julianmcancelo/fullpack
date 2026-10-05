@@ -12,7 +12,10 @@ import {
   ChevronUp,
   MapPin,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  QrCode,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -192,6 +195,19 @@ export default function OrdersManager({ connection }) {
                         >
                           {order.status === 'paid' ? 'Pagada' : order.status}
                         </span>
+
+                        {/* Scanner Status Badge */}
+                        {order.packing?.packed ? (
+                          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500 text-white flex items-center space-x-1 shadow-xs">
+                            <QrCode className="w-3 h-3" />
+                            <span>LEÍDO POR LECTOR QR • LISTO</span>
+                          </span>
+                        ) : order.shipping?.id ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center space-x-1">
+                            <Clock className="w-3 h-3" />
+                            <span>PENDIENTE ESCANEO</span>
+                          </span>
+                        ) : null}
                       </div>
 
                       <p className="text-xs text-slate-600 mt-1 line-clamp-1 font-medium">

@@ -13,7 +13,9 @@ import {
   FileText,
   Sparkles,
   BarChart3,
-  CreditCard
+  CreditCard,
+  QrCode,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 

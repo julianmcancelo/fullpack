@@ -36,8 +36,20 @@ async function getOrders(query = {}) {
     params,
   });
 
+  const { getPackingMetadata } = require('../db/store');
+  const packingMeta = getPackingMetadata();
+
+  const enrichedResults = (searchRes.data.results || []).map(o => {
+    const shippingId = o.shipping?.id ? String(o.shipping.id) : null;
+    const packing = shippingId ? (packingMeta[shippingId] || null) : null;
+    return {
+      ...o,
+      packing
+    };
+  });
+
   return {
-    results: searchRes.data.results || [],
+    results: enrichedResults,
     total: searchRes.data.paging?.total || 0,
     paging: searchRes.data.paging,
   };
