@@ -1,8 +1,8 @@
 ![ML Pro Suite](docs/banner.svg)
 
 [![Vercel](https://img.shields.io/badge/deploy-vercel-black?logo=vercel)](https://ml-manager-pro-jade.vercel.app)
-[![Release APK](https://img.shields.io/github/v/release/julianmcancelo/ml-manager-pro?label=APK&color=FFD600)](https://github.com/julianmcancelo/ml-manager-pro/releases/latest)
-[![CI](https://github.com/julianmcancelo/ml-manager-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/julianmcancelo/ml-manager-pro/actions/workflows/ci.yml)
+[![Release APK](https://img.shields.io/github/v/release/julianmcancelo/fullpack?label=APK&color=FFD600)](https://github.com/julianmcancelo/fullpack/releases/latest)
+[![CI](https://github.com/julianmcancelo/fullpack/actions/workflows/ci.yml/badge.svg)](https://github.com/julianmcancelo/fullpack/actions/workflows/ci.yml)
 [![Android](https://img.shields.io/badge/Android-Kotlin%20%2B%20Compose-3DDC84?logo=android)](mobile/CONTRACT.md)
 [![Web](https://img.shields.io/badge/Web-React%20%2B%20Vite-61DAFB?logo=react)](frontend/README.md)
 
@@ -70,7 +70,7 @@ Un solo resumen canónico (`backend/src/services/overview.service.js`) alimenta 
 
 Vinculás el celular escaneando el QR de la web (**Vincular celular**) y operás la terminal de empaque desde el depósito. La app avisa sola cuando hay una versión nueva (**Ajustes → Buscar actualizaciones**).
 
-- 📲 Último APK: [Releases](https://github.com/julianmcancelo/ml-manager-pro/releases/latest)
+- 📲 Último APK: [Releases](https://github.com/julianmcancelo/fullpack/releases/latest)
 - 📖 Contrato técnico: [mobile/CONTRACT.md](mobile/CONTRACT.md)
 
 ## Deploy
