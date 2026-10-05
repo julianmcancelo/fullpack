@@ -228,17 +228,19 @@ export default function ShipmentsManager({ connection }) {
       />
 
       {/* Header and Print Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Mesa de Empaque & Logística</h1>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2.5">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">Mesa de Empaque & Logística</h1>
             <span className="px-2.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 text-xs font-black shadow-xs">
               {shipments.length} paquetes
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Preparación, etiquetas térmicas, control de calidad y archivo de entregas.
-          </p>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+            <span>Pendientes por empaquetar: <strong className="text-amber-600 dark:text-amber-400 font-black">{pendingCount}</strong></span>
+            <span>•</span>
+            <span>Listos / Empaquetados: <strong className="text-emerald-600 dark:text-emerald-400 font-black">{packedCount}</strong></span>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">

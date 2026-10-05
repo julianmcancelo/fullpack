@@ -182,7 +182,7 @@ export default function App() {
       />
 
       {/* Main App Layout */}
-      <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row pb-16 md:pb-0">
+      <div className="flex-1 max-w-[1700px] w-full mx-auto flex flex-col md:flex-row pb-16 md:pb-0 px-2 sm:px-4 lg:px-6">
         
         {/* Desktop Sidebar */}
         <Sidebar
@@ -192,7 +192,7 @@ export default function App() {
         />
 
         {/* Dynamic Page Content */}
-        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 min-w-0">
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 min-w-0">
           
           {/* Show connection warning if not connected and not on settings page */}
           {!connection?.connected && activeTab !== 'settings' && (
