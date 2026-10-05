@@ -258,6 +258,8 @@ export default function App() {
           setActiveTab={setActiveTab}
           connection={connection}
           onOpenPairDevice={() => setPairModalOpen(true)}
+          stats={stats}
+          shipments={shipments}
         />
 
         {/* Dynamic Page Content */}

@@ -12,20 +12,30 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice }) {
+export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice, stats, shipments }) {
+  const summary = stats?.summary || {};
+  // Solo se muestra badge con dato real ya cargado: nunca 0 ni inventados.
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('es-AR') : null);
+  const pendingPack = Array.isArray(shipments)
+    ? shipments.filter((s) => s.status === 'ready_to_ship' && !s.packing?.packed).length
+    : null;
+  const stockCount = num(summary.totalItemsCount);
+  const paidCount = num(summary.paidOrdersCount);
+
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
-    { id: 'stock', label: 'Stock & Publicaciones', icon: Boxes, badge: '96 Ítems' },
-    { id: 'orders', label: 'Ventas & Órdenes', icon: ShoppingCart, badge: null },
-    { id: 'shipments', label: 'Logística & Envíos', icon: Truck, badge: 'Etiquetas' },
-    { id: 'mobile_terminal', label: 'Terminal Móvil', icon: Smartphone, badge: 'QR/Móvil' },
-    { id: 'questions', label: 'Preguntas Clientes', icon: MessageSquare, badge: null },
-    { id: 'calculator', label: 'Calculadora ML', icon: Calculator, badge: 'Utilidad' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null, title: null },
+    { id: 'stock', label: 'Stock & Publicaciones', icon: Boxes, badge: stockCount, title: stockCount ? `${stockCount} publicaciones` : null },
+    { id: 'orders', label: 'Ventas & Órdenes', icon: ShoppingCart, badge: paidCount, title: paidCount ? `${paidCount} órdenes pagadas` : null },
+    { id: 'shipments', label: 'Logística & Envíos', icon: Truck, badge: pendingPack, title: pendingPack != null ? `${pendingPack} por empaquetar` : null },
+    { id: 'mobile_terminal', label: 'Terminal Móvil', icon: Smartphone, badge: null, title: null },
+    { id: 'questions', label: 'Preguntas Clientes', icon: MessageSquare, badge: null, title: null },
+    { id: 'calculator', label: 'Calculadora ML', icon: Calculator, badge: null, title: null },
     {
       id: 'settings',
       label: 'Credenciales & Config',
       icon: Settings,
       badge: !connection?.connected ? '!' : null,
+      title: !connection?.connected ? 'Cuenta sin conectar' : null,
     },
   ];
 
@@ -54,17 +64,18 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
                 aria-current={isActive ? 'page' : undefined}
                 className={`nav-link ${isActive ? 'nav-link-active' : ''}`}
               >
-                <span className="flex items-center gap-3">
+                <span className="flex min-w-0 flex-1 items-center gap-3">
                   <Icon
                     className={`h-4 w-4 shrink-0 ${isActive ? '' : 'text-ink-subtle'}`}
                     strokeWidth={isActive ? 2.5 : 2}
                   />
-                  <span>{item.label}</span>
+                  <span className="truncate">{item.label}</span>
                 </span>
 
-                {item.badge && (
+                {item.badge != null && (
                   <span
-                    className={`badge !px-2 ${
+                    title={item.title || undefined}
+                    className={`badge shrink-0 !px-2 tabular ${
                       item.badge === '!'
                         ? 'badge-danger animate-pulse'
                         : isActive
