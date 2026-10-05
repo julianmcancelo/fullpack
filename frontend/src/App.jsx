@@ -6,6 +6,7 @@ import CommandPalette from './components/CommandPalette';
 import MobileBottomNav from './components/MobileBottomNav';
 import BarcodeScannerModal from './components/BarcodeScannerModal';
 import PairDeviceModal from './components/PairDeviceModal';
+import OnboardingWizard from './components/OnboardingWizard';
 import NewSaleNotification from './components/NewSaleNotification';
 import NewQuestionNotification from './components/NewQuestionNotification';
 import Dashboard from './pages/Dashboard';
@@ -49,10 +50,27 @@ export default function App() {
   const initialQuestionsLoadedRef = useRef(false);
   const lastStatsAtRef = useRef(0);
 
+  // Asistente de primera conexión (Fase 3): guía hasta vincular ML.
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardVerify, setWizardVerify] = useState(false);
+  const dismissWizard = () => {
+    try {
+      sessionStorage.setItem('mlpro:onboarding:dismissed', '1');
+    } catch {}
+    setWizardOpen(false);
+    setWizardVerify(false);
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth_success')) {
       setActiveTab('settings');
+      // Vuelve de OAuth: abrir el asistente en verificación.
+      try {
+        sessionStorage.removeItem('mlpro:onboarding:dismissed');
+      } catch {}
+      setWizardVerify(true);
+      setWizardOpen(true);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -63,6 +81,16 @@ export default function App() {
       }
     }
   }, []);
+
+  // Auto-apertura del asistente para usuarios activos sin ML vinculado.
+  useEffect(() => {
+    if (!currentUser || !connection || connection.connected || wizardOpen) return;
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem('mlpro:onboarding:dismissed') === '1';
+    } catch {}
+    if (!dismissed) setWizardOpen(true);
+  }, [currentUser, connection, wizardOpen]);
 
   const loadConnectionStatus = async () => {
     try {
@@ -303,6 +331,17 @@ export default function App() {
         onClose={() => setNewQuestionAlert(null)}
         onViewQuestions={handleViewQuestions}
       />
+
+      {/* Asistente de primera conexión con Mercado Libre */}
+      {wizardOpen && currentUser && (
+        <OnboardingWizard
+          connection={connection}
+          onRefreshStatus={loadConnectionStatus}
+          onRefreshAllData={refreshAll}
+          onClose={dismissWizard}
+          startAtVerify={wizardVerify}
+        />
+      )}
 
       {/* Universal Command Palette (Ctrl+K) */}
       <CommandPalette

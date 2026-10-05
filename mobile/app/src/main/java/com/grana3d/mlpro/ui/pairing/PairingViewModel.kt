@@ -66,7 +66,7 @@ class PairingViewModel(private val repository: MobileRepository) : ViewModel() {
         val payload = parseQrPayload(raw)
         if (payload == null) {
             _state.update {
-                it.copy(notice = "Ese código no es un QR de vinculación de ML Pro. Buscá el QR en Vincular celular.")
+                it.copy(notice = "Ese código no es un QR de vinculación de Fullpack. Buscá el QR en Vincular celular.")
             }
             return
         }

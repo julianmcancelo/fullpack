@@ -2,6 +2,7 @@ package com.grana3d.mlpro.core
 
 import android.content.Context
 import com.grana3d.mlpro.data.local.SessionStore
+import com.grana3d.mlpro.data.local.ThemeStore
 import com.grana3d.mlpro.data.remote.MlProApi
 import com.grana3d.mlpro.data.repository.MobileRepository
 import kotlinx.serialization.json.Json
@@ -22,6 +23,9 @@ class AppContainer(context: Context) {
 
     /** Persistencia de la sesión (token de dispositivo, URL base, usuario, linkedAt). */
     val sessionStore: SessionStore = SessionStore(appContext)
+
+    /** Preferencia de tema claro/oscuro (vive en su propio DataStore: sobrevive al desvincular). */
+    val themeStore: ThemeStore = ThemeStore(appContext)
 
     /** Configuración JSON tolerante: el backend agrega campos y ML manda tipos variables. */
     val json: Json = Json {

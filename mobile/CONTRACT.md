@@ -81,6 +81,7 @@ mobile/
     util/Vibrate.kt
     util/Notifications.kt
     data/local/SessionStore.kt
+    data/local/ThemeStore.kt
     data/remote/dto/Dtos.kt
     data/remote/MlProApi.kt
     data/repository/MobileRepository.kt
@@ -540,6 +541,7 @@ Inyección de dependencias manual (sin librerías):
 class AppContainer(context: Context) {
     val appContext: Context // contexto de aplicación (notificaciones del polling)
     val sessionStore: SessionStore
+    val themeStore: ThemeStore
     val api: MlProApi
     val repository: MobileRepository
 }

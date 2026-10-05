@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.grana3d.mlpro.core.ApiResult
 import com.grana3d.mlpro.core.normalizeApiBase
+import com.grana3d.mlpro.data.local.ThemeMode
+import com.grana3d.mlpro.data.local.ThemeStore
 import com.grana3d.mlpro.data.repository.MobileRepository
 import com.grana3d.mlpro.domain.ConnectionState
 import com.grana3d.mlpro.domain.LinkedAccount
@@ -36,6 +38,8 @@ data class SettingsUiState(
     /** Búsqueda de actualizaciones en GitHub Releases. */
     val isCheckingUpdates: Boolean = false,
     val updateResult: UpdateCheck? = null,
+    /** Modo de apariencia elegido (claro/oscuro/sistema). Persiste al desvincular. */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
 ) {
     val displayName: String
         get() = account?.name?.takeIf { it.isNotBlank() }
@@ -86,6 +90,7 @@ data class SettingsUiState(
  */
 class SettingsViewModel(
     private val repository: MobileRepository,
+    private val themeStore: ThemeStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -95,6 +100,11 @@ class SettingsViewModel(
     private var autoUpdateCheckDone: Boolean = false
 
     init {
+        viewModelScope.launch {
+            themeStore.mode.collect { mode ->
+                _state.update { it.copy(themeMode = mode) }
+            }
+        }
         viewModelScope.launch {
             repository.sessionState.collect { session ->
                 _state.update {
@@ -109,6 +119,13 @@ class SettingsViewModel(
             }
         }
         load()
+    }
+
+    /** Guarda el modo de apariencia elegido (claro/oscuro/sistema). */
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            themeStore.setMode(mode)
+        }
     }
 
     fun load() {

@@ -2,7 +2,9 @@ package com.grana3d.mlpro.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,15 +13,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,9 +36,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +49,7 @@ import com.grana3d.mlpro.core.Constants
 import com.grana3d.mlpro.core.formatDateTime
 import com.grana3d.mlpro.core.formatRelative
 import com.grana3d.mlpro.core.mlViewModelFactory
+import com.grana3d.mlpro.data.local.ThemeMode
 import com.grana3d.mlpro.domain.UpdateCheck
 import com.grana3d.mlpro.ui.components.MlBadge
 import com.grana3d.mlpro.ui.components.MlButton
@@ -54,7 +61,6 @@ import com.grana3d.mlpro.ui.components.MlLoadingList
 import com.grana3d.mlpro.ui.components.MlScaffold
 import com.grana3d.mlpro.ui.components.MlSectionHeader
 import com.grana3d.mlpro.ui.components.MlStatusPill
-import com.grana3d.mlpro.ui.components.MlTextField
 import com.grana3d.mlpro.ui.components.MlThumbnail
 import com.grana3d.mlpro.ui.components.MlTone
 import com.grana3d.mlpro.ui.theme.MlTheme
@@ -67,7 +73,7 @@ private const val DEVCENTER_URL = "https://developers.mercadolibre.com.ar/devcen
  */
 @Composable
 fun SettingsScreen(onUnlinked: () -> Unit) {
-    val vm: SettingsViewModel = viewModel(factory = mlViewModelFactory { SettingsViewModel(it.repository) })
+    val vm: SettingsViewModel = viewModel(factory = mlViewModelFactory { SettingsViewModel(it.repository, it.themeStore) })
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val colors = MlTheme.colors
@@ -129,7 +135,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
 
     MlScaffold(
         title = "Ajustes",
-        subtitle = "Cuenta, dispositivo y servidor",
+        subtitle = "Cuenta, dispositivo y apariencia",
         actions = {
             MlButton(
                 text = "Actualizar",
@@ -250,45 +256,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                         label = "Usuario ML",
                         value = state.connection?.userId?.toString() ?: "—",
                     )
-                }
-            }
-
-            item { MlSectionHeader(title = "Servidor") }
-            item {
-                MlCard {
-                    MlTextField(
-                        value = state.apiBase,
-                        onValueChange = vm::onApiBaseChange,
-                        label = "URL del servidor",
-                        placeholder = "https://tu-servidor.com/api",
-                        keyboardType = KeyboardType.Uri,
-                    )
-                    val apiBaseError = state.apiBaseError
-                    if (apiBaseError != null) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = apiBaseError,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.danger,
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    MlButton(
-                        text = "Guardar URL",
-                        onClick = vm::saveApiBase,
-                        variant = MlButtonVariant.Primary,
-                        enabled = !state.isSavingBase,
-                        loading = state.isSavingBase,
-                        fillWidth = true,
-                    )
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Tiene que empezar con http:// o https:// y terminar en /api",
-                        fontSize = 12.sp,
-                        color = colors.inkSubtle,
-                    )
-                    Spacer(Modifier.height(10.dp))
                     val lastSync = state.lastSyncLabel
                     if (lastSync.isNotBlank()) {
                         SettingsRow(label = "Última sincronización", value = formatDateTime(lastSync))
@@ -299,11 +267,43 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                 }
             }
 
+            item { MlSectionHeader(title = "Apariencia") }
+            item {
+                MlCard {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ThemeModeOption(
+                            text = "Sistema",
+                            selected = state.themeMode == ThemeMode.SYSTEM,
+                            onClick = { vm.setThemeMode(ThemeMode.SYSTEM) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ThemeModeOption(
+                            text = "Claro",
+                            selected = state.themeMode == ThemeMode.LIGHT,
+                            onClick = { vm.setThemeMode(ThemeMode.LIGHT) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ThemeModeOption(
+                            text = "Oscuro",
+                            selected = state.themeMode == ThemeMode.DARK,
+                            onClick = { vm.setThemeMode(ThemeMode.DARK) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Se mantiene aunque desvincules el dispositivo.",
+                        fontSize = 12.sp,
+                        color = colors.inkSubtle,
+                    )
+                }
+            }
+
             item { MlSectionHeader(title = "Desvincular dispositivo") }
             item {
                 MlCard {
                     Text(
-                        text = "Al desvincular, la app deja de operar con tu cuenta de Mercado Libre. Vas a necesitar un código QR nuevo desde la web de ML Pro Suite.",
+                        text = "Al desvincular, la app deja de operar con tu cuenta de Mercado Libre. Vas a necesitar un código QR nuevo desde la web de Fullpack.",
                         fontSize = 13.sp,
                         color = colors.inkMuted,
                     )
@@ -334,6 +334,39 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
             item { MlSectionHeader(title = "Acerca de") }
             item {
                 MlCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(MlTheme.radius.control))
+                                .background(colors.brand),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Inventory2,
+                                contentDescription = "Logo de Fullpack",
+                                tint = colors.brandInk,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Fullpack",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.4).sp,
+                                color = colors.ink,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Tu depósito de Mercado Libre en el bolsillo",
+                                fontSize = 13.sp,
+                                color = colors.inkMuted,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
                     SettingsRow(label = "Versión de la app", value = Constants.APP_VERSION)
                     Spacer(Modifier.height(10.dp))
                     UpdateSection(
@@ -396,7 +429,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                     MlBadge(text = "Depósito", tone = MlTone.Neutral)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "ML Pro Suite · gestor de Mercado Libre",
+                        text = "Fullpack · gestor de Mercado Libre",
                         fontSize = 12.sp,
                         color = colors.inkSubtle,
                         textAlign = TextAlign.Start,
@@ -484,6 +517,21 @@ private fun UpdateSection(
             )
         }
     }
+}
+
+@Composable
+private fun ThemeModeOption(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    MlButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = if (selected) MlButtonVariant.Primary else MlButtonVariant.Outline,
+    )
 }
 
 @Composable

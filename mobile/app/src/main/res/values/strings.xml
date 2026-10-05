@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ML Pro Suite</string>
+    <string name="app_name">Fullpack</string>
 
     <!-- Acciones generales -->
     <string name="action_back">Volver</string>
@@ -15,7 +15,7 @@
 
     <!-- Vinculación -->
     <string name="pairing_title">Vincular dispositivo</string>
-    <string name="pairing_subtitle">Escaneá el código QR que muestra ML Pro Suite en la web.</string>
+    <string name="pairing_subtitle">Escaneá el código QR que muestra Fullpack en la web.</string>
     <string name="pairing_scan_hint">Apuntá al código QR de vinculación</string>
     <string name="pairing_server_label">URL del servidor</string>
     <string name="pairing_server_placeholder">https://ml-manager-pro-jade.vercel.app/api</string>
@@ -33,10 +33,10 @@
     <string name="pairing_manual_secret_placeholder">Clave secreta del código</string>
     <string name="pairing_manual_confirm">Vincular</string>
     <string name="pairing_camera_denied_title">Permiso de cámara denegado</string>
-    <string name="pairing_camera_denied_message">Para escanear el QR necesitamos la cámara. Podés habilitarla en Ajustes › Aplicaciones › ML Pro Suite › Permisos, o vincular el dispositivo con el código a mano.</string>
+    <string name="pairing_camera_denied_message">Para escanear el QR necesitamos la cámara. Podés habilitarla en Ajustes › Aplicaciones › Fullpack › Permisos, o vincular el dispositivo con el código a mano.</string>
     <string name="pairing_allow_camera">Permitir cámara</string>
     <string name="pairing_help_title">Cómo vincular</string>
-    <string name="pairing_help_step_1">Abrí ML Pro Suite en la computadora y entrá a Ajustes › Dispositivos.</string>
+    <string name="pairing_help_step_1">Abrí Fullpack en la computadora y entrá a Ajustes › Dispositivos.</string>
     <string name="pairing_help_step_2">Generá un código QR de vinculación: vence a los pocos minutos.</string>
     <string name="pairing_help_step_3">Escanealo con esta pantalla y la terminal queda habilitada al instante.</string>
     <string name="pairing_server_status_checking">Consultando el servidor…</string>

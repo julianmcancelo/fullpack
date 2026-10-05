@@ -5,12 +5,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.grana3d.mlpro.data.local.ThemeMode
 import com.grana3d.mlpro.ui.navigation.AppNav
 import com.grana3d.mlpro.ui.theme.MlTheme
 import com.grana3d.mlpro.util.Notifications
@@ -35,7 +38,14 @@ class MainActivity : ComponentActivity() {
         openRoute = requestedRoute(intent)
         enableEdgeToEdge()
         setContent {
-            MlTheme {
+            val themeMode by MlProApp.container().themeStore.mode
+                .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+            val darkTheme = when (themeMode) {
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            MlTheme(darkTheme = darkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MlTheme.colors.app,

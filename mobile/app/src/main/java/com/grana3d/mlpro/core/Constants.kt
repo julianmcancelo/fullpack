@@ -16,8 +16,8 @@ object Constants {
     /** Versión de la app (se envía en `POST /pair/claim` como `appVersion`). */
     const val APP_VERSION: String = "1.1.0"
 
-    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+4`). */
-    const val APP_VERSION_CODE: Int = 4
+    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+5`). */
+    const val APP_VERSION_CODE: Int = 5
 
     /** Repo público donde se publican los APK (`Ajustes → Buscar actualizaciones`). */
     const val GITHUB_OWNER: String = "julianmcancelo"
@@ -104,7 +104,7 @@ object Constants {
 
     /** Pasos de ayuda que muestra la pantalla de vinculación. */
     val PAIRING_HELP_STEPS: List<String> = listOf(
-        "Abrí ML Pro Suite en la computadora e iniciá sesión.",
+        "Abrí Fullpack en la computadora e iniciá sesión.",
         "Entrá a Vincular celular y dejá el código QR en pantalla.",
         "Escaneá el QR con esta app: el teléfono queda vinculado al instante.",
     )

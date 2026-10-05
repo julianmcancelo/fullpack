@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,9 +118,16 @@ fun HomeScreen(
     }
 
     MlScaffold(
-        title = "ML Pro Suite",
+        title = "Fullpack",
         subtitle = "Panel de depósito",
         actions = {
+            MlButton(
+                text = "Actualizar",
+                onClick = { vm.load() },
+                variant = MlButtonVariant.Ghost,
+                icon = Icons.Outlined.Refresh,
+                loading = state.isLoading,
+            )
             MlButton(
                 text = "Ajustes",
                 onClick = onOpenSettings,
@@ -158,7 +167,13 @@ fun HomeScreen(
 
             item { HomeGreetingCard(state = state) }
             item { HomeConnectionCard(state = state) }
-            item { HomeKpiGrid(state = state) }
+            item {
+                HomeKpiGrid(
+                    state = state,
+                    onOpenTerminal = onOpenTerminal,
+                    onOpenShipments = onOpenShipments,
+                )
+            }
 
             item {
                 HomeAccessCard(
@@ -361,7 +376,11 @@ private fun HomeConnectionCard(state: HomeUiState) {
 }
 
 @Composable
-private fun HomeKpiGrid(state: HomeUiState) {
+private fun HomeKpiGrid(
+    state: HomeUiState,
+    onOpenTerminal: () -> Unit,
+    onOpenShipments: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MlKpiCard(
@@ -370,7 +389,9 @@ private fun HomeKpiGrid(state: HomeUiState) {
                 icon = Icons.Outlined.ShoppingCart,
                 tone = MlTone.Warning,
                 footline = "${state.unpackedCount} sin empaquetar",
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(role = Role.Button, onClickLabel = "Abrir terminal", onClick = onOpenTerminal),
             )
             MlKpiCard(
                 label = "Empaquetados",
@@ -378,7 +399,9 @@ private fun HomeKpiGrid(state: HomeUiState) {
                 icon = Icons.Outlined.CheckCircle,
                 tone = MlTone.Success,
                 footline = "Listos para despacho",
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(role = Role.Button, onClickLabel = "Abrir terminal", onClick = onOpenTerminal),
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -388,7 +411,9 @@ private fun HomeKpiGrid(state: HomeUiState) {
                 icon = Icons.Outlined.Send,
                 tone = MlTone.Info,
                 footline = "${state.deliveredCount} entregados",
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(role = Role.Button, onClickLabel = "Ver envíos", onClick = onOpenShipments),
             )
             MlKpiCard(
                 label = "Ventas cobradas",
@@ -396,7 +421,9 @@ private fun HomeKpiGrid(state: HomeUiState) {
                 icon = Icons.Outlined.Star,
                 tone = MlTone.Brand,
                 footline = "${state.paidOrdersCount} órdenes cobradas",
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(role = Role.Button, onClickLabel = "Ver envíos", onClick = onOpenShipments),
             )
         }
     }
@@ -641,6 +668,7 @@ private const val LOW_STOCK_ALERT = 3
 private fun homeGreeting(): String {
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     return when {
+        hour < 6 -> "BUENA MADRUGADA"
         hour < 12 -> "BUENOS DÍAS"
         hour < 20 -> "BUENAS TARDES"
         else -> "BUENAS NOCHES"

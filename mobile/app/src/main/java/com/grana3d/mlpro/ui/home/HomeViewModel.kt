@@ -73,7 +73,7 @@ data class HomeUiState(
             if (!nickname.isNullOrBlank()) return "Cuenta $nickname"
             val message = connection?.message
             if (!message.isNullOrBlank()) return message
-            return "Sincronizado con ML Pro Suite"
+            return "Sincronizado con Fullpack"
         }
 
     /** Paquetes por despachar (todo lo que sigue en la cola). */
