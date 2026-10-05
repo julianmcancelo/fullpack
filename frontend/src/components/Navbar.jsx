@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import UserAvatar from './UserAvatar';
 
 export default function Navbar({
   connection,
@@ -158,12 +159,11 @@ export default function Navbar({
                 aria-haspopup="menu"
                 className="flex items-center gap-2 rounded-2xl border border-line bg-muted p-1.5 pr-2 transition duration-200 hover:border-line-strong sm:pr-2.5"
               >
-                <img
-                  src={
-                    currentUser.avatar ||
-                    `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.email}`
-                  }
-                  alt=""
+                <UserAvatar
+                  avatar={currentUser.avatar}
+                  name={currentUser.name}
+                  email={currentUser.email}
+                  size={28}
                   className="h-7 w-7 rounded-full border border-brand/40 bg-brand p-0.5"
                 />
                 <span className="hidden max-w-[130px] items-center gap-1.5 lg:flex">

@@ -4,6 +4,11 @@ const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
+// Mercado Libre acepta máximo 50 resultados por llamada en /orders/search.
+// Si se piden más, se pagina con offset (máx. 200 por consulta).
+const ML_PAGE_SIZE = 50;
+const ML_MAX_RESULTS = 200;
+
 async function getOrders(query = {}) {
   const token = await getValidAccessToken();
   const auth = getAuth();
@@ -11,30 +16,41 @@ async function getOrders(query = {}) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
 
-  const params = {
+  const wanted = query.limit ? Math.min(parseInt(query.limit, 10) || 50, ML_MAX_RESULTS) : 50;
+  const startOffset = query.offset ? parseInt(query.offset, 10) : 0;
+
+  const baseParams = {
     seller: auth.userId,
     sort: 'date_desc',
-    limit: query.limit ? Math.min(parseInt(query.limit, 10), 100) : 50,
-    offset: query.offset ? parseInt(query.offset, 10) : 0,
   };
 
   if (query.status && query.status !== 'all') {
-    params['order.status'] = query.status;
+    baseParams['order.status'] = query.status;
   }
   if (query.q) {
-    params.q = query.q;
+    baseParams.q = query.q;
   }
   if (query.dateFrom) {
-    params['order.date_created.from'] = query.dateFrom;
+    baseParams['order.date_created.from'] = query.dateFrom;
   }
   if (query.dateTo) {
-    params['order.date_created.to'] = query.dateTo;
+    baseParams['order.date_created.to'] = query.dateTo;
   }
 
-  const searchRes = await axios.get(`${ML_API_BASE}/orders/search`, {
-    headers: { Authorization: `Bearer ${token}` },
-    params,
-  });
+  let allResults = [];
+  let firstPaging = null;
+  for (let offset = startOffset; allResults.length < wanted; offset += ML_PAGE_SIZE) {
+    const need = Math.min(ML_PAGE_SIZE, wanted - allResults.length);
+    const searchRes = await axios.get(`${ML_API_BASE}/orders/search`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { ...baseParams, limit: need, offset },
+    });
+    const page = searchRes.data.results || [];
+    if (!firstPaging) firstPaging = searchRes.data.paging;
+    if (page.length === 0) break;
+    allResults = allResults.concat(page);
+    if (page.length < need) break;
+  }
 
   let packingMeta = {};
   try {
@@ -45,7 +61,7 @@ async function getOrders(query = {}) {
     packingMeta = getPackingMetadata();
   }
 
-  const enrichedResults = (searchRes.data.results || []).map(o => {
+  const enrichedResults = allResults.map(o => {
     const shippingId = o.shipping?.id ? String(o.shipping.id) : null;
     const packing = shippingId ? (packingMeta[shippingId] || null) : null;
     return {
@@ -56,8 +72,8 @@ async function getOrders(query = {}) {
 
   return {
     results: enrichedResults,
-    total: searchRes.data.paging?.total || 0,
-    paging: searchRes.data.paging,
+    total: firstPaging?.total || 0,
+    paging: firstPaging,
     serverTime: new Date().toISOString(),
     connected: true,
   };

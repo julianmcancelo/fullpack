@@ -934,7 +934,7 @@ export default function ShipmentsManager({ connection }) {
             <div className="modal-body text-xs">
               <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-muted/60 p-3.5">
                 <div>
-                  <p className="text-xs font-extrabold text-ink">Vendedor: @GRANA3DOK</p>
+                  <p className="text-xs font-extrabold text-ink">Vendedor: @{connection?.nickname || 'Mi tienda'}</p>
                   <p className="tabular text-[11px] text-ink-muted">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
                 </div>
                 <div className="text-right">

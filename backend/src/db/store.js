@@ -19,9 +19,9 @@ if (!fs.existsSync(dataDir)) {
 
 const defaultData = {
   settings: {
-    appId: '8410220120357196',
-    clientSecret: 'KJWBdQk7fNkSVuZpBY8EYzcAegZDKtqt',
-    redirectUri: 'https://httpbin.org/get',
+    appId: '',
+    clientSecret: '',
+    redirectUri: '',
     siteId: 'MLA',
     lowStockThreshold: 5,
     autoSyncMinutes: 15,
@@ -37,18 +37,7 @@ const defaultData = {
   },
   packingMetadata: {},
   scanLogs: [],
-  users: [
-    {
-      id: 1,
-      email: 'jcancelo.dev@gmail.com',
-      name: 'Julián Cancelo (Admin)',
-      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=jcancelo.dev@gmail.com',
-      role: 'admin',
-      status: 'active',
-      authProvider: 'google',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  ],
+  users: [],
   loginTokens: [],
   pairingSessions: [],
   devices: [],
@@ -110,15 +99,11 @@ function readDb() {
     const parsed = parseJsonFile(DB_FILE, raw);
     inMemoryCache = {
       ...parsed,
-      settings: {
-        ...parsed.settings,
-        appId: '8410220120357196',
-        clientSecret: 'KJWBdQk7fNkSVuZpBY8EYzcAegZDKtqt',
-        redirectUri: parsed.settings?.redirectUri || 'https://httpbin.org/get',
-      },
+      settings: parsed.settings || { ...defaultData.settings },
+      auth: parsed.auth || { ...defaultData.auth },
       packingMetadata: parsed.packingMetadata || {},
       scanLogs: parsed.scanLogs || [],
-      users: parsed.users || defaultData.users,
+      users: parsed.users || [],
       loginTokens: parsed.loginTokens || [],
       pairingSessions: parsed.pairingSessions || [],
       devices: parsed.devices || [],
@@ -177,7 +162,16 @@ function writeDb(data) {
 
 function getSettings() {
   const db = readDb();
-  return db.settings;
+  const settings = { ...(db.settings || {}) };
+  if (!settings.appId && process.env.ML_APP_ID) settings.appId = process.env.ML_APP_ID;
+  if (!settings.clientSecret && process.env.ML_CLIENT_SECRET) settings.clientSecret = process.env.ML_CLIENT_SECRET;
+  if (!settings.redirectUri && process.env.ML_REDIRECT_URI) settings.redirectUri = process.env.ML_REDIRECT_URI;
+  return settings;
+}
+
+function isAdminEmail(email) {
+  const cfg = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  return !!cfg && String(email || '').trim().toLowerCase() === cfg;
 }
 
 function updateSettings(newSettings) {
@@ -308,45 +302,23 @@ async function findUserByEmail(email) {
   }
 
   const db = readDb();
-  if (!db.users) db.users = [...defaultData.users];
+  if (!db.users) db.users = [];
 
-  let local = db.users.find(u => u.email.toLowerCase() === cleanEmail);
-  if (cleanEmail === 'jcancelo.dev@gmail.com') {
-    if (!local) {
-      local = {
-        id: 1,
-        email: 'jcancelo.dev@gmail.com',
-        name: 'Julián Cancelo (Admin)',
-        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=jcancelo.dev@gmail.com',
-        role: 'admin',
-        status: 'active',
-        authProvider: 'google',
-        createdAt: new Date().toISOString(),
-      };
-      db.users.push(local);
-      writeDb(db);
-    } else {
-      local.role = 'admin';
-      local.status = 'active';
-    }
-  }
+  const local = db.users.find(u => String(u.email || '').toLowerCase() === cleanEmail);
   return local || null;
 }
 
 async function upsertUser({ email, name, avatar, role = 'user', status = 'pending', authProvider = 'email' }) {
   const cleanEmail = (email || '').trim().toLowerCase();
-  const isAdmin = cleanEmail === 'jcancelo.dev@gmail.com';
-  const finalRole = isAdmin ? 'admin' : role;
-  const finalStatus = isAdmin ? 'active' : status;
 
   let userResult = null;
   try {
     userResult = await neon.upsertUserInNeon({
       email: cleanEmail,
       name,
-      avatar,
-      role: finalRole,
-      status: finalStatus,
+      avatar: avatar || '',
+      role,
+      status,
       authProvider,
     });
   } catch (e) {
@@ -354,16 +326,16 @@ async function upsertUser({ email, name, avatar, role = 'user', status = 'pendin
   }
 
   const db = readDb();
-  if (!db.users) db.users = [...defaultData.users];
+  if (!db.users) db.users = [];
 
-  const existingIdx = db.users.findIndex(u => u.email.toLowerCase() === cleanEmail);
+  const existingIdx = db.users.findIndex(u => String(u.email || '').toLowerCase() === cleanEmail);
   const userObj = userResult || {
     id: existingIdx >= 0 ? db.users[existingIdx].id : Date.now(),
     email: cleanEmail,
     name: name || cleanEmail.split('@')[0],
-    avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
-    role: finalRole,
-    status: finalStatus,
+    avatar: avatar || '',
+    role,
+    status,
     authProvider,
     createdAt: existingIdx >= 0 ? db.users[existingIdx].createdAt : new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
@@ -387,10 +359,7 @@ async function getAllUsers() {
   }
 
   const db = readDb();
-  if (!db.users || db.users.length === 0) {
-    db.users = [...defaultData.users];
-    writeDb(db);
-  }
+  if (!db.users) db.users = [];
   return db.users;
 }
 
@@ -649,6 +618,7 @@ async function touchDevice(id) {
 
 module.exports = {
   getSettings,
+  isAdminEmail,
   updateSettings,
   getAuth,
   updateAuth,

@@ -65,16 +65,34 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
     ? Math.round(summary.totalSalesAmount / summary.paidOrdersCount) 
     : 0;
 
-  // Chart data (Calculated from orders or distributed)
-  const salesChartData = [
-    { day: 'Lun', total: Math.round(summary.totalSalesAmount * 0.12), ordenes: 4 },
-    { day: 'Mar', total: Math.round(summary.totalSalesAmount * 0.15), ordenes: 6 },
-    { day: 'Mié', total: Math.round(summary.totalSalesAmount * 0.18), ordenes: 8 },
-    { day: 'Jue', total: Math.round(summary.totalSalesAmount * 0.14), ordenes: 5 },
-    { day: 'Vie', total: Math.round(summary.totalSalesAmount * 0.22), ordenes: 9 },
-    { day: 'Sáb', total: Math.round(summary.totalSalesAmount * 0.11), ordenes: 4 },
-    { day: 'Dom', total: Math.round(summary.totalSalesAmount * 0.08), ordenes: 3 },
-  ];
+  // Reputación real desde la API (connection.sellerReputation)
+  const powerStatus =
+    typeof connection?.sellerReputation?.power_seller_status === 'string' &&
+    connection.sellerReputation.power_seller_status.trim() !== ''
+      ? connection.sellerReputation.power_seller_status.trim()
+      : null;
+  const powerLabel = powerStatus
+    ? powerStatus.charAt(0).toUpperCase() + powerStatus.slice(1).toLowerCase()
+    : null;
+
+  const subtitle = connection?.connected
+    ? `Monitoreo oficial de la tienda: @${connection.nickname}${powerLabel ? ` (MercadoLíder ${powerLabel})` : ''}`
+    : 'Resumen en tiempo real de tu tienda en Mercado Libre';
+
+  // Gráfico real: últimos 7 días desde la API (stats.salesByDay)
+  const salesByDay = Array.isArray(stats?.salesByDay) ? stats.salesByDay : [];
+  const salesChartData = salesByDay.map((d) => ({
+    day: d.day,
+    total: Number(d.total) || 0,
+    ordenes: Number(d.ordenes) || 0,
+  }));
+
+  // Errores parciales no bloqueantes (catálogo / ventas / envíos)
+  const staleSources = [
+    stats?.itemsError ? 'catálogo' : null,
+    stats?.ordersError ? 'ventas' : null,
+    stats?.shipmentsError ? 'envíos' : null,
+  ].filter(Boolean);
 
   return (
     <div className="page">
@@ -90,12 +108,21 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
             </span>
           </div>
           <p className="page-sub">
-            {connection?.connected 
-              ? `Monitoreo oficial de la tienda: @${connection.nickname} (Reputación Verde Líder)` 
-              : 'Resumen en tiempo real de tu tienda en Mercado Libre'}
+            {subtitle}
           </p>
         </div>
       </div>
+
+      {/* Aviso no bloqueante: datos parciales desactualizados */}
+      {staleSources.length > 0 && (
+        <div
+          className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-xs font-semibold text-warning"
+          role="status"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Algunos datos no pudieron actualizarse: {staleSources.join(', ')}.</span>
+        </div>
+      )}
 
       {/* Grilla de KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -203,6 +230,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
         </div>
 
         <div className="card-body">
+          {salesChartData.length > 0 ? (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={salesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -242,6 +270,15 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          ) : (
+            <div className="empty">
+              <div className="empty-icon">
+                <BarChart3 className="h-6 w-6" />
+              </div>
+              <p className="empty-title">Sin ventas registradas en los últimos 7 días</p>
+              <p className="empty-text">Cuando se concreten ventas, acá verás la evolución diaria de tu facturación.</p>
+            </div>
+          )}
         </div>
       </div>
 

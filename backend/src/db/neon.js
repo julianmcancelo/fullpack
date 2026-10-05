@@ -143,11 +143,6 @@ async function initNeonDb() {
 
         CREATE INDEX IF NOT EXISTS ml_devices_email_idx ON ml_devices (email);
         CREATE INDEX IF NOT EXISTS ml_pairing_created_idx ON ml_pairing_sessions (created_at);
-
-        -- Ensure SuperAdmin jcancelo.dev@gmail.com is always pre-seeded and active
-        INSERT INTO ml_users (email, name, role, status, auth_provider)
-        VALUES ('jcancelo.dev@gmail.com', 'Julián Cancelo (Admin)', 'admin', 'active', 'google')
-        ON CONFLICT (email) DO UPDATE SET role = 'admin', status = 'active';
       `);
 
       // Migration check for existing tables (ensure new columns exist)
@@ -460,9 +455,6 @@ async function upsertUserInNeon({ email, name, avatar, role = 'user', status = '
   try {
     await initNeonDb();
     const cleanEmail = email.trim().toLowerCase();
-    const isAdmin = cleanEmail === 'jcancelo.dev@gmail.com';
-    const finalRole = isAdmin ? 'admin' : role;
-    const finalStatus = isAdmin ? 'active' : status;
 
     const res = await p.query(
       `INSERT INTO ml_users (email, name, avatar, role, status, auth_provider, last_login_at)
@@ -472,7 +464,7 @@ async function upsertUserInNeon({ email, name, avatar, role = 'user', status = '
          avatar = COALESCE(EXCLUDED.avatar, ml_users.avatar),
          last_login_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [cleanEmail, name, avatar || null, finalRole, finalStatus, authProvider]
+      [cleanEmail, name, avatar || null, role, status, authProvider]
     );
 
     const r = res.rows[0];

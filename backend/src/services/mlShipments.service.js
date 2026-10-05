@@ -4,31 +4,25 @@ const { getValidAccessToken } = require('./mlAuth.service');
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
-async function getShipments(query = {}) {
+async function getShipments(query = {}, options = {}) {
   const token = await getValidAccessToken();
   const auth = getAuth();
   if (!token || !auth.userId) {
     throw new Error('Debes conectar tu cuenta de Mercado Libre primero.');
   }
 
-  const params = {
-    seller: auth.userId,
-    sort: 'date_desc',
-    limit: query.limit ? Math.min(parseInt(query.limit, 10), 100) : 50,
-    offset: query.offset ? parseInt(query.offset, 10) : 0,
-  };
-
-  const ordersRes = await axios.get(`${ML_API_BASE}/orders/search`, {
-    headers: { Authorization: `Bearer ${token}` },
-    params,
-  });
+  // Reutiliza el paginado de órdenes (ML acepta máx. 50 por llamada).
+  const { getOrders } = require('./mlOrders.service');
+  const ordersData = await getOrders(query);
+  const ordersRes = { data: { results: ordersData.results, paging: ordersData.paging } };
 
   const orders = ordersRes.data.results || [];
   const shipmentsList = [];
   const packingMeta = await refreshPackingFromNeon();
 
-  // Extract unique shipment IDs to fetch official live status from /shipments in parallel chunks
-  const shipmentIds = orders.map(o => o.shipping && o.shipping.id).filter(Boolean);
+  // Extract unique shipment IDs to fetch official live status from /shipments in parallel chunks.
+  // Con skipLive se omite (el escaneo solo necesita matchear y enriquece 1 envío).
+  const shipmentIds = options.skipLive ? [] : orders.map(o => o.shipping && o.shipping.id).filter(Boolean);
   const liveShipmentsMap = {};
 
   // Fetch in concurrency-controlled chunks of 10

@@ -52,9 +52,11 @@ router.post('/exchange-code', async (req, res) => {
 // GET /api/auth/callback (Mercado Libre OAuth redirect)
 router.get('/callback', async (req, res) => {
   const { code, error, error_description } = req.query;
+  const host = req.get('host') || '';
+  const base = host.includes('localhost') ? 'http://localhost:5173' : `https://${host}`;
 
   if (error) {
-    return res.redirect(`http://localhost:5173/settings?auth_error=${encodeURIComponent(error_description || error)}`);
+    return res.redirect(`${base}/settings?auth_error=${encodeURIComponent(error_description || error)}`);
   }
 
   if (!code) {
@@ -63,11 +65,11 @@ router.get('/callback', async (req, res) => {
 
   try {
     await exchangeCodeForToken(code);
-    res.redirect('http://localhost:5173/settings?auth_success=true');
+    res.redirect(`${base}/settings?auth_success=true`);
   } catch (err) {
     console.error('Callback error:', err.response?.data || err.message);
     const msg = err.response?.data?.message || err.message;
-    res.redirect(`http://localhost:5173/settings?auth_error=${encodeURIComponent(msg)}`);
+    res.redirect(`${base}/settings?auth_error=${encodeURIComponent(msg)}`);
   }
 });
 

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import UserAvatar from './UserAvatar';
 
 export default function UsersAdminModal({ isOpen, onClose }) {
   const { adminEmail } = useAuth();
@@ -123,9 +124,11 @@ export default function UsersAdminModal({ isOpen, onClose }) {
                     className="flex flex-col gap-3 rounded-2xl border border-warning/40 bg-warning-soft p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <img
-                        src={u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.email}`}
-                        alt=""
+                      <UserAvatar
+                        avatar={u.avatar}
+                        name={u.name}
+                        email={u.email}
+                        size={40}
                         className="avatar h-10 w-10 border-warning/40 bg-card p-0.5"
                       />
                       <div className="min-w-0">
@@ -190,9 +193,11 @@ export default function UsersAdminModal({ isOpen, onClose }) {
                     className="flex items-center justify-between gap-3 bg-card p-3.5 transition-colors hover:bg-muted/60"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <img
-                        src={u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.email}`}
-                        alt=""
+                      <UserAvatar
+                        avatar={u.avatar}
+                        name={u.name}
+                        email={u.email}
+                        size={32}
                         className="avatar h-8 w-8 bg-muted"
                       />
                       <div className="min-w-0">

@@ -3,8 +3,6 @@ const router = express.Router();
 const crypto = require('crypto');
 const store = require('../db/store');
 
-const ADMIN_EMAIL = 'jcancelo.dev@gmail.com';
-
 // POST /api/users/google-login
 // Handles Google OAuth sign-in / verification
 router.post('/google-login', async (req, res) => {
@@ -15,8 +13,10 @@ router.post('/google-login', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const isAdmin = cleanEmail === ADMIN_EMAIL;
-    
+    const isAdmin = store.isAdminEmail(cleanEmail);
+    const existentes = await store.getAllUsers();
+    const esPrimero = !existentes || existentes.length === 0;
+
     // Check if user exists
     let user = await store.findUserByEmail(cleanEmail);
 
@@ -25,13 +25,13 @@ router.post('/google-login', async (req, res) => {
       user = await store.upsertUser({
         email: cleanEmail,
         name: name || cleanEmail.split('@')[0],
-        avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
-        role: isAdmin ? 'admin' : 'user',
-        status: isAdmin ? 'active' : 'pending', // pending admin approval unless superAdmin
+        avatar: avatar || '',
+        role: (isAdmin || esPrimero) ? 'admin' : 'user',
+        status: (isAdmin || esPrimero) ? 'active' : 'pending',
         authProvider: 'google',
       });
     } else if (isAdmin) {
-      // Always enforce active admin for superadmin
+      // Enforce active admin for the configured admin account
       user.role = 'admin';
       user.status = 'active';
     }
@@ -75,7 +75,9 @@ router.post('/request-code', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const isAdmin = cleanEmail === ADMIN_EMAIL;
+    const isAdmin = store.isAdminEmail(cleanEmail);
+    const existentes = await store.getAllUsers();
+    const esPrimero = !existentes || existentes.length === 0;
 
     // Check or register user
     let user = await store.findUserByEmail(cleanEmail);
@@ -83,9 +85,9 @@ router.post('/request-code', async (req, res) => {
       user = await store.upsertUser({
         email: cleanEmail,
         name: name || cleanEmail.split('@')[0],
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
-        role: isAdmin ? 'admin' : 'user',
-        status: isAdmin ? 'active' : 'pending',
+        avatar: '',
+        role: (isAdmin || esPrimero) ? 'admin' : 'user',
+        status: (isAdmin || esPrimero) ? 'active' : 'pending',
         authProvider: 'email',
       });
     }
@@ -103,14 +105,19 @@ router.post('/request-code', async (req, res) => {
 
     await store.createLoginToken(cleanEmail, otpCode, token, 15);
 
-    // In production or demo, return the OTP code for instant testing while also simulating email dispatch
-    res.json({
+    const allowDebugOtp = process.env.ALLOW_DEBUG_OTP === 'true';
+    const payload = {
       success: true,
-      message: `Código de acceso de 6 dígitos generado para ${cleanEmail}. Expira en 15 minutos.`,
+      message: allowDebugOtp
+        ? `Código de acceso de 6 dígitos generado para ${cleanEmail}. Expira en 15 minutos.`
+        : `Código de acceso enviado a ${cleanEmail}. Expira en 15 minutos.`,
       email: cleanEmail,
-      debugOtp: otpCode,
       status: user.status,
-    });
+    };
+    if (allowDebugOtp) {
+      payload.debugOtp = otpCode;
+    }
+    res.json(payload);
   } catch (err) {
     console.error('Request code error:', err);
     res.status(500).json({ error: err.message || 'Error al generar código' });
@@ -172,8 +179,8 @@ router.get('/list', async (req, res) => {
 router.post('/approve', async (req, res) => {
   try {
     const { adminEmail, userId, status } = req.body;
-    if (adminEmail?.trim().toLowerCase() !== ADMIN_EMAIL) {
-      return res.status(403).json({ error: 'Solo el administrador principal (jcancelo.dev@gmail.com) puede autorizar cuentas.' });
+    if (!store.isAdminEmail(adminEmail)) {
+      return res.status(403).json({ error: 'Solo la cuenta administradora puede autorizar cuentas.' });
     }
 
     if (!userId || !status) {

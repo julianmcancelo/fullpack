@@ -160,11 +160,12 @@ router.post('/scan', async (req, res) => {
     const candidatos = candidatosDeCodigo(trimmed);
     const codigoLeido = candidatos[0] || trimmed;
 
-    // Envíos activos recientes (misma ventana que usa la app para la cola).
-    const shipmentsData = await getShipments({ limit: 100 });
-    const shipments = shipmentsData.results || [];
+    // Envíos recientes para matchear (sin estados en vivo: rápido y liviano).
+    // Si hay match, se enriquece SOLO ese envío con su estado oficial.
+    const shipmentsData = await getShipments({ limit: 60 }, { skipLive: true });
+    let shipments = shipmentsData.results || [];
 
-    const { matched, matchedBy, ambiguous, count } = buscarEnvio(shipments, candidatos);
+    let { matched, matchedBy, ambiguous, count } = buscarEnvio(shipments, candidatos);
 
     // Código que apunta a más de un paquete: no adivinamos.
     if (ambiguous) {
@@ -180,6 +181,20 @@ router.post('/scan', async (req, res) => {
     }
 
     if (matched) {
+      // Enriquece solo el match con el estado oficial en vivo de ML.
+      try {
+        const live = await getShipmentLiveStatus(matched.id);
+        matched = {
+          ...matched,
+          status: matched.packing?.statusOverride || live.status || matched.status,
+          substatus: live.substatus || matched.substatus,
+          logistic_type: live.logistic_type || matched.logistic_type,
+          tracking_number: live.tracking_number || matched.tracking_number,
+          receiver_address: live.receiver_address || matched.receiver_address,
+        };
+      } catch {
+        // Sin estado en vivo se sigue con los datos de la orden.
+      }
       const prevPacking = matched.packing || {};
       const nowIso = new Date().toISOString();
       const firstItem = (matched.items && matched.items[0]?.item) || {};

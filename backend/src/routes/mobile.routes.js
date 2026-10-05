@@ -102,7 +102,7 @@ router.get('/me', async (req, res) => {
 router.get('/queue', async (req, res) => {
   try {
     const parsedLimit = req.query.limit
-      ? Math.min(parseInt(req.query.limit, 10) || 50, 100)
+      ? Math.min(parseInt(req.query.limit, 10) || 50, 50)
       : 50;
     let statusParam = req.query.status ? String(req.query.status).toLowerCase() : null;
     if (statusParam === 'pending') statusParam = 'ready_to_ship';
@@ -161,7 +161,7 @@ router.get('/bootstrap', async (req, res) => {
 
     const [connection, shipmentsData, itemsData, ordersData] = await Promise.all([
       checkConnectionStatus().catch(() => ({ connected: false })),
-      getShipments({ limit: 100 }).catch((e) => ({ results: [], error: e.message })),
+      getShipments({ limit: 50 }).catch((e) => ({ results: [], error: e.message })),
       getItems({ limit: 50 }).catch((e) => ({ results: [], error: e.message })),
       getOrders({ limit: 50 }).catch((e) => ({ results: [], error: e.message })),
     ]);

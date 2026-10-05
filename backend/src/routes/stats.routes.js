@@ -5,6 +5,62 @@ const { getOrders } = require('../services/mlOrders.service');
 const { getShipments } = require('../services/mlShipments.service');
 const { getSettings } = require('../db/store');
 
+const SALES_TZ = 'America/Argentina/Buenos_Aires';
+const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function toBaKey(dateInput) {
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: SALES_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  } catch {
+    return null;
+  }
+}
+
+function baWeekday(date) {
+  try {
+    const baStr = date.toLocaleString('en-US', { timeZone: SALES_TZ });
+    return new Date(baStr).getDay();
+  } catch {
+    return date.getDay();
+  }
+}
+
+function buildSalesByDay(paidOrders) {
+  const now = new Date();
+  const buckets = [];
+  const keyToIndex = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    const key = toBaKey(d);
+    const label = DAY_SHORT[baWeekday(d)] || '';
+    if (key && !(key in keyToIndex)) {
+      keyToIndex[key] = buckets.length;
+      buckets.push({ key, day: label, total: 0, ordenes: 0 });
+    }
+  }
+  for (const o of paidOrders || []) {
+    const rawDate = o.date_created || o.created_at || o.date_closed;
+    if (!rawDate) continue;
+    const key = toBaKey(rawDate);
+    if (!key || !(key in keyToIndex)) continue;
+    const bucket = buckets[keyToIndex[key]];
+    bucket.total += Number(o.total_amount || 0);
+    bucket.ordenes += 1;
+  }
+  return buckets.map(({ day, total, ordenes }) => ({
+    day,
+    total: Math.round(total * 100) / 100,
+    ordenes,
+  }));
+}
+
 // GET /api/stats/dashboard
 router.get('/dashboard', async (req, res) => {
   try {
@@ -41,6 +97,17 @@ router.get('/dashboard', async (req, res) => {
     const inTransitShipments = shipments.filter(s => s.status === 'shipped');
     const deliveredShipments = shipments.filter(s => s.status === 'delivered');
 
+    // Ventas reales por día (últimos 7 días, zona horaria de Argentina)
+    let salesByDay = [];
+    try {
+      const salesData = await getOrders({ limit: 100 });
+      const salesOrders = salesData.results || [];
+      const paidSales = salesOrders.filter(o => o.status === 'paid');
+      salesByDay = buildSalesByDay(paidSales);
+    } catch {
+      salesByDay = [];
+    }
+
     res.json({
       summary: {
         totalSalesAmount,
@@ -56,6 +123,7 @@ router.get('/dashboard', async (req, res) => {
         inTransitShipmentsCount: inTransitShipments.length,
         deliveredShipmentsCount: deliveredShipments.length,
       },
+      salesByDay,
       lowStockAlerts: lowStockItems.slice(0, 6),
       urgentShipments: pendingShipments.slice(0, 6),
       recentOrders: orders.slice(0, 6),
@@ -80,6 +148,7 @@ router.get('/dashboard', async (req, res) => {
         inTransitShipmentsCount: 0,
         deliveredShipmentsCount: 0,
       },
+      salesByDay: [],
       lowStockAlerts: [],
       urgentShipments: [],
       recentOrders: [],

@@ -107,7 +107,7 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
             <span>Mercado Libre Pro</span>
           </div>
           <p className="relative mt-1.5 text-[11px] leading-relaxed text-white/70">
-            Cuenta: <b className="text-white">@{connection?.nickname || 'GRANA3DOK'}</b>
+            Cuenta: <b className="text-white">@{connection?.nickname || 'Mi tienda'}</b>
           </p>
           <a
             href="https://developers.mercadolibre.com.ar/devcenter"

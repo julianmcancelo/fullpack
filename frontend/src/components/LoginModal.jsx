@@ -58,7 +58,7 @@ export default function LoginModal({ isOpen, onClose }) {
       const res = await loginWithGoogle({
         email: payload.email,
         name: payload.name || payload.email.split('@')[0],
-        avatar: payload.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${payload.email}`,
+        avatar: payload.picture || '',
         googleId: payload.sub,
       });
 
@@ -124,7 +124,7 @@ export default function LoginModal({ isOpen, onClose }) {
       const res = await loginWithGoogle({
         email: targetEmail,
         name: targetName,
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${targetEmail}`,
+        avatar: '',
         googleId: `google_${Date.now()}`,
       });
 
@@ -161,6 +161,9 @@ export default function LoginModal({ isOpen, onClose }) {
       if (res.debugOtp) {
         setDebugOtp(res.debugOtp);
         setOtpCode(res.debugOtp); // Auto-fill for ultra-convenience
+      } else {
+        setDebugOtp(null);
+        setOtpCode('');
       }
       setAuthMode('otp_verify');
     } catch (err) {
@@ -370,10 +373,16 @@ export default function LoginModal({ isOpen, onClose }) {
                 />
               </div>
 
-              {debugOtp && (
+              {debugOtp ? (
                 <div className="rounded-xl border border-warning/30 bg-warning-soft p-2.5 text-center">
                   <span className="text-[11px] font-bold text-warning">
                     Código de acceso temporal: <b className="font-mono text-sm">{debugOtp}</b>
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-line bg-muted/60 p-2.5 text-center">
+                  <span className="text-[11px] font-semibold text-ink-muted">
+                    Revisá tu casilla de correo o pedile el código al administrador.
                   </span>
                 </div>
               )}

@@ -955,8 +955,12 @@ export default function MobileTerminal({ connection }) {
               </div>
               <p className="page-sub flex items-center gap-2 mt-0.5">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
-                <span className="font-semibold text-ink-muted">@GRANA3DOK</span>
-                <span className="text-ink-subtle">•</span>
+                {connection?.nickname ? (
+                  <>
+                    <span className="font-semibold text-ink-muted">@{connection.nickname}</span>
+                    <span className="text-ink-subtle">•</span>
+                  </>
+                ) : null}
                 <span className="tabular font-mono text-[11px] font-bold text-ink-muted">{currentTime}</span>
               </p>
             </div>
@@ -2483,7 +2487,7 @@ export default function MobileTerminal({ connection }) {
               <div className="p-4 rounded-2xl border border-dashed border-line space-y-6">
                 <p className="text-[10px] font-black text-ink-subtle uppercase">Despachado por (Depósito)</p>
                 <div className="h-10 border-b border-line-strong"></div>
-                <p className="text-[10px] text-ink-muted">@GRANA3DOK • Depósito Central</p>
+                <p className="text-[10px] text-ink-muted">@{connection?.nickname || 'Mi tienda'} • Depósito Central</p>
               </div>
             </div>
 

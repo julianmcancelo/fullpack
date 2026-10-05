@@ -22,6 +22,7 @@ import {
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import UserAvatar from '../components/UserAvatar';
 
 const THEME_OPTIONS = [
   { id: 'light', label: 'Claro', Icon: Sun },
@@ -198,12 +199,11 @@ export default function Settings({
       {/* ---------------- SaaS account ---------------- */}
       <div className="card card-pad flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3.5">
-          <img
-            src={
-              currentUser?.avatar ||
-              `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.email || 'admin'}`
-            }
-            alt=""
+          <UserAvatar
+            avatar={currentUser?.avatar}
+            name={currentUser?.name}
+            email={currentUser?.email}
+            size={48}
             className="h-12 w-12 shrink-0 rounded-2xl border border-brand/40 bg-brand p-0.5"
           />
           <div className="min-w-0">
@@ -635,7 +635,7 @@ export default function Settings({
             </p>
             <ul className="mt-2.5 space-y-1.5 pl-1">
               {[
-                ['ml_auth', 'Tokens de acceso y credenciales @GRANA3DOK'],
+                ['ml_auth', `Tokens de acceso y credenciales${connection?.nickname ? ` @${connection.nickname}` : ''}`],
                 ['ml_settings', 'Preferencias y configuración de la tienda'],
                 ['ml_packing_metadata', 'Control de calidad, checklist y estados de empaque'],
                 ['ml_scan_logs', 'Auditoría histórica de cada escaneo QR y código de barras'],

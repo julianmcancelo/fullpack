@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
           const res = await api.googleLogin({
             email: fbUser.email,
             name: fbUser.displayName || fbUser.email.split('@')[0],
-            avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.email}`,
+            avatar: fbUser.photoURL || '',
             googleId: fbUser.uid,
           });
           if (res.user) {
@@ -76,7 +76,7 @@ export function AuthProvider({ children }) {
     const res = await api.googleLogin({
       email: fbUser.email,
       name: fbUser.displayName || fbUser.email.split('@')[0],
-      avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.email}`,
+      avatar: fbUser.photoURL || '',
       googleId: fbUser.uid,
     });
 
