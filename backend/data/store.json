@@ -61,5 +61,29 @@
       "printedAt": "2026-10-04T23:55:05.568Z"
     }
   },
-  "scanLogs": []
+  "scanLogs": [],
+  "users": [
+    {
+      "id": 1,
+      "email": "jcancelo.dev@gmail.com",
+      "name": "Julián Cancelo (Admin)",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=jcancelo.dev@gmail.com",
+      "role": "admin",
+      "status": "active",
+      "authProvider": "google",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": 1791164630997,
+      "email": "test@example.com",
+      "name": "Test",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=test@example.com",
+      "role": "user",
+      "status": "pending",
+      "authProvider": "email",
+      "createdAt": "2026-10-05T01:43:50.997Z",
+      "lastLoginAt": "2026-10-05T01:43:50.998Z"
+    }
+  ],
+  "loginTokens": []
 }

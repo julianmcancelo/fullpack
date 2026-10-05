@@ -64,7 +64,26 @@ router.get('/dashboard', async (req, res) => {
       shipmentsError: shipmentsData.error,
     });
   } catch (err) {
-    res.status(500).json({ error: err.response?.data || err.message });
+    res.json({
+      summary: {
+        totalSalesAmount: 0,
+        paidOrdersCount: 0,
+        totalOrdersCount: 0,
+        totalUnitsSold: 0,
+        totalItemsCount: 0,
+        activeItemsCount: 0,
+        pausedItemsCount: 0,
+        lowStockCount: 0,
+        outOfStockCount: 0,
+        pendingShipmentsCount: 0,
+        inTransitShipmentsCount: 0,
+        deliveredShipmentsCount: 0,
+      },
+      lowStockAlerts: [],
+      urgentShipments: [],
+      recentOrders: [],
+      error: err.message,
+    });
   }
 });
 

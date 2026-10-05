@@ -1,12 +1,5 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Boxes, 
-  Truck, 
-  ShoppingCart, 
-  QrCode,
-  Settings
-} from 'lucide-react';
+import { LayoutDashboard, Boxes, Truck, ShoppingCart, QrCode } from 'lucide-react';
 
 export default function MobileBottomNav({ activeTab, setActiveTab, onOpenScanner }) {
   const tabs = [
@@ -18,8 +11,8 @@ export default function MobileBottomNav({ activeTab, setActiveTab, onOpenScanner
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-2 py-1.5 shadow-lg safe-area-bottom">
-      <div className="flex items-center justify-around">
+    <nav className="safe-area-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-line bg-card/90 px-2 pb-1.5 pt-2 shadow-pop backdrop-blur-xl backdrop-saturate-150 md:hidden">
+      <div className="mx-auto flex max-w-md items-end justify-around gap-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -28,11 +21,13 @@ export default function MobileBottomNav({ activeTab, setActiveTab, onOpenScanner
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={onOpenScanner}
-                className="-mt-5 p-3 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-400 text-slate-950 shadow-lg shadow-yellow-400/40 border-4 border-white dark:border-slate-900 flex flex-col items-center justify-center active:scale-95 transition"
-                title="Escanear QR con Cámara del Celular"
+                title="Escanear QR con la cámara del celular"
+                aria-label="Escanear QR con la cámara del celular"
+                className="fab"
               >
-                <Icon className="w-6 h-6 stroke-[2.5]" />
+                <Icon className="h-6 w-6" strokeWidth={2.5} />
               </button>
             );
           }
@@ -40,15 +35,23 @@ export default function MobileBottomNav({ activeTab, setActiveTab, onOpenScanner
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition ${
-                isActive
-                  ? 'text-yellow-600 dark:text-yellow-400 font-extrabold'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
-              }`}
+              aria-current={isActive ? 'page' : undefined}
+              className={`mobile-tab relative ${isActive ? 'mobile-tab-active' : ''}`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
-              <span className="text-[10px] mt-0.5">{tab.label}</span>
+              <span
+                className={`absolute top-0 h-0.5 w-6 rounded-full transition-colors duration-200 ${
+                  isActive ? 'bg-brand-400' : 'bg-transparent'
+                }`}
+              />
+              <Icon
+                className={`h-5 w-5 transition-colors duration-200 ${
+                  isActive ? 'text-brand-500' : ''
+                }`}
+                strokeWidth={isActive ? 2.5 : 2}
+              />
+              <span>{tab.label}</span>
             </button>
           );
         })}

@@ -15,7 +15,11 @@ router.get('/status', async (req, res) => {
     const status = await checkConnectionStatus();
     res.json(status);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.json({
+      connected: false,
+      message: 'No hay conexión activa con Mercado Libre o el token ha expirado.',
+      error: err.message,
+    });
   }
 });
 

@@ -6,7 +6,6 @@ import {
   CheckCircle2, 
   Clock, 
   AlertCircle, 
-  ExternalLink,
   Package,
   Calendar,
   X
@@ -83,75 +82,118 @@ export default function QuestionsManager({ connection }) {
   const unansweredCount = questions.filter(q => q.status === 'UNANSWERED').length;
 
   return (
-    <div className="space-y-6">
-      
+    <div className="page">
+
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="page-head">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Preguntas de Compradores</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="page-title">Preguntas de Compradores</h1>
             {unansweredCount > 0 && (
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white font-black text-xs">
-                {unansweredCount} pendientes
+              <span className="badge badge-warning">
+                <Clock className="h-3 w-3" />
+                <span className="tabular">{unansweredCount}</span> pendientes
               </span>
             )}
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <p className="page-sub">
             Responde las dudas de tus compradores en tiempo real para aumentar tus conversiones.
           </p>
         </div>
 
-        <button
-          onClick={loadQuestions}
-          className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold flex items-center space-x-2 transition shadow-sm self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-yellow-600' : ''}`} />
-          <span>Actualizar Preguntas</span>
-        </button>
+        <div className="toolbar">
+          <button onClick={loadQuestions} className="btn btn-outline btn-sm">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Actualizar Preguntas</span>
+          </button>
+        </div>
       </div>
 
       {/* Feedback Alert */}
       {feedback && (
         <div
-          className={`p-4 rounded-xl flex items-center justify-between text-xs font-medium ${
+          className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-xs font-bold ${
             feedback.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border border-rose-200'
+              ? 'border-success/30 bg-success-soft text-success'
+              : 'border-danger/30 bg-danger-soft text-danger'
           }`}
         >
-          <span>{feedback.text}</span>
-          <button onClick={() => setFeedback(null)} className="p-1 hover:opacity-75">
+          <span className="flex items-center gap-2">
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 shrink-0" />
+            )}
+            <span>{feedback.text}</span>
+          </span>
+          <button
+            onClick={() => setFeedback(null)}
+            aria-label="Cerrar aviso"
+            title="Cerrar aviso"
+            className="-m-1 rounded-lg p-1 transition hover:opacity-70"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {/* Status Filter Tabs */}
-      <div className="border-b border-slate-200 flex items-center space-x-6">
-        {[
-          { id: 'UNANSWERED', label: 'Sin Responder (Pendientes)' },
-          { id: 'ALL', label: 'Historial Completo de Preguntas' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setStatusFilter(tab.id)}
-            className={`pb-3 text-xs md:text-sm font-bold transition relative ${
-              statusFilter === tab.id
-                ? 'text-slate-900 border-b-2 border-yellow-400 -mb-[2px]'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="toolbar">
+        <div className="segmented">
+          {[
+            { id: 'UNANSWERED', label: 'Sin Responder (Pendientes)' },
+            { id: 'ALL', label: 'Historial Completo de Preguntas' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`segmented-btn ${statusFilter === tab.id ? 'segmented-btn-active' : ''}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Questions Feed */}
       <div className="space-y-4">
         {loading ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-sm">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
-            <p className="text-xs">Consultando preguntas de Mercado Libre...</p>
+          <div className="space-y-4" aria-busy="true">
+            <p className="sr-only">Consultando preguntas de Mercado Libre…</p>
+
+            <div className="card">
+              <div className="card-head">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="skeleton h-10 w-10 rounded-xl" />
+                  <div className="w-40 space-y-2">
+                    <div className="skeleton h-3 w-full" />
+                    <div className="skeleton h-2.5 w-2/3" />
+                  </div>
+                </div>
+                <div className="skeleton h-5 w-24 rounded-full" />
+              </div>
+              <div className="card-body space-y-3">
+                <div className="skeleton h-3 w-3/4" />
+                <div className="skeleton h-3 w-1/2" />
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="skeleton h-10 w-10 rounded-xl" />
+                  <div className="w-52 space-y-2">
+                    <div className="skeleton h-3 w-full" />
+                    <div className="skeleton h-2.5 w-1/2" />
+                  </div>
+                </div>
+                <div className="skeleton h-5 w-24 rounded-full" />
+              </div>
+              <div className="card-body space-y-3">
+                <div className="skeleton h-3 w-2/3" />
+                <div className="skeleton h-3 w-1/3" />
+              </div>
+            </div>
           </div>
         ) : questions.length > 0 ? (
           questions.map((q) => {
@@ -162,44 +204,46 @@ export default function QuestionsManager({ connection }) {
             return (
               <div
                 key={q.id}
-                className={`bg-white rounded-2xl border shadow-sm p-5 transition ${
-                  isUnanswered ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'
+                className={`card card-hover overflow-hidden ${
+                  isUnanswered ? 'border-warning/40' : ''
                 }`}
               >
                 {/* Product Context Banner */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 text-xs">
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 overflow-hidden">
+                <div className="card-head">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-muted">
                       {q.item?.thumbnail ? (
                         <img src={q.item.thumbnail} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <Package className="w-4 h-4 text-slate-400" />
+                        <Package className="w-4 h-4 text-ink-subtle" />
                       )}
                     </div>
-                    <span className="font-bold text-slate-800 truncate">
+                    <span className="truncate font-display text-sm font-bold text-ink">
                       {q.item?.title || `Publicación #${q.item_id}`}
                     </span>
                   </div>
 
-                  <div className="flex items-center space-x-3 shrink-0 text-slate-400 text-[11px]">
-                    <span className="flex items-center space-x-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>{formatDate(q.date_created)}</span>
-                    </span>
-                  </div>
+                  <span className={`badge ${isUnanswered ? 'badge-warning' : 'badge-success'}`}>
+                    {isUnanswered ? (
+                      <Clock className="h-3 w-3" />
+                    ) : (
+                      <CheckCircle2 className="h-3 w-3" />
+                    )}
+                    {isUnanswered ? 'Sin responder' : 'Respondida'}
+                  </span>
                 </div>
 
                 {/* Question Body */}
-                <div className="mt-3.5 space-y-3">
-                  <div className="flex items-start space-x-3">
-                    <div className="p-2 bg-slate-100 rounded-xl text-slate-700 font-bold text-xs shrink-0">
+                <div className="card-body space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-muted text-ink-muted">
                       <MessageSquare className="w-4 h-4" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase">Pregunta del Comprador:</span>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-900 mt-0.5 leading-relaxed">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-ink-subtle">
+                        Pregunta del Comprador
+                      </span>
+                      <p className="mt-1 text-sm font-semibold leading-relaxed text-ink">
                         "{q.text}"
                       </p>
                     </div>
@@ -207,13 +251,15 @@ export default function QuestionsManager({ connection }) {
 
                   {/* Answer (if already answered) */}
                   {q.answer?.text && (
-                    <div className="ml-10 p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs space-y-1">
-                      <div className="flex items-center space-x-1.5 text-emerald-800 font-bold">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Tu Respuesta:</span>
-                        <span className="text-[10px] text-emerald-600 font-normal">({formatDate(q.answer.date_created)})</span>
+                    <div className="rounded-2xl border border-success/30 bg-success-soft p-3.5 sm:ml-12">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-success">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Tu Respuesta</span>
+                        <span className="tabular font-medium normal-case tracking-normal text-ink-subtle">
+                          ({formatDate(q.answer.date_created)})
+                        </span>
                       </div>
-                      <p className="text-slate-800 leading-relaxed pl-5">
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink">
                         {q.answer.text}
                       </p>
                     </div>
@@ -221,8 +267,9 @@ export default function QuestionsManager({ connection }) {
 
                   {/* Answer Input (if unanswered) */}
                   {isUnanswered && (
-                    <div className="ml-10 pt-2 space-y-2">
-                      <div className="relative">
+                    <div className="space-y-2 sm:ml-12">
+                      <div className="field">
+                        <label className="label">Tu Respuesta</label>
                         <textarea
                           rows={2}
                           placeholder="Escribe tu respuesta aquí para responderle en Mercado Libre..."
@@ -230,34 +277,66 @@ export default function QuestionsManager({ connection }) {
                           onChange={(e) =>
                             setAnswerDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))
                           }
-                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+                          className="textarea"
                         />
-                      </div>
-
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => handleSendAnswer(q.id)}
-                          disabled={isSending || !draft.trim()}
-                          className="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl transition flex items-center space-x-2 shadow-sm"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>{isSending ? 'Enviando...' : 'Enviar Respuesta a Mercado Libre'}</span>
-                        </button>
+                        <p className="help">
+                          Se publica en Mercado Libre apenas la envíes y queda guardada en el historial.
+                        </p>
                       </div>
                     </div>
                   )}
+                </div>
 
+                {/* Card foot: date + actions */}
+                <div className="card-foot">
+                  <span className="flex items-center gap-1.5 text-[11px] text-ink-subtle">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span className="tabular">{formatDate(q.date_created)}</span>
+                  </span>
+
+                  {isUnanswered && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() =>
+                          setAnswerDrafts((prev) => {
+                            const copy = { ...prev };
+                            delete copy[q.id];
+                            return copy;
+                          })
+                        }
+                        className="btn btn-outline btn-sm"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Cancelar</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleSendAnswer(q.id)}
+                        disabled={isSending || !draft.trim()}
+                        className="btn btn-primary btn-sm"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{isSending ? 'Enviando...' : 'Responder en Mercado Libre'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               </div>
             );
           })
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-sm">
-            <CheckCircle2 className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-500" />
-            <p className="text-xs text-emerald-700 font-medium">
-              ¡Genial! No tienes preguntas pendientes por responder.
-            </p>
+          <div className="card">
+            <div className="empty">
+              <div className="empty-icon">
+                <CheckCircle2 className="w-6 h-6 text-success" />
+              </div>
+              <p className="empty-title">¡Genial! No tienes preguntas pendientes por responder.</p>
+              <p className="empty-text">
+                Cuando un comprador te consulte, la pregunta va a aparecer acá para que puedas
+                responderla al instante.
+              </p>
+            </div>
           </div>
         )}
       </div>

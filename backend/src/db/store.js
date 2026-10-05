@@ -37,6 +37,19 @@ const defaultData = {
   },
   packingMetadata: {},
   scanLogs: [],
+  users: [
+    {
+      id: 1,
+      email: 'jcancelo.dev@gmail.com',
+      name: 'Julián Cancelo (Admin)',
+      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=jcancelo.dev@gmail.com',
+      role: 'admin',
+      status: 'active',
+      authProvider: 'google',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ],
+  loginTokens: [],
 };
 
 // In-memory cache for ultra-fast response
@@ -77,6 +90,8 @@ function readDb() {
       },
       packingMetadata: parsed.packingMetadata || {},
       scanLogs: parsed.scanLogs || [],
+      users: parsed.users || defaultData.users,
+      loginTokens: parsed.loginTokens || [],
     };
     return inMemoryCache;
   } catch (err) {
@@ -114,6 +129,12 @@ function writeDb(data) {
     if (neonPacking && Object.keys(neonPacking).length > 0) {
       const db = readDb();
       db.packingMetadata = { ...db.packingMetadata, ...neonPacking };
+      writeDb(db);
+    }
+    const neonUsers = await neon.getAllUsersFromNeon();
+    if (neonUsers && neonUsers.length > 0) {
+      const db = readDb();
+      db.users = neonUsers;
       writeDb(db);
     }
   } catch (e) {
@@ -201,6 +222,176 @@ function getScanLogs(limit = 50) {
   return (db.scanLogs || []).slice(0, limit);
 }
 
+// Resilient SaaS User & Auth operations with Neon fallback
+async function findUserByEmail(email) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail) return null;
+
+  try {
+    const neonUser = await neon.findUserByEmailInNeon(cleanEmail);
+    if (neonUser) return neonUser;
+  } catch (e) {
+    console.warn('Neon findUser fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.users) db.users = [...defaultData.users];
+
+  let local = db.users.find(u => u.email.toLowerCase() === cleanEmail);
+  if (cleanEmail === 'jcancelo.dev@gmail.com') {
+    if (!local) {
+      local = {
+        id: 1,
+        email: 'jcancelo.dev@gmail.com',
+        name: 'Julián Cancelo (Admin)',
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=jcancelo.dev@gmail.com',
+        role: 'admin',
+        status: 'active',
+        authProvider: 'google',
+        createdAt: new Date().toISOString(),
+      };
+      db.users.push(local);
+      writeDb(db);
+    } else {
+      local.role = 'admin';
+      local.status = 'active';
+    }
+  }
+  return local || null;
+}
+
+async function upsertUser({ email, name, avatar, role = 'user', status = 'pending', authProvider = 'email' }) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const isAdmin = cleanEmail === 'jcancelo.dev@gmail.com';
+  const finalRole = isAdmin ? 'admin' : role;
+  const finalStatus = isAdmin ? 'active' : status;
+
+  let userResult = null;
+  try {
+    userResult = await neon.upsertUserInNeon({
+      email: cleanEmail,
+      name,
+      avatar,
+      role: finalRole,
+      status: finalStatus,
+      authProvider,
+    });
+  } catch (e) {
+    console.warn('Neon upsertUser fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.users) db.users = [...defaultData.users];
+
+  const existingIdx = db.users.findIndex(u => u.email.toLowerCase() === cleanEmail);
+  const userObj = userResult || {
+    id: existingIdx >= 0 ? db.users[existingIdx].id : Date.now(),
+    email: cleanEmail,
+    name: name || cleanEmail.split('@')[0],
+    avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
+    role: finalRole,
+    status: finalStatus,
+    authProvider,
+    createdAt: existingIdx >= 0 ? db.users[existingIdx].createdAt : new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+  };
+
+  if (existingIdx >= 0) {
+    db.users[existingIdx] = { ...db.users[existingIdx], ...userObj, lastLoginAt: new Date().toISOString() };
+  } else {
+    db.users.push(userObj);
+  }
+  writeDb(db);
+  return userObj;
+}
+
+async function getAllUsers() {
+  try {
+    const neonUsers = await neon.getAllUsersFromNeon();
+    if (neonUsers && neonUsers.length > 0) return neonUsers;
+  } catch (e) {
+    console.warn('Neon getAllUsers fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.users || db.users.length === 0) {
+    db.users = [...defaultData.users];
+    writeDb(db);
+  }
+  return db.users;
+}
+
+async function updateUserStatus(userId, newStatus) {
+  try {
+    await neon.updateUserStatusInNeon(userId, newStatus);
+  } catch (e) {
+    console.warn('Neon updateUserStatus fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (db.users) {
+    const user = db.users.find(u => String(u.id) === String(userId));
+    if (user) {
+      user.status = newStatus;
+      writeDb(db);
+    }
+  }
+  return true;
+}
+
+async function createLoginToken(email, code, token, expireMinutes = 15) {
+  try {
+    await neon.createLoginTokenInNeon(email, code, token, expireMinutes);
+  } catch (e) {
+    console.warn('Neon createLoginToken fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.loginTokens) db.loginTokens = [];
+  const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000).toISOString();
+  db.loginTokens.push({
+    email: email.trim().toLowerCase(),
+    code,
+    token,
+    expiresAt,
+    used: false,
+    createdAt: new Date().toISOString(),
+  });
+  writeDb(db);
+  return { email, code, token, expiresAt };
+}
+
+async function verifyLoginToken(email, codeOrToken) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanCode = (codeOrToken || '').trim();
+
+  try {
+    const neonValid = await neon.verifyLoginTokenInNeon(cleanEmail, cleanCode);
+    if (neonValid) return true;
+  } catch (e) {
+    console.warn('Neon verifyLoginToken fallback:', e.message);
+  }
+
+  const db = readDb();
+  if (!db.loginTokens) return false;
+
+  const now = new Date();
+  const found = db.loginTokens.find(
+    t => t.email === cleanEmail &&
+         (t.code === cleanCode || t.token === cleanCode) &&
+         !t.used &&
+         new Date(t.expiresAt) > now
+  );
+
+  if (found) {
+    found.used = true;
+    writeDb(db);
+    return true;
+  }
+
+  return false;
+}
+
 async function getDatabaseStatus() {
   const neonActive = await neon.isNeonConnected();
   const connStr = neon.getConnectionString();
@@ -222,5 +413,11 @@ module.exports = {
   updatePackingMetadata,
   addScanLog,
   getScanLogs,
+  findUserByEmail,
+  upsertUser,
+  getAllUsers,
+  updateUserStatus,
+  createLoginToken,
+  verifyLoginToken,
   getDatabaseStatus,
 };

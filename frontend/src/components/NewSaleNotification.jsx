@@ -8,51 +8,61 @@ export default function NewSaleNotification({ sale, onClose, onViewOrders }) {
   const amount = (sale.total_amount || 0).toLocaleString('es-AR');
 
   return (
-    <div className="fixed top-4 right-4 left-4 sm:left-auto sm:w-96 z-50 animate-in slide-in-from-top-4 duration-300">
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 rounded-3xl shadow-2xl border-2 border-yellow-300 flex items-start justify-between gap-3">
-        <div className="flex items-start space-x-3 min-w-0">
-          <div className="p-2.5 bg-yellow-400 text-slate-950 rounded-2xl shadow-md shrink-0">
-            <ShoppingBag className="w-6 h-6 animate-bounce" />
-          </div>
-
-          <div className="min-w-0">
-            <div className="flex items-center space-x-1.5">
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-yellow-400 text-slate-950 uppercase tracking-wide">
-                ¡NUEVA VENTA!
-              </span>
-              <span className="text-xs font-black text-yellow-200">
-                ${amount} ARS
-              </span>
+    <div className="fixed top-4 right-4 left-4 z-50 animate-slide-down sm:left-auto sm:w-96">
+      <div className="card card-accent overflow-hidden border-brand/40 shadow-pop">
+        <div className="flex items-start justify-between gap-3 p-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="kpi-icon kpi-icon-brand shrink-0">
+              <ShoppingBag className="h-5 w-5 animate-bounce" />
             </div>
 
-            <h4 className="text-xs font-black text-white mt-1 line-clamp-1">
-              {item.title || 'Producto de Mercado Libre'}
-            </h4>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="badge badge-brand">
+                  <Sparkles className="h-3 w-3" />
+                  ¡Nueva venta!
+                </span>
+                <span className="tabular inline-flex items-center gap-0.5 font-display text-xl font-extrabold leading-none text-ink">
+                  <DollarSign className="h-4 w-4 text-success" />
+                  {amount}
+                </span>
+              </div>
 
-            <p className="text-[11px] text-emerald-100 mt-0.5">
-              Comprador: <b>{sale.buyer?.nickname || 'Cliente'}</b> • Orden #{sale.id}
-            </p>
+              <h4 className="mt-2 line-clamp-1 font-display text-sm font-extrabold tracking-tight text-ink">
+                {item.title || 'Producto de Mercado Libre'}
+              </h4>
 
-            <div className="mt-2.5 flex items-center space-x-2">
-              <button
-                onClick={() => {
-                  if (onViewOrders) onViewOrders();
-                  if (onClose) onClose();
-                }}
-                className="px-3 py-1 bg-white text-emerald-950 font-black text-xs rounded-xl shadow-xs hover:bg-emerald-50 transition"
-              >
-                Ver en Ventas
-              </button>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-muted">
+                <span className="badge badge-neutral">
+                  {sale.buyer?.nickname || 'Cliente'}
+                </span>
+                <span className="tabular">Orden #{sale.id}</span>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (onViewOrders) onViewOrders();
+                    if (onClose) onClose();
+                  }}
+                  className="btn btn-primary btn-sm"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Ver la orden
+                </button>
+              </div>
             </div>
           </div>
+
+          <button
+            onClick={onClose}
+            aria-label="Cerrar la notificación de venta"
+            title="Cerrar"
+            className="btn btn-ghost btn-icon-sm shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-xl hover:bg-white/20 text-white/80 hover:text-white transition shrink-0"
-        >
-          <X className="w-4 h-4" />
-        </button>
       </div>
     </div>
   );

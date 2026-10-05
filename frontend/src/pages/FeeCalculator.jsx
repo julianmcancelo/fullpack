@@ -46,213 +46,272 @@ export default function FeeCalculator() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      
+    <div className="page max-w-5xl">
+
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora de Rentabilidad & Comisiones ML</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-          Calcula con precisión tus márgenes de ganancia reales, comisiones de Mercado Libre y costos de envío.
-        </p>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Calculadora de Rentabilidad & Comisiones ML</h1>
+          <p className="page-sub">
+            Calcula con precisión tus márgenes de ganancia reales, comisiones de Mercado Libre y costos de envío.
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+
         {/* Left Form: Inputs */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
-          <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-2 pb-3 border-b border-slate-100">
-            <Calculator className="w-4 h-4 text-yellow-600" />
-            <span>Parámetros de Costo y Venta</span>
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            
+        <div className="card">
+          <div className="card-head">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                Costo de Compra / Fabricación ($)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={costPrice}
-                  onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
-                  className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-yellow-400 focus:bg-white"
-                />
-              </div>
+              <h2 className="card-title">
+                <Calculator className="w-4 h-4 text-brand-600" />
+                <span>Parámetros de Costo y Venta</span>
+              </h2>
+              <p className="card-sub mt-0.5">El resultado se recalcula al instante con cada cambio.</p>
             </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                Precio de Venta al Público ($)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={sellingPrice}
-                  onChange={(e) => setSellingPrice(parseFloat(e.target.value) || 0)}
-                  className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-yellow-400 focus:bg-white"
-                />
-              </div>
-            </div>
-
+            <span className="badge badge-neutral">
+              Comisión <span className="tabular">{commissionRate}%</span>
+            </span>
           </div>
 
-          {/* Listing type selector */}
-          <div className="space-y-2 text-xs">
-            <label className="block font-bold text-slate-700">Tipo de Publicación Mercado Libre:</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setListingType('gold_special')}
-                className={`p-3 rounded-xl border text-left transition ${
-                  listingType === 'gold_special'
-                    ? 'border-yellow-400 bg-yellow-50 text-slate-900 font-bold'
-                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span>Clásica (14%)</span>
-                  {listingType === 'gold_special' && <CheckCircle2 className="w-4 h-4 text-yellow-600" />}
-                </div>
-                <p className="text-[10px] text-slate-500 font-normal mt-0.5">Exposición media/alta</p>
-              </button>
+          <div className="card-body space-y-5">
 
-              <button
-                type="button"
-                onClick={() => setListingType('gold_pro')}
-                className={`p-3 rounded-xl border text-left transition ${
-                  listingType === 'gold_pro'
-                    ? 'border-yellow-400 bg-yellow-50 text-slate-900 font-bold'
-                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span>Premium (28%)</span>
-                  {listingType === 'gold_pro' && <CheckCircle2 className="w-4 h-4 text-yellow-600" />}
-                </div>
-                <p className="text-[10px] text-slate-500 font-normal mt-0.5">Máxima exposición + cuotas</p>
-              </button>
-            </div>
-          </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
-          {/* Shipping checkbox */}
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5 text-xs">
-            <label className="flex items-center space-x-2 font-bold text-slate-800 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeShippingCost}
-                onChange={(e) => setIncludeShippingCost(e.target.checked)}
-                className="w-4 h-4 text-yellow-500 rounded focus:ring-yellow-400"
-              />
-              <span>Ofrezco Envío Gratis a mi cargo</span>
-            </label>
-
-            {includeShippingCost && (
-              <div className="pt-2 flex items-center space-x-3">
-                <span className="text-slate-600 font-medium">Costo de Envío:</span>
-                <div className="relative w-32">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+              <div className="field">
+                <label className="label">Costo de Compra / Fabricación ($)</label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-ink-subtle">$</span>
                   <input
                     type="number"
-                    value={shippingCost}
-                    onChange={(e) => setShippingCost(parseFloat(e.target.value) || 0)}
-                    className="w-full pl-6 pr-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold outline-none"
+                    min="0"
+                    value={costPrice}
+                    onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
+                    className="input tabular pl-7 font-bold"
                   />
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Target Margin Helper */}
-          <div className="pt-2 border-t border-slate-100 text-xs">
-            <label className="block font-bold text-slate-700 mb-1">
-              Quiero ganar un margen deseado de:
-            </label>
-            <div className="flex items-center space-x-3">
-              <input
-                type="range"
-                min="5"
-                max="70"
-                value={targetMarginPct}
-                onChange={(e) => setTargetMarginPct(parseInt(e.target.value, 10))}
-                className="flex-1 accent-yellow-400"
-              />
-              <span className="font-extrabold text-sm text-slate-900 w-12 text-right">
-                {targetMarginPct}%
-              </span>
-            </div>
-            {suggestedPrice > 0 && (
-              <div className="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 flex items-center justify-between">
-                <span>Precio de venta sugerido para lograr {targetMarginPct}%:</span>
-                <b className="font-extrabold text-sm">{formatMoney(suggestedPrice)}</b>
+              <div className="field">
+                <label className="label">Precio de Venta al Público ($)</label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-ink-subtle">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={sellingPrice}
+                    onChange={(e) => setSellingPrice(parseFloat(e.target.value) || 0)}
+                    className="input tabular pl-7 font-bold"
+                  />
+                </div>
               </div>
-            )}
-          </div>
 
+            </div>
+
+            {/* Listing type selector */}
+            <div className="field">
+              <span className="label">Tipo de Publicación Mercado Libre</span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setListingType('gold_special')}
+                  aria-pressed={listingType === 'gold_special'}
+                  className={`rounded-2xl border p-3.5 text-left transition-all duration-200 ease-spring ${
+                    listingType === 'gold_special'
+                      ? 'border-brand/60 bg-brand-soft shadow-xs'
+                      : 'border-line bg-muted hover:border-line-strong hover:bg-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-xs font-extrabold text-ink">Clásica (14%)</span>
+                    {listingType === 'gold_special' && <CheckCircle2 className="w-4 h-4 text-success" />}
+                  </div>
+                  <p className="help mt-1">Exposición media/alta</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setListingType('gold_pro')}
+                  aria-pressed={listingType === 'gold_pro'}
+                  className={`rounded-2xl border p-3.5 text-left transition-all duration-200 ease-spring ${
+                    listingType === 'gold_pro'
+                      ? 'border-brand/60 bg-brand-soft shadow-xs'
+                      : 'border-line bg-muted hover:border-line-strong hover:bg-card'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-xs font-extrabold text-ink">Premium (28%)</span>
+                    {listingType === 'gold_pro' && <CheckCircle2 className="w-4 h-4 text-success" />}
+                  </div>
+                  <p className="help mt-1">Máxima exposición + cuotas</p>
+                </button>
+              </div>
+            </div>
+
+            {/* Shipping checkbox */}
+            <div className="space-y-3 rounded-2xl border border-line bg-muted p-4">
+              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-bold text-ink">
+                <input
+                  type="checkbox"
+                  checked={includeShippingCost}
+                  onChange={(e) => setIncludeShippingCost(e.target.checked)}
+                  className="check"
+                />
+                <span>Ofrezco Envío Gratis a mi cargo</span>
+              </label>
+
+              {includeShippingCost && (
+                <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
+                  <span className="text-xs font-bold text-ink-muted">Costo de Envío:</span>
+                  <div className="relative w-36">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-ink-subtle">$</span>
+                    <input
+                      type="number"
+                      value={shippingCost}
+                      onChange={(e) => setShippingCost(parseFloat(e.target.value) || 0)}
+                      className="input input-sm tabular pl-6 font-bold"
+                    />
+                  </div>
+                  <span className="help">Se descuenta de tu liquidación.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Target Margin Helper */}
+            <div className="field border-t border-line pt-4">
+              <span className="label">Quiero ganar un margen deseado de</span>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="5"
+                  max="70"
+                  value={targetMarginPct}
+                  onChange={(e) => setTargetMarginPct(parseInt(e.target.value, 10))}
+                  className="flex-1 accent-brand"
+                />
+                <span className="tabular w-12 text-right font-display text-sm font-extrabold text-ink">
+                  {targetMarginPct}%
+                </span>
+              </div>
+
+              {suggestedPrice > 0 && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-accent/30 bg-accent-soft px-3.5 py-2.5 text-xs text-accent">
+                  <span className="flex items-center gap-1.5 font-bold">
+                    <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                    <span>Precio de venta sugerido para lograr {targetMarginPct}%:</span>
+                  </span>
+                  <b className="tabular font-display text-sm font-extrabold">{formatMoney(suggestedPrice)}</b>
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
 
         {/* Right Card: Financial Breakdown Results */}
-        <div className="lg:col-span-5 bg-gradient-to-b from-slate-900 to-slate-950 text-white rounded-2xl shadow-xl p-6 flex flex-col justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">
-              Resumen de Liquidación
-            </span>
-            <h3 className="text-3xl font-black mt-1 text-white tracking-tight">
-              {formatMoney(grossProfit)}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5 font-medium">
-              Ganancia limpia de bolsillo por unidad
-            </p>
+        <div className="card card-accent flex flex-col overflow-hidden">
+          <div className="card-body flex-1 space-y-5">
 
-            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-800">
-              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase">Margen s/ Venta</span>
-                <h4 className={`text-lg font-black mt-0.5 ${marginPercentage >= 20 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {marginPercentage.toFixed(1)}%
-                </h4>
+            {/* Hero: net profit */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="kpi-label">Resumen de Liquidación</span>
+                <p className="kpi-value text-3xl">{formatMoney(grossProfit)}</p>
+                <p className="mt-2 text-xs text-ink-muted">Ganancia limpia de bolsillo por unidad</p>
               </div>
-
-              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase">Retorno ROI</span>
-                <h4 className="text-lg font-black mt-0.5 text-blue-400">
-                  {roiPercentage.toFixed(1)}%
-                </h4>
+              <div className="kpi-icon kpi-icon-success shrink-0">
+                <DollarSign className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="mt-6 space-y-2.5 text-xs text-slate-300">
-              <div className="flex justify-between">
-                <span>Precio de venta bruto:</span>
-                <span className="font-bold text-white">{formatMoney(sellingPrice)}</span>
+            {/* Verdict + ROI */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`badge ${marginPercentage >= 20 ? 'badge-success' : marginPercentage >= 0 ? 'badge-warning' : 'badge-danger'}`}>
+                {marginPercentage >= 20 ? (
+                  <CheckCircle2 className="w-3 h-3" />
+                ) : (
+                  <AlertCircle className="w-3 h-3" />
+                )}
+                {marginPercentage >= 20 ? 'Rentable' : marginPercentage >= 0 ? 'Margen ajustado' : 'A pérdida'}
+              </span>
+              <span className="chip">
+                <TrendingUp className="w-3.5 h-3.5" />
+                ROI <b className="tabular">{roiPercentage.toFixed(1)}%</b>
+              </span>
+            </div>
+
+            {/* Margin bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-extrabold uppercase tracking-wider text-ink-subtle">
+                <span className="flex items-center gap-1.5">
+                  <Percent className="w-3 h-3" />
+                  <span>Margen sobre la venta</span>
+                </span>
+                <span className={`tabular ${marginPercentage >= 20 ? 'text-success' : 'text-warning'}`}>
+                  {marginPercentage.toFixed(1)}%
+                </span>
               </div>
-              <div className="flex justify-between text-rose-400">
-                <span>Comisión Mercado Libre ({commissionRate}%):</span>
-                <span>-{formatMoney(mlCommissionAmount)}</span>
+              <div className="progress">
+                <div
+                  className="progress-bar"
+                  style={{ width: `${Math.max(0, Math.min(100, marginPercentage))}%` }}
+                />
               </div>
+            </div>
+
+            {/* Breakdown rows */}
+            <div className="text-xs">
+              <div className="flex items-center justify-between border-b border-line py-2.5">
+                <span className="text-ink-muted">Precio de venta bruto:</span>
+                <span className="tabular font-bold text-ink">{formatMoney(sellingPrice)}</span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-line py-2.5">
+                <span className="text-ink-muted">Comisión Mercado Libre ({commissionRate}%):</span>
+                <span className="tabular font-bold text-danger">-{formatMoney(mlCommissionAmount)}</span>
+              </div>
+
               {includeShippingCost && (
-                <div className="flex justify-between text-rose-400">
-                  <span>Costo de envío bonificado:</span>
-                  <span>-{formatMoney(shippingCost)}</span>
+                <div className="flex items-center justify-between border-b border-line py-2.5">
+                  <span className="text-ink-muted">Costo de envío bonificado:</span>
+                  <span className="tabular font-bold text-danger">-{formatMoney(shippingCost)}</span>
                 </div>
               )}
-              <div className="pt-2 border-t border-slate-800 flex justify-between text-slate-300">
-                <span>Dinero neto acreditado:</span>
-                <span className="font-bold text-emerald-400">{formatMoney(netReceived)}</span>
+
+              <div className="flex items-center justify-between border-b border-line py-2.5">
+                <span className="text-ink-muted">Dinero neto acreditado:</span>
+                <span className="tabular font-bold text-success">{formatMoney(netReceived)}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>Costo del producto:</span>
-                <span>-{formatMoney(costPrice)}</span>
+
+              <div className="flex items-center justify-between border-b border-line py-2.5">
+                <span className="text-ink-muted">Costo del producto:</span>
+                <span className="tabular font-bold text-ink">-{formatMoney(costPrice)}</span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-line py-2.5">
+                <span className="text-ink-muted">Margen s/ Venta:</span>
+                <span className={`tabular font-bold ${marginPercentage >= 20 ? 'text-success' : 'text-warning'}`}>
+                  {marginPercentage.toFixed(1)}%
+                </span>
+              </div>
+
+              {/* Highlighted total row */}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line-strong bg-muted px-3.5 py-3">
+                <span className="font-display text-xs font-extrabold text-ink">Utilidad neta por unidad</span>
+                <span className="tabular font-display text-base font-extrabold text-ink">
+                  {formatMoney(grossProfit)}
+                </span>
               </div>
             </div>
+
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center space-x-1.5">
-            <HelpCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-            <span>Calculado con las tarifas oficiales de Mercado Libre Argentina.</span>
+          <div className="card-foot text-[11px] text-ink-subtle">
+            <span className="flex items-center gap-1.5">
+              <HelpCircle className="w-3.5 h-3.5 shrink-0 text-brand-600" />
+              <span>Calculado con las tarifas oficiales de Mercado Libre Argentina.</span>
+            </span>
           </div>
         </div>
 

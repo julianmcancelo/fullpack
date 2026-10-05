@@ -83,78 +83,108 @@ export default function OrdersManager({ connection }) {
   };
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header and Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="page">
+
+      {/* Cabecera y acciones */}
+      <div className="page-head">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Centro de Ventas y Órdenes</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <h1 className="page-title">Centro de Ventas y Órdenes</h1>
+          <p className="page-sub">
             Historial de ventas, comisiones de Mercado Libre, cobros y datos del comprador.
           </p>
         </div>
 
-        <button
-          onClick={loadOrders}
-          className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold flex items-center space-x-2 transition shadow-sm self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-yellow-600' : ''}`} />
-          <span>Actualizar Ventas</span>
-        </button>
+        <div className="toolbar">
+          <button
+            onClick={loadOrders}
+            className="btn btn-outline btn-sm"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand-600' : ''}`} />
+            <span>Actualizar Ventas</span>
+          </button>
+        </div>
       </div>
 
-      {/* Error Alert */}
+      {/* Tira de resumen */}
+      <div className="stat-strip">
+        <span className="flex items-center gap-2 text-xs font-bold text-ink-muted">
+          <ShoppingCart className="h-4 w-4 text-brand-600" aria-hidden="true" />
+          Órdenes listadas
+          <span className="tabular text-sm font-extrabold text-ink">
+            {loading ? '—' : orders.length}
+          </span>
+        </span>
+
+        <span className="hidden h-5 w-px bg-line sm:block" aria-hidden="true" />
+
+        <span className="flex items-center gap-2 text-xs text-ink-muted">
+          <CreditCard className="h-4 w-4 text-accent" aria-hidden="true" />
+          <span>Cobros, comisiones y neto acreditado en el detalle de cada venta.</span>
+        </span>
+      </div>
+
+      {/* Alerta de error */}
       {error && (
-        <div className="p-4 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 text-xs font-medium flex items-center space-x-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+        <div className="flex items-center gap-2.5 rounded-2xl border border-danger/30 bg-danger-soft px-4 py-3 text-xs font-semibold text-danger">
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Filters & Search Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-        
-        {/* Search Bar */}
-        <form onSubmit={handleSearchSubmit} className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por ID de orden, Comprador o Producto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
-          />
-        </form>
+      {/* Filtros y búsqueda */}
+      <div className="card card-pad">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-        {/* Status Filter Buttons */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { id: 'all', label: 'Todas las Ventas' },
-            { id: 'paid', label: 'Pagadas / Acreditadas' },
-            { id: 'cancelled', label: 'Canceladas' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                statusFilter === tab.id
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <form onSubmit={handleSearchSubmit} className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" aria-hidden="true" />
+            <input
+              type="text"
+              placeholder="Buscar por ID de orden, Comprador o Producto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input-search text-xs"
+            />
+          </form>
+
+          <div className="segmented flex-wrap">
+            {[
+              { id: 'all', label: 'Todas las Ventas' },
+              { id: 'paid', label: 'Pagadas / Acreditadas' },
+              { id: 'cancelled', label: 'Canceladas' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id)}
+                aria-pressed={statusFilter === tab.id}
+                className={`segmented-btn whitespace-nowrap ${
+                  statusFilter === tab.id ? 'segmented-btn-active' : ''
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
         </div>
-
       </div>
 
-      {/* Orders List / Cards */}
-      <div className="space-y-3">
+      {/* Listado de órdenes */}
+      <div className="flex flex-col gap-3">
         {loading ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-sm">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
-            <p className="text-xs">Consultando órdenes en Mercado Libre...</p>
+          <div className="card card-pad" aria-busy="true">
+            <div className="flex items-center gap-3.5">
+              <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="skeleton h-3.5 w-40 max-w-full" />
+                <div className="skeleton h-3 w-56 max-w-full" />
+                <div className="skeleton h-3 w-32 max-w-full" />
+              </div>
+              <div className="hidden shrink-0 space-y-2 sm:block">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-3 w-20" />
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-ink-subtle">Consultando órdenes en Mercado Libre...</p>
           </div>
         ) : orders.length > 0 ? (
           orders.map((order) => {
@@ -166,173 +196,242 @@ export default function OrdersManager({ connection }) {
             const saleFee = itemsList.reduce((acc, it) => acc + (it.sale_fee || 0), 0);
 
             return (
-              <div
-                key={order.id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:border-slate-300 transition"
-              >
-                {/* Main Order Row */}
-                <div
-                  className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none"
-                  onClick={() => toggleExpand(order.id)}
-                >
-                  {/* Left: ID, Date, Buyer */}
-                  <div className="flex items-start space-x-3.5 min-w-0">
-                    <div className="p-3 bg-yellow-50 rounded-xl text-slate-900 font-bold text-xs shrink-0 border border-yellow-200">
-                      <ShoppingCart className="w-5 h-5 text-yellow-600" />
-                    </div>
+              <React.Fragment key={order.id}>
+                <div className="card card-hover overflow-hidden">
 
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-extrabold text-sm text-slate-900">
-                          Orden #{order.id}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                            order.status === 'paid'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-rose-100 text-rose-800'
-                          }`}
-                        >
-                          {order.status === 'paid' ? 'Pagada' : order.status}
-                        </span>
+                  {/* Fila principal de la orden */}
+                  <div
+                    className="flex cursor-pointer select-none flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-center md:justify-between"
+                    onClick={() => toggleExpand(order.id)}
+                  >
+                    {/* Orden, artículos, fecha y comprador */}
+                    <div className="flex min-w-0 items-start gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-brand/40 bg-brand-soft text-brand-700">
+                        <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+                      </div>
 
-                        {/* Scanner Status Badge */}
-                        {order.packing?.packed ? (
-                          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500 text-white flex items-center space-x-1 shadow-xs">
-                            <QrCode className="w-3 h-3" />
-                            <span>LEÍDO POR LECTOR QR • LISTO</span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-display text-sm font-extrabold text-ink">
+                            Orden #{order.id}
                           </span>
-                        ) : order.shipping?.id ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center space-x-1">
-                            <Clock className="w-3 h-3" />
-                            <span>PENDIENTE ESCANEO</span>
+
+                          <span className={`badge ${order.status === 'paid' ? 'badge-success' : 'badge-danger'}`}>
+                            {order.status === 'paid' ? 'Pagada' : order.status}
                           </span>
-                        ) : null}
-                      </div>
 
-                      <p className="text-xs text-slate-600 mt-1 line-clamp-1 font-medium">
-                        {itemsList.map((it) => `${it.quantity}x ${it.item?.title || 'Producto'}`).join(', ')}
-                      </p>
+                          {/* Estado de empaque / escaneo */}
+                          {order.packing?.packed ? (
+                            <span className="badge badge-success">
+                              <QrCode className="h-3 w-3" aria-hidden="true" />
+                              <span>Leído por lector QR · listo</span>
+                            </span>
+                          ) : order.shipping?.id ? (
+                            <span className="badge badge-warning">
+                              <Clock className="h-3 w-3" aria-hidden="true" />
+                              <span>Pendiente escaneo</span>
+                            </span>
+                          ) : null}
+                        </div>
 
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-400">
-                        <span className="flex items-center space-x-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{formatDate(order.date_created)}</span>
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center space-x-1 text-slate-600">
-                          <User className="w-3 h-3" />
-                          <span>{order.buyer?.first_name ? `${order.buyer.first_name} ${order.buyer.last_name || ''}` : order.buyer?.nickname}</span>
-                        </span>
+                        <p className="mt-1 line-clamp-1 text-xs font-medium text-ink-muted">
+                          {itemsList.map((it) => `${it.quantity}x ${it.item?.title || 'Producto'}`).join(', ')}
+                        </p>
+
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-subtle">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" aria-hidden="true" />
+                            <span>{formatDate(order.date_created)}</span>
+                          </span>
+                          <span aria-hidden="true">•</span>
+                          <span className="flex items-center gap-1.5 text-ink-muted">
+                            <span className="avatar flex h-5 w-5 items-center justify-center bg-muted">
+                              <User className="h-3 w-3 text-ink-subtle" aria-hidden="true" />
+                            </span>
+                            <span>{order.buyer?.first_name ? `${order.buyer.first_name} ${order.buyer.last_name || ''}` : order.buyer?.nickname}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right: Amounts & Toggle */}
-                  <div className="flex items-center justify-between md:justify-end space-x-6 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                    <div className="text-left md:text-right">
-                      <div className="text-base font-black text-slate-900">
-                        {formatMoney(order.total_amount)}
+                    {/* Importes y control de detalle */}
+                    <div className="flex items-center justify-between gap-5 border-t border-line pt-3 md:justify-end md:border-t-0 md:pt-0">
+                      <div className="text-left md:text-right">
+                        <div className="tabular text-base font-black text-ink">
+                          {formatMoney(order.total_amount)}
+                        </div>
+                        <div className="text-[11px] font-semibold text-success">
+                          Neto a recibir: <span className="tabular">{formatMoney(netAmount)}</span>
+                        </div>
                       </div>
-                      <div className="text-[11px] text-emerald-600 font-semibold">
-                        Neto a recibir: {formatMoney(netAmount)}
-                      </div>
-                    </div>
 
-                    <div className="p-1 rounded-lg text-slate-400 hover:text-slate-700 bg-slate-50">
-                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-muted text-ink-subtle"
+                        aria-hidden="true"
+                      >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Expanded Details Drawer */}
+                {/* Detalle expandible de la orden */}
                 {isExpanded && (
-                  <div className="bg-slate-50 border-t border-slate-200 p-5 space-y-4">
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      
-                      {/* Products breakdown */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-                        <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                          Productos en la Orden
-                        </h4>
-                        <div className="divide-y divide-slate-100">
-                          {itemsList.map((it, idx) => (
-                            <div key={idx} className="py-2 first:pt-0 last:pb-0 text-xs">
-                              <p className="font-semibold text-slate-800">{it.item?.title}</p>
-                              <div className="flex justify-between text-slate-500 mt-1">
-                                <span>{it.quantity} x {formatMoney(it.unit_price)}</span>
-                                <span className="font-bold text-slate-900">{formatMoney(it.quantity * it.unit_price)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                  <div className="overlay" role="dialog" aria-modal="true" aria-label={`Detalle de la orden ${order.id}`}>
+                    <div className="modal modal-lg">
 
-                      {/* Buyer and Shipping Details */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-                        <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                          Comprador y Envío
-                        </h4>
-                        <div className="text-xs space-y-1.5 text-slate-600">
-                          <p className="font-bold text-slate-900">
-                            {order.buyer?.first_name ? `${order.buyer.first_name} ${order.buyer.last_name || ''}` : order.buyer?.nickname}
+                      <div className="modal-head">
+                        <div className="min-w-0">
+                          <h2 className="modal-title">Orden #{order.id}</h2>
+                          <p className="modal-sub">
+                            {formatDate(order.date_created)} · {itemsList.length} {itemsList.length === 1 ? 'producto' : 'productos'}
                           </p>
-                          <p className="text-[11px] text-slate-400">Usuario: @{order.buyer?.nickname}</p>
-                          {order.buyer?.email && <p className="text-[11px]">Email: {order.buyer.email}</p>}
-                          {order.buyer?.phone?.number && (
-                            <p className="text-[11px]">Tel: ({order.buyer.phone.area_code}) {order.buyer.phone.number}</p>
-                          )}
-                          {order.shipping?.receiver_address && (
-                            <div className="mt-2 pt-2 border-t border-slate-100 flex items-start space-x-1.5 text-[11px] text-slate-700">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                              <span>
-                                {order.shipping.receiver_address.street_name} {order.shipping.receiver_address.street_number},{' '}
-                                {order.shipping.receiver_address.city?.name}, {order.shipping.receiver_address.state?.name}
-                              </span>
-                            </div>
-                          )}
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className={`badge ${order.status === 'paid' ? 'badge-success' : 'badge-danger'}`}>
+                            {order.status === 'paid' ? 'Pagada' : order.status}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(order.id)}
+                            className="modal-close"
+                            title="Cerrar detalle"
+                            aria-label="Cerrar detalle de la orden"
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Financial Detail */}
-                      <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-                        <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider">
-                          Liquidación de Dinero
-                        </h4>
-                        <div className="text-xs space-y-1.5">
-                          <div className="flex justify-between text-slate-600">
-                            <span>Cobro bruto:</span>
-                            <span>{formatMoney(order.total_amount)}</span>
+                      <div className="modal-body">
+
+                        {/* Productos de la orden */}
+                        <div className="rounded-xl border border-line bg-muted/50 p-4">
+                          <h3 className="section-title mb-3 flex items-center gap-2">
+                            <ShoppingCart className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                            Productos en la orden
+                          </h3>
+
+                          <div className="divide-y divide-line">
+                            {itemsList.map((it, idx) => (
+                              <div key={idx} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-muted">
+                                  {it.item?.thumbnail ? (
+                                    <img src={it.item.thumbnail} alt="" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <ShoppingCart className="h-4 w-4 text-ink-subtle" aria-hidden="true" />
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-semibold text-ink">{it.item?.title}</p>
+                                  <p className="mt-0.5 text-[11px] text-ink-subtle">
+                                    {it.quantity} x <span className="tabular">{formatMoney(it.unit_price)}</span>
+                                  </p>
+                                </div>
+
+                                <span className="tabular shrink-0 text-xs font-bold text-ink">
+                                  {formatMoney(it.quantity * it.unit_price)}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                          <div className="flex justify-between text-rose-600">
-                            <span>Comisión ML (aprox):</span>
-                            <span>-{formatMoney(saleFee || (order.total_amount * 0.13))}</span>
-                          </div>
-                          <div className="pt-2 border-t border-slate-100 flex justify-between font-extrabold text-emerald-700 text-sm">
-                            <span>Neto acreditado:</span>
-                            <span>{formatMoney(netAmount)}</span>
-                          </div>
-                          {primaryPayment?.payment_method_id && (
-                            <p className="text-[11px] text-slate-400 mt-2">
-                              Medio: {primaryPayment.payment_method_id.toUpperCase()}
-                            </p>
-                          )}
                         </div>
+
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                          {/* Comprador y envío */}
+                          <div className="rounded-xl border border-line bg-muted/50 p-4">
+                            <h3 className="section-title mb-3 flex items-center gap-2">
+                              <Truck className="h-4 w-4 text-accent" aria-hidden="true" />
+                              Comprador y envío
+                            </h3>
+
+                            <div className="space-y-1.5 text-xs text-ink-muted">
+                              <p className="font-bold text-ink">
+                                {order.buyer?.first_name ? `${order.buyer.first_name} ${order.buyer.last_name || ''}` : order.buyer?.nickname}
+                              </p>
+                              <p className="text-[11px] text-ink-subtle">Usuario: @{order.buyer?.nickname}</p>
+                              {order.buyer?.email && <p className="text-[11px]">Email: {order.buyer.email}</p>}
+                              {order.buyer?.phone?.number && (
+                                <p className="text-[11px]">Tel: ({order.buyer.phone.area_code}) {order.buyer.phone.number}</p>
+                              )}
+                              {order.shipping?.receiver_address && (
+                                <div className="mt-2 flex items-start gap-1.5 border-t border-line pt-2 text-[11px] text-ink-muted">
+                                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle" aria-hidden="true" />
+                                  <span>
+                                    {order.shipping.receiver_address.street_name} {order.shipping.receiver_address.street_number},{' '}
+                                    {order.shipping.receiver_address.city?.name}, {order.shipping.receiver_address.state?.name}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Liquidación del dinero */}
+                          <div className="rounded-xl border border-line bg-muted/50 p-4">
+                            <h3 className="section-title mb-3 flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-success" aria-hidden="true" />
+                              Liquidación de dinero
+                            </h3>
+
+                            <div className="space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between gap-3 text-ink-muted">
+                                <span>Cobro bruto</span>
+                                <span className="tabular font-semibold text-ink">{formatMoney(order.total_amount)}</span>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3 text-danger">
+                                <span>Comisión ML (aprox.)</span>
+                                <span className="tabular font-semibold">-{formatMoney(saleFee || (order.total_amount * 0.13))}</span>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3 border-t border-line pt-2.5 text-sm font-extrabold text-success">
+                                <span className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                                  Neto acreditado
+                                </span>
+                                <span className="tabular">{formatMoney(netAmount)}</span>
+                              </div>
+
+                              {primaryPayment?.payment_method_id && (
+                                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-subtle">
+                                  <CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Medio: {primaryPayment.payment_method_id.toUpperCase()}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      <div className="modal-foot">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(order.id)}
+                          className="btn btn-outline btn-sm"
+                        >
+                          Cerrar
+                        </button>
                       </div>
 
                     </div>
-
                   </div>
                 )}
-
-              </div>
+              </React.Fragment>
             );
           })
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 shadow-sm">
-            <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-40" />
-            <p className="text-xs">No se encontraron ventas con los filtros aplicados.</p>
+          <div className="card">
+            <div className="empty">
+              <div className="empty-icon">
+                <ShoppingCart className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <p className="empty-title">Sin ventas para mostrar</p>
+              <p className="empty-text">No se encontraron ventas con los filtros aplicados.</p>
+            </div>
           </div>
         )}
       </div>

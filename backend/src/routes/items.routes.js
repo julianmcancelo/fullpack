@@ -15,7 +15,12 @@ router.get('/', async (req, res) => {
     const data = await getItems(req.query);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.response?.data || err.message });
+    res.json({
+      results: [],
+      total: 0,
+      connected: false,
+      message: err.message || 'Mercado Libre no conectado',
+    });
   }
 });
 

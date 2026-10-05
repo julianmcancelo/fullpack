@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const neon = require('../db/neon');
+const store = require('../db/store');
 
 const ADMIN_EMAIL = 'jcancelo.dev@gmail.com';
 
@@ -18,11 +18,11 @@ router.post('/google-login', async (req, res) => {
     const isAdmin = cleanEmail === ADMIN_EMAIL;
     
     // Check if user exists
-    let user = await neon.findUserByEmailInNeon(cleanEmail);
+    let user = await store.findUserByEmail(cleanEmail);
 
     if (!user) {
       // First time registration
-      user = await neon.upsertUserInNeon({
+      user = await store.upsertUser({
         email: cleanEmail,
         name: name || cleanEmail.split('@')[0],
         avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
@@ -30,6 +30,10 @@ router.post('/google-login', async (req, res) => {
         status: isAdmin ? 'active' : 'pending', // pending admin approval unless superAdmin
         authProvider: 'google',
       });
+    } else if (isAdmin) {
+      // Always enforce active admin for superadmin
+      user.role = 'admin';
+      user.status = 'active';
     }
 
     if (user.status === 'pending') {
@@ -58,7 +62,7 @@ router.post('/google-login', async (req, res) => {
     });
   } catch (err) {
     console.error('Google login error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Error en autenticación Google' });
   }
 });
 
@@ -74,9 +78,9 @@ router.post('/request-code', async (req, res) => {
     const isAdmin = cleanEmail === ADMIN_EMAIL;
 
     // Check or register user
-    let user = await neon.findUserByEmailInNeon(cleanEmail);
+    let user = await store.findUserByEmail(cleanEmail);
     if (!user) {
-      user = await neon.upsertUserInNeon({
+      user = await store.upsertUser({
         email: cleanEmail,
         name: name || cleanEmail.split('@')[0],
         avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
@@ -97,20 +101,19 @@ router.post('/request-code', async (req, res) => {
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const token = crypto.randomBytes(24).toString('hex');
 
-    await neon.createLoginTokenInNeon(cleanEmail, otpCode, token, 15);
+    await store.createLoginToken(cleanEmail, otpCode, token, 15);
 
     // In production or demo, return the OTP code for instant testing while also simulating email dispatch
     res.json({
       success: true,
       message: `Código de acceso de 6 dígitos generado para ${cleanEmail}. Expira en 15 minutos.`,
       email: cleanEmail,
-      // We pass the debugOtp in response so user can test and log in instantly without waiting for external SMTP setup
       debugOtp: otpCode,
       status: user.status,
     });
   } catch (err) {
     console.error('Request code error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Error al generar código' });
   }
 });
 
@@ -123,13 +126,13 @@ router.post('/verify-code', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const isValid = await neon.verifyLoginTokenInNeon(cleanEmail, code);
+    const isValid = await store.verifyLoginToken(cleanEmail, code);
 
     if (!isValid) {
       return res.status(400).json({ error: 'El código de seguridad es inválido o ha expirado.' });
     }
 
-    const user = await neon.findUserByEmailInNeon(cleanEmail);
+    const user = await store.findUserByEmail(cleanEmail);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
@@ -151,14 +154,14 @@ router.post('/verify-code', async (req, res) => {
     });
   } catch (err) {
     console.error('Verify code error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Error al verificar código' });
   }
 });
 
 // GET /api/users/list (Admin only - List all platform users and pending approvals)
 router.get('/list', async (req, res) => {
   try {
-    const users = await neon.getAllUsersFromNeon();
+    const users = await store.getAllUsers();
     res.json({ success: true, users });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -177,7 +180,7 @@ router.post('/approve', async (req, res) => {
       return res.status(400).json({ error: 'userId y status (active, pending, rejected) son obligatorios.' });
     }
 
-    await neon.updateUserStatusInNeon(userId, status);
+    await store.updateUserStatus(userId, status);
     res.json({ success: true, message: `Usuario actualizado a estado '${status}'.` });
   } catch (err) {
     res.status(500).json({ error: err.message });

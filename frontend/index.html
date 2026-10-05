@@ -1,13 +1,39 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Mercado Libre Pro Manager | Control de Stock, Envíos y Ventas</title>
     <meta name="description" content="Sistema de gestión profesional de Mercado Libre con terminal móvil de empaque y lector QR" />
+    <meta name="theme-color" content="#f2f5fb" />
+    <meta name="color-scheme" content="light dark" />
     <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Typography: Inter (UI) + Plus Jakarta Sans (display) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Apply the persisted theme before first paint so there is no flash -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('ml_manager_theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = saved === 'dark' || ((!saved || saved === 'system') && prefersDark);
+          var root = document.documentElement;
+          root.classList.toggle('dark', dark);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#080c16' : '#f2f5fb');
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- Google Identity Services (GIS) Official SDK -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>

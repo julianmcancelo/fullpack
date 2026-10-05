@@ -7,14 +7,12 @@ import {
   AlertTriangle, 
   ArrowUpRight, 
   Clock, 
-  ExternalLink,
   ChevronRight,
   TrendingUp,
   FileText,
   Sparkles,
   BarChart3,
   CreditCard,
-  QrCode,
   CheckCircle2
 } from 'lucide-react';
 import { 
@@ -24,9 +22,7 @@ import {
   XAxis, 
   YAxis, 
   Tooltip, 
-  CartesianGrid,
-  BarChart,
-  Bar
+  CartesianGrid
 } from 'recharts';
 import { api } from '../services/api';
 
@@ -81,18 +77,19 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      
-      {/* Top Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="page">
+
+      {/* Encabezado del panel */}
+      <div className="page-head">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Panel de Control & KPIs</h1>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-300 dark:border-emerald-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="page-title">Panel de Control & KPIs</h1>
+            <span className="badge badge-success">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
               API EN VIVO
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="page-sub">
             {connection?.connected 
               ? `Monitoreo oficial de la tienda: @${connection.nickname} (Reputación Verde Líder)` 
               : 'Resumen en tiempo real de tu tienda en Mercado Libre'}
@@ -100,165 +97,200 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Total Facturado */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-yellow-400 transition">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ventas Cobradas</span>
-            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
-              <DollarSign className="w-5 h-5" />
+      {/* Grilla de KPIs */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+        {/* Ventas cobradas */}
+        <div className="kpi">
+          <div className="flex items-start justify-between gap-3">
+            <span className="kpi-label">Ventas Cobradas</span>
+            <div className="kpi-icon kpi-icon-success">
+              <DollarSign className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-3">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {formatMoney(summary.totalSalesAmount)}
-            </h3>
-            <div className="flex items-center space-x-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">{summary.paidOrdersCount} órdenes</span>
-              <span>• {summary.totalUnitsSold} unidades</span>
-            </div>
+          <p className="kpi-value tabular">{formatMoney(summary.totalSalesAmount)}</p>
+          <div className="kpi-foot">
+            <span className="inline-flex items-center gap-1 font-bold text-success">
+              <TrendingUp className="h-3.5 w-3.5" />
+              <span className="tabular">{summary.paidOrdersCount} órdenes</span>
+            </span>
+            <span className="text-ink-subtle">•</span>
+            <span className="tabular">{summary.totalUnitsSold} unidades</span>
           </div>
+          <span className="kpi-spark" aria-hidden="true" />
         </div>
 
-        {/* Ticket Promedio */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-yellow-400 transition">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ticket Promedio</span>
-            <div className="p-2 bg-blue-50 dark:bg-blue-950/60 rounded-xl text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60">
-              <CreditCard className="w-5 h-5" />
+        {/* Ticket promedio */}
+        <div className="kpi">
+          <div className="flex items-start justify-between gap-3">
+            <span className="kpi-label">Ticket Promedio</span>
+            <div className="kpi-icon kpi-icon-accent">
+              <CreditCard className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-3">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {formatMoney(averageTicket)}
-            </h3>
-            <div className="flex items-center space-x-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <span className="text-blue-600 dark:text-blue-400 font-bold">Por cada venta</span>
-              <span>• Neto estimado</span>
-            </div>
+          <p className="kpi-value tabular">{formatMoney(averageTicket)}</p>
+          <div className="kpi-foot">
+            <span className="inline-flex items-center gap-1 font-bold text-accent">
+              <ArrowUpRight className="h-3.5 w-3.5" />
+              <span>Por cada venta</span>
+            </span>
+            <span className="text-ink-subtle">•</span>
+            <span>Neto estimado</span>
           </div>
+          <span className="kpi-spark" aria-hidden="true" />
         </div>
 
-        {/* Publicaciones */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-yellow-400 transition">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Catálogo de Ítems</span>
-            <div className="p-2 bg-amber-50 dark:bg-amber-950/60 rounded-xl text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/60">
-              <Boxes className="w-5 h-5" />
+        {/* Catálogo de ítems */}
+        <div className="kpi">
+          <div className="flex items-start justify-between gap-3">
+            <span className="kpi-label">Catálogo de Ítems</span>
+            <div className="kpi-icon kpi-icon-brand">
+              <Boxes className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-3">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {summary.totalItemsCount || summary.activeItemsCount + summary.pausedItemsCount}
-            </h3>
-            <div className="flex items-center space-x-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold">{summary.activeItemsCount} activas</span>
-              <span>•</span>
-              <span>{summary.pausedItemsCount} pausadas</span>
-            </div>
+          <p className="kpi-value tabular">
+            {summary.totalItemsCount || summary.activeItemsCount + summary.pausedItemsCount}
+          </p>
+          <div className="kpi-foot">
+            <span className="inline-flex items-center gap-1 font-bold text-success">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span className="tabular">{summary.activeItemsCount} activas</span>
+            </span>
+            <span className="text-ink-subtle">•</span>
+            <span className="tabular">{summary.pausedItemsCount} pausadas</span>
           </div>
+          <span className="kpi-spark" aria-hidden="true" />
         </div>
 
-        {/* Envíos / Despachos */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-yellow-400 transition">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Por Despachar</span>
-            <div className="p-2 bg-purple-50 dark:bg-purple-950/60 rounded-xl text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/60">
-              <Truck className="w-5 h-5" />
+        {/* Envíos por despachar */}
+        <div className="kpi">
+          <div className="flex items-start justify-between gap-3">
+            <span className="kpi-label">Por Despachar</span>
+            <div className="kpi-icon kpi-icon-warning">
+              <Truck className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-3">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {summary.pendingShipmentsCount}
-            </h3>
-            <div className="flex items-center space-x-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <span className="text-purple-600 dark:text-purple-400 font-bold">Listos en empaque</span>
-              <span>• {summary.inTransitShipmentsCount} en camino</span>
-            </div>
+          <p className="kpi-value tabular">{summary.pendingShipmentsCount}</p>
+          <div className="kpi-foot">
+            <span className="inline-flex items-center gap-1 font-bold text-warning">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Listos en empaque</span>
+            </span>
+            <span className="text-ink-subtle">•</span>
+            <span className="tabular">{summary.inTransitShipmentsCount} en camino</span>
           </div>
+          <span className="kpi-spark" aria-hidden="true" />
         </div>
 
       </div>
 
-      {/* Interactive Sales Chart */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center space-x-2">
-            <BarChart3 className="w-5 h-5 text-yellow-500" />
+      {/* Gráfico de facturación */}
+      <div className="card">
+        <div className="card-head">
+          <div className="flex items-center gap-3">
+            <div className="kpi-icon kpi-icon-brand">
+              <BarChart3 className="h-5 w-5" />
+            </div>
             <div>
-              <h2 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">
-                Facturación Semanal & Volumen de Pedidos
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Evolución de ingresos y órdenes cobradas</p>
+              <h2 className="card-title">Facturación Semanal & Volumen de Pedidos</h2>
+              <p className="card-sub">Evolución de ingresos y órdenes cobradas</p>
             </div>
           </div>
+          <span className="chip">
+            <Sparkles className="h-3.5 w-3.5" />
+            Últimos 7 días
+          </span>
         </div>
 
-        <div className="mt-4 h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={salesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#EAB308" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="#EAB308" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.4} />
-              <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} tickFormatter={(v) => `$${v / 1000}k`} />
-              <Tooltip
-                formatter={(val) => [formatMoney(val), 'Facturado']}
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  border: 'none',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                }}
-              />
-              <Area type="monotone" dataKey="total" stroke="#EAB308" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
-            </AreaChart>
-          </ResponsiveContainer>
+        <div className="card-body">
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={salesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#FFD600" stopOpacity={0.45} />
+                    <stop offset="55%" stopColor="#FFD600" stopOpacity={0.14} />
+                    <stop offset="100%" stopColor="#F0B800" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.28)" vertical={false} />
+                <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={6} />
+                <YAxis
+                  stroke="#94a3b8"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `$${v / 1000}k`}
+                />
+                <Tooltip
+                  formatter={(val) => [formatMoney(val), 'Facturado']}
+                  cursor={{ stroke: 'rgba(148,163,184,0.45)', strokeDasharray: '4 4' }}
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    border: '1px solid rgba(148,163,184,0.25)',
+                    borderRadius: '14px',
+                    padding: '10px 12px',
+                    color: '#fff',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 18px 40px -18px rgba(2,6,23,0.85)',
+                  }}
+                  labelStyle={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700', marginBottom: '2px' }}
+                  itemStyle={{ color: '#FFD600' }}
+                />
+                <Area type="monotone" dataKey="total" stroke="#FFD600" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
-      {/* Two Column Layout: Urgent Shipments & Low Stock Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Widget: Envíos Urgentes / Por Despachar */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center space-x-2">
-              <Truck className="w-5 h-5 text-amber-500" />
-              <h2 className="font-bold text-base text-slate-900 dark:text-white">Envíos por Despachar</h2>
-            </div>
+      {/* Envíos urgentes y stock crítico */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+        {/* Widget: envíos por despachar */}
+        <div className="card">
+          <div className="card-head">
+            <h2 className="card-title">
+              <Truck className="h-4 w-4 shrink-0 text-warning" />
+              <span>Envíos por Despachar</span>
+            </h2>
             <button
               onClick={() => onNavigate('shipments')}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1"
+              className="btn btn-ghost btn-xs text-accent"
             >
               <span>Ver todos</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="card-body space-y-3">
             {stats?.urgentShipments && stats.urgentShipments.length > 0 ? (
               stats.urgentShipments.map((shipment) => (
                 <div
                   key={shipment.id}
-                  className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 transition flex items-center justify-between gap-3"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-line bg-muted/60 p-3.5 transition duration-200 ease-spring hover:border-line-strong hover:bg-muted"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">Orden #{shipment.order_id}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 uppercase">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="tabular text-xs font-bold text-ink">
+                        Orden #{shipment.order_id}
+                      </span>
+                      <span
+                        className={`badge ${
+                          shipment.logistic_type === 'self_service'
+                            ? 'badge-warning'
+                            : shipment.logistic_type === 'cross_docking'
+                            ? 'badge-info'
+                            : shipment.logistic_type === 'fulfillment'
+                            ? 'badge-brand'
+                            : 'badge-neutral'
+                        }`}
+                      >
                         {shipment.logistic_type === 'self_service' ? 'FLEX' : shipment.logistic_type === 'cross_docking' ? 'COLECTA' : shipment.logistic_type === 'fulfillment' ? 'FULL' : 'CORREO'}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 truncate mt-1">
+                    <p className="mt-1 truncate text-xs text-ink-muted">
                       Destino: {shipment.receiver_address?.city?.name || 'Local'}, {shipment.receiver_address?.state?.name || ''}
                     </p>
                   </div>
@@ -267,84 +299,90 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
                     href={api.downloadLabelUrl(shipment.id, 'pdf')}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-xs transition flex items-center space-x-1 shrink-0 shadow-xs"
+                    className="btn btn-primary btn-sm shrink-0"
                   >
-                    <FileText className="w-3.5 h-3.5" />
+                    <FileText className="h-3.5 w-3.5" />
                     <span>Etiqueta PDF</span>
                   </a>
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-slate-400">
-                <Truck className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-xs">No hay envíos pendientes de despacho por el momento.</p>
+              <div className="empty">
+                <div className="empty-icon">
+                  <Truck className="h-6 w-6" />
+                </div>
+                <p className="empty-title">Todo despachado</p>
+                <p className="empty-text">No hay envíos pendientes de despacho por el momento.</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Widget: Alertas de Stock Bajo */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-5 h-5 text-rose-500" />
-              <h2 className="font-bold text-base text-slate-900 dark:text-white">Alerta de Stock Crítico</h2>
-            </div>
+        {/* Widget: stock crítico */}
+        <div className="card">
+          <div className="card-head">
+            <h2 className="card-title">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-danger" />
+              <span>Alerta de Stock Crítico</span>
+            </h2>
             <button
               onClick={() => onNavigate('stock')}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1"
+              className="btn btn-ghost btn-xs text-accent"
             >
               <span>Gestionar Stock</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="card-body space-y-3">
             {stats?.lowStockAlerts && stats.lowStockAlerts.length > 0 ? (
               stats.lowStockAlerts.map((item) => (
                 <div
                   key={item.id}
-                  className="p-3.5 rounded-xl border border-rose-100 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20 hover:bg-rose-50/60 transition flex items-center justify-between gap-3"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-line bg-muted/60 p-3.5 transition duration-200 ease-spring hover:border-danger/40 hover:bg-danger-soft/40"
                 >
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     {item.thumbnail ? (
                       <img
                         src={item.thumbnail}
                         alt=""
-                        className="w-10 h-10 object-cover rounded-lg border border-slate-200 dark:border-slate-700 shrink-0 bg-white"
+                        className="avatar h-10 w-10 rounded-xl bg-muted"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                        <Package className="w-5 h-5 text-slate-400" />
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-line bg-muted">
+                        <Package className="h-5 w-5 text-ink-subtle" />
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      <h4 className="truncate text-xs font-bold text-ink">
                         {item.title}
                       </h4>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-[11px] font-black text-rose-600 dark:text-rose-400">
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="badge badge-danger tabular">
                           {item.available_quantity === 0 ? 'AGOTADO' : `Quedan ${item.available_quantity} unidades`}
                         </span>
-                        <span className="text-[11px] text-slate-400">• {formatMoney(item.price)}</span>
+                        <span className="tabular text-[11px] text-ink-subtle">
+                          • {formatMoney(item.price)}
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   <button
                     onClick={() => onNavigate('stock')}
-                    className="px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-800 dark:text-rose-300 font-bold text-xs transition shrink-0"
+                    className="btn btn-danger-soft btn-sm shrink-0"
                   >
                     Reponer
                   </button>
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-slate-400">
-                <Boxes className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-500" />
-                <p className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
-                  ¡Excelente! No tienes publicaciones con stock crítico.
-                </p>
+              <div className="empty">
+                <div className="empty-icon border-success/25 bg-success-soft text-success">
+                  <Boxes className="h-6 w-6" />
+                </div>
+                <p className="empty-title">Stock bajo control</p>
+                <p className="empty-text">¡Excelente! No tienes publicaciones con stock crítico.</p>
               </div>
             )}
           </div>

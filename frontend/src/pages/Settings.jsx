@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Key, 
-  ShieldCheck, 
-  ExternalLink, 
-  CheckCircle2, 
-  AlertCircle, 
-  RefreshCw, 
-  Trash2, 
-  Sliders, 
+import {
+  Key,
+  ShieldCheck,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
   HelpCircle,
   Copy,
   Check,
@@ -15,13 +13,30 @@ import {
   Lock,
   Users,
   LogIn,
-  UserCheck
+  Sun,
+  Moon,
+  Monitor,
+  Palette,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
-export default function Settings({ connection, onRefreshStatus, onRefreshAllData, onOpenLogin, onOpenUsersAdmin }) {
+const THEME_OPTIONS = [
+  { id: 'light', label: 'Claro', Icon: Sun },
+  { id: 'dark', label: 'Oscuro', Icon: Moon },
+  { id: 'system', label: 'Sistema', Icon: Monitor },
+];
+
+export default function Settings({
+  connection,
+  onRefreshStatus,
+  onRefreshAllData,
+  onOpenLogin,
+  onOpenUsersAdmin,
+}) {
   const { currentUser, isAdmin, adminEmail } = useAuth();
+  const { mode, setMode } = useTheme();
   const [settings, setSettings] = useState({
     appId: '',
     clientSecret: '',
@@ -140,124 +155,166 @@ export default function Settings({ connection, onRefreshStatus, onRefreshAllData
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      
-      {/* Header */}
+    <div className="page max-w-4xl">
+      {/* ---------------- Header ---------------- */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Conexión con Mercado Libre & Credenciales</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-          Configura tus claves oficiales de la API de Mercado Libre para sincronizar tu catálogo, ventas y envíos.
+        <h1 className="page-title">Conexión & credenciales</h1>
+        <p className="page-sub">
+          Configurá tus claves oficiales de la API de Mercado Libre para sincronizar catálogo,
+          ventas y envíos.
         </p>
       </div>
 
-      {/* Status Feedback Message */}
+      {/* ---------------- Feedback ---------------- */}
       {statusMsg && (
         <div
-          className={`p-4 rounded-xl flex items-center justify-between text-xs font-medium ${
+          className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-xs font-semibold ${
             statusMsg.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border border-rose-200'
+              ? 'border-success/30 bg-success-soft text-success'
+              : 'border-danger/30 bg-danger-soft text-danger'
           }`}
+          role="status"
         >
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             {statusMsg.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertCircle className="h-4 w-4 shrink-0" />
             )}
             <span>{statusMsg.text}</span>
           </div>
-          <button onClick={() => setStatusMsg(null)} className="text-xs font-bold hover:underline">
+          <button
+            type="button"
+            onClick={() => setStatusMsg(null)}
+            className="shrink-0 text-[11px] font-bold underline-offset-2 hover:underline"
+          >
             Cerrar
           </button>
         </div>
       )}
 
-      {/* SaaS User Account & Security Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3.5">
+      {/* ---------------- SaaS account ---------------- */}
+      <div className="card card-pad flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3.5">
           <img
-            src={currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.email || 'admin'}`}
+            src={
+              currentUser?.avatar ||
+              `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.email || 'admin'}`
+            }
             alt=""
-            className="w-12 h-12 rounded-2xl bg-yellow-400 p-0.5 border border-yellow-500/30 shrink-0"
+            className="h-12 w-12 shrink-0 rounded-2xl border border-brand/40 bg-brand p-0.5"
           />
-          <div>
-            <div className="flex items-center space-x-2">
-              <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-sm font-extrabold text-ink">
                 {currentUser?.name || currentUser?.email || 'Usuario SaaS'}
               </h3>
               {isAdmin ? (
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-yellow-400 text-slate-950 uppercase">
-                  SuperAdmin
-                </span>
+                <span className="badge badge-brand">SuperAdmin</span>
               ) : (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 uppercase">
-                  Autorizado
-                </span>
+                <span className="badge badge-success">Autorizado</span>
               )}
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{currentUser?.email || adminEmail}</p>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-              {isAdmin 
-                ? 'Tienes el control total de seguridad y autorización para nuevas cuentas que ingresen.' 
+            <p className="mt-0.5 truncate font-mono text-xs text-ink-muted">
+              {currentUser?.email || adminEmail}
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              {isAdmin
+                ? 'Tenés el control total de seguridad y autorización para nuevas cuentas.'
                 : `Cuenta autorizada por el administrador (${adminEmail}).`}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {isAdmin && (
-            <button
-              onClick={onOpenUsersAdmin}
-              className="px-3.5 py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black rounded-xl text-xs flex items-center space-x-1.5 transition shadow-xs"
-            >
-              <Users className="w-4 h-4" />
-              <span>Aprobar Usuarios</span>
+            <button type="button" onClick={onOpenUsersAdmin} className="btn btn-primary btn-sm">
+              <Users className="h-4 w-4" />
+              <span>Aprobar usuarios</span>
             </button>
           )}
 
-          <button
-            onClick={onOpenLogin}
-            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs flex items-center space-x-1.5 transition"
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Cambiar Cuenta</span>
+          <button type="button" onClick={onOpenLogin} className="btn btn-outline btn-sm">
+            <LogIn className="h-3.5 w-3.5" />
+            <span>Cambiar cuenta</span>
           </button>
         </div>
       </div>
 
-      {/* Active Connected Account Status Card */}
+      {/* ---------------- Appearance ---------------- */}
+      <section className="card">
+        <div className="card-head">
+          <div className="flex items-start gap-3">
+            <span className="kpi-icon kpi-icon-accent">
+              <Palette className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="card-title">Apariencia</h2>
+              <p className="card-sub">Se guarda en este navegador y se aplica al instante.</p>
+            </div>
+          </div>
+        </div>
+        <div className="card-body flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed text-ink-muted sm:max-w-sm">
+            Con <b className="font-bold text-ink">Sistema</b> el panel sigue automáticamente la
+            preferencia de tu sistema operativo.
+          </p>
+          <div className="segmented shrink-0" role="group" aria-label="Tema de la interfaz">
+            {THEME_OPTIONS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMode(id)}
+                aria-pressed={mode === id}
+                className={`segmented-btn flex items-center gap-1.5 ${
+                  mode === id ? 'segmented-btn-active' : ''
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- ML connection state ---------------- */}
       {connection?.connected ? (
-        <div className="bg-gradient-to-tr from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start space-x-4">
-              <div className="p-3 bg-emerald-500 rounded-2xl text-white shadow-md shadow-emerald-200">
-                <ShieldCheck className="w-7 h-7" />
-              </div>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h3 className="font-extrabold text-lg text-emerald-950">
-                    Cuenta Conectada: @{connection.nickname}
+        <div className="card card-accent overflow-hidden">
+          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <span className="kpi-icon kpi-icon-success h-12 w-12">
+                <ShieldCheck className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-base font-extrabold tracking-tight text-ink">
+                    Conectado como @{connection.nickname}
                   </h3>
-                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
-                    ACTIVA
+                  <span className="badge badge-success">
+                    <span className="h-1.5 w-1.5 animate-pulse-ring rounded-full bg-success" />
+                    Activa
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-emerald-800">
-                  <span>User ID: <b>#{connection.userId}</b></span>
-                  <span>•</span>
-                  <span>País / Sitio: <b>{connection.siteId}</b></span>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
+                  <span>
+                    User ID: <b className="tabular font-bold text-ink">#{connection.userId}</b>
+                  </span>
+                  <span className="text-ink-subtle">•</span>
+                  <span>
+                    Sitio: <b className="font-bold text-ink">{connection.siteId}</b>
+                  </span>
                   {connection.permalink && (
                     <>
-                      <span>•</span>
+                      <span className="text-ink-subtle">•</span>
                       <a
                         href={connection.permalink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center space-x-1 text-emerald-900 hover:underline font-semibold"
+                        className="link inline-flex items-center gap-1"
                       >
-                        <span>Ver Perfil ML</span>
-                        <ExternalLink className="w-3 h-3" />
+                        <span>Ver perfil en ML</span>
+                        <ExternalLink className="h-3 w-3" />
                       </a>
                     </>
                   )}
@@ -266,252 +323,301 @@ export default function Settings({ connection, onRefreshStatus, onRefreshAllData
             </div>
 
             <button
+              type="button"
               onClick={handleDisconnect}
               disabled={disconnecting}
-              className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-2 self-start sm:self-auto shadow-sm"
+              className="btn btn-danger-soft btn-sm shrink-0 self-start sm:self-auto"
             >
-              <Trash2 className="w-4 h-4 text-rose-500" />
-              <span>{disconnecting ? 'Desvinculando...' : 'Desvincular Cuenta'}</span>
+              <Trash2 className="h-4 w-4" />
+              <span>{disconnecting ? 'Desvinculando…' : 'Desvincular cuenta'}</span>
             </button>
           </div>
         </div>
       ) : (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-xs text-amber-900 flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-5">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
           <div>
-            <p className="font-bold text-sm text-amber-950">No hay cuenta vinculada en este momento</p>
-            <p className="mt-0.5 text-amber-800 leading-relaxed">
-              Para operar con publicaciones, stock y envíos reales, completa las credenciales de tu aplicación a continuación o ingresa directamente tu Access Token.
+            <p className="text-sm font-bold text-ink">No hay ninguna cuenta vinculada</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+              Para operar con publicaciones, stock y envíos reales, completá las credenciales de tu
+              aplicación o ingresá directamente tu Access Token.
             </p>
           </div>
         </div>
       )}
 
-      {/* Method 1: OAuth 2.0 Official Flow */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
-        <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
-          <div className="p-2 bg-yellow-100 rounded-xl text-yellow-900">
-            <Key className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-900">
-              Método 1: Conexión Automática OAuth 2.0 (Recomendado)
-            </h2>
-            <p className="text-xs text-slate-500">
-              Permite auto-renovación de tokens sin necesidad de volver a ingresar claves manualmente.
-            </p>
+      {/* ---------------- Method 1: OAuth 2.0 ---------------- */}
+      <section className="card">
+        <div className="card-head">
+          <div className="flex items-start gap-3">
+            <span className="kpi-icon kpi-icon-brand">
+              <Key className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="card-title">
+                Método 1 · Conexión automática OAuth 2.0
+                <span className="badge badge-success ml-1">Recomendado</span>
+              </h2>
+              <p className="card-sub">
+                Renueva los tokens automáticamente, sin volver a cargar claves a mano.
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Step by step helper */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-2">
-          <h4 className="font-bold text-slate-900 flex items-center space-x-1.5">
-            <HelpCircle className="w-4 h-4 text-yellow-600" />
-            <span>¿Cómo obtener tus credenciales en Mercado Libre?</span>
-          </h4>
-          <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-1 leading-relaxed">
-            <li>
-              Ingresa al{' '}
-              <a
-                href="https://developers.mercadolibre.com.ar/devcenter"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 font-semibold hover:underline inline-flex items-center space-x-0.5"
-              >
-                <span>DevCenter de Mercado Libre</span>
-                <ExternalLink className="w-3 h-3 inline ml-0.5" />
-              </a>{' '}
-              con tu cuenta de vendedor.
-            </li>
-            <li>Haz clic en <b>Crear una aplicación</b>.</li>
-            <li>
-              En el campo <b>Redirect URI</b> (URL de retorno), coloca exactamente:
-              <div className="flex items-center space-x-2 my-1.5 font-mono bg-white border border-slate-300 p-2 rounded-lg text-slate-900 font-semibold">
-                <span className="truncate">{settings.redirectUri}</span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(settings.redirectUri)}
-                  className="p-1 text-slate-500 hover:text-slate-900"
-                  title="Copiar URI"
+        <div className="card-body space-y-5">
+          {/* Step-by-step helper */}
+          <div className="rounded-2xl border border-line bg-muted/60 p-4">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold text-ink">
+              <HelpCircle className="h-4 w-4 text-brand-500" />
+              <span>¿Cómo obtener tus credenciales en Mercado Libre?</span>
+            </h4>
+            <ol className="mt-2.5 list-inside list-decimal space-y-1.5 pl-1 text-xs leading-relaxed text-ink-muted">
+              <li>
+                Ingresá al{' '}
+                <a
+                  href="https://developers.mercadolibre.com.ar/devcenter"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link inline-flex items-center gap-0.5"
                 >
-                  {copiedRedirect ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                </button>
+                  <span>DevCenter de Mercado Libre</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>{' '}
+                con tu cuenta de vendedor.
+              </li>
+              <li>
+                Hacé clic en <b className="font-bold text-ink">Crear una aplicación</b>.
+              </li>
+              <li>
+                En <b className="font-bold text-ink">Redirect URI</b> (URL de retorno) pegá
+                exactamente:
+                <div className="my-2 flex items-center gap-2 rounded-lg border border-line bg-card px-2.5 py-2">
+                  <span className="truncate font-mono text-[11px] font-semibold text-ink">
+                    {settings.redirectUri}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(settings.redirectUri)}
+                    title="Copiar URI"
+                    aria-label="Copiar URI"
+                    className="btn btn-ghost btn-icon-sm ml-auto shrink-0"
+                  >
+                    {copiedRedirect ? (
+                      <Check className="h-4 w-4 text-success" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </li>
+              <li>
+                Copiá tu <b className="font-bold text-ink">APP ID</b> y{' '}
+                <b className="font-bold text-ink">Client Secret</b> y pegalos abajo.
+              </li>
+            </ol>
+          </div>
+
+          {/* Credentials form */}
+          <form onSubmit={handleSaveSettings} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="field">
+                <label className="label" htmlFor="ml-app-id">
+                  APP ID (Client ID) <span className="text-danger">*</span>
+                </label>
+                <input
+                  id="ml-app-id"
+                  type="text"
+                  placeholder="Ej: 5829104820192841"
+                  value={settings.appId}
+                  onChange={(e) => setSettings({ ...settings, appId: e.target.value })}
+                  className="input font-mono"
+                />
               </div>
-            </li>
-            <li>Copia tu <b>APP ID (Client ID)</b> y <b>Client Secret</b> y pégalos a continuación:</li>
-          </ol>
-        </div>
 
-        {/* Credentials Form */}
-        <form onSubmit={handleSaveSettings} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                APP ID (Client ID) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Ej: 5829104820192841"
-                value={settings.appId}
-                onChange={(e) => setSettings({ ...settings, appId: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
-              />
+              <div className="field">
+                <label className="label" htmlFor="ml-client-secret">
+                  Client Secret Key <span className="text-danger">*</span>
+                </label>
+                <input
+                  id="ml-client-secret"
+                  type="password"
+                  placeholder="••••••••••••••••••••••••"
+                  value={settings.clientSecret}
+                  onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
+                  className="input font-mono"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Client Secret Key <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="password"
-                placeholder="••••••••••••••••••••••••••••••••"
-                value={settings.clientSecret}
-                onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="field">
+                <label className="label" htmlFor="ml-site">
+                  País / sitio de Mercado Libre
+                </label>
+                <select
+                  id="ml-site"
+                  value={settings.siteId}
+                  onChange={(e) => setSettings({ ...settings, siteId: e.target.value })}
+                  className="select"
+                >
+                  <option value="MLA">Argentina (MLA)</option>
+                  <option value="MLB">Brasil (MLB)</option>
+                  <option value="MLM">México (MLM)</option>
+                  <option value="MLC">Chile (MLC)</option>
+                  <option value="MLU">Uruguay (MLU)</option>
+                  <option value="MCO">Colombia (MCO)</option>
+                  <option value="MPE">Perú (MPE)</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label className="label" htmlFor="ml-threshold">
+                  Umbral de alerta de stock bajo
+                </label>
+                <input
+                  id="ml-threshold"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={settings.lowStockThreshold}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      lowStockThreshold: parseInt(e.target.value, 10) || 5,
+                    })
+                  }
+                  className="input tabular"
+                />
+                <p className="help">Se avisa cuando una publicación baja de estas unidades.</p>
+              </div>
             </div>
 
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                País / Sitio de Mercado Libre
-              </label>
-              <select
-                value={settings.siteId}
-                onChange={(e) => setSettings({ ...settings, siteId: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={handleConnectOAuth}
+                className="btn btn-primary btn-lg w-full sm:w-auto"
               >
-                <option value="MLA">Argentina (MLA)</option>
-                <option value="MLB">Brasil (MLB)</option>
-                <option value="MLM">México (MLM)</option>
-                <option value="MLC">Chile (MLC)</option>
-                <option value="MLU">Uruguay (MLU)</option>
-                <option value="MCO">Colombia (MCO)</option>
-                <option value="MPE">Perú (MPE)</option>
-              </select>
-            </div>
+                <Zap className="h-4 w-4 fill-current" />
+                <span>Conectar con Mercado Libre</span>
+              </button>
 
+              <button
+                type="submit"
+                disabled={savingSettings}
+                className="btn btn-outline w-full sm:w-auto"
+              >
+                {savingSettings ? 'Guardando…' : 'Guardar credenciales'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {/* ---------------- Method 2: direct token ---------------- */}
+      <section className="card">
+        <div className="card-head">
+          <div className="flex items-start gap-3">
+            <span className="kpi-icon kpi-icon-accent">
+              <Lock className="h-5 w-5" />
+            </span>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Umbral de Alerta de Stock Bajo (Unidades)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                value={settings.lowStockThreshold}
-                onChange={(e) => setSettings({ ...settings, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
-              />
+              <h2 className="card-title">Método 2 · Ingreso directo de Access Token</h2>
+              <p className="card-sub">
+                Útil si ya generaste un token desde Postman o la consola de Mercado Libre.
+              </p>
             </div>
-          </div>
-
-          <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
-            <button
-              type="button"
-              onClick={handleConnectOAuth}
-              className="w-full sm:w-auto px-6 py-3 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-extrabold text-xs sm:text-sm rounded-xl transition shadow-md flex items-center justify-center space-x-2"
-            >
-              <Zap className="w-4 h-4 fill-slate-950" />
-              <span>Conectar con Mercado Libre (OAuth 2.0)</span>
-            </button>
-
-            <button
-              type="submit"
-              disabled={savingSettings}
-              className="w-full sm:w-auto px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
-            >
-              {savingSettings ? 'Guardando...' : 'Guardar Credenciales'}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Method 2: Direct Token Input */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
-          <div className="p-2 bg-blue-100 rounded-xl text-blue-900">
-            <Lock className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-900">
-              Método 2: Ingreso Directo de Access Token
-            </h2>
-            <p className="text-xs text-slate-500">
-              Ideal si ya tienes un Access Token generado mediante Postman o la consola de Mercado Libre.
-            </p>
           </div>
         </div>
 
-        <form onSubmit={handleSaveManualToken} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Access Token (Bearer APP_USR-...) <span className="text-rose-500">*</span>
+        <form onSubmit={handleSaveManualToken} className="card-body space-y-4">
+          <div className="field">
+            <label className="label" htmlFor="ml-access-token">
+              Access Token (Bearer APP_USR-…) <span className="text-danger">*</span>
             </label>
             <textarea
+              id="ml-access-token"
               rows={2}
-              placeholder="APP_USR-..."
+              placeholder="APP_USR-…"
               value={directToken.accessToken}
               onChange={(e) => setDirectToken({ ...directToken, accessToken: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
+              className="textarea font-mono"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Refresh Token (Opcional)
+          <div className="field">
+            <label className="label" htmlFor="ml-refresh-token">
+              Refresh Token (opcional)
             </label>
             <input
+              id="ml-refresh-token"
               type="text"
-              placeholder="TG-..."
+              placeholder="TG-…"
               value={directToken.refreshToken}
               onChange={(e) => setDirectToken({ ...directToken, refreshToken: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
+              className="input font-mono"
             />
-          </div>
-
-          <button
-            type="submit"
-            disabled={savingToken}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition flex items-center space-x-2 shadow-sm"
-          >
-            <span>{savingToken ? 'Validando Token...' : 'Vincular con Access Token'}</span>
-          </button>
-        </form>
-      </div>
-
-      {/* Neon PostgreSQL Cloud Database Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
-          <div className="p-2 bg-emerald-100 rounded-xl text-emerald-900">
-            <ShieldCheck className="w-5 h-5 text-emerald-700" />
-          </div>
-          <div>
-            <h2 className="font-bold text-base text-slate-900">
-              Base de Datos Cloud: Neon PostgreSQL
-            </h2>
-            <p className="text-xs text-slate-500">
-              Persistencia permanente de tokens OAuth, listas de empaque, estados de calidad y logs de escaneo.
+            <p className="help">
+              Guardarlo permite renovar el acceso automáticamente cuando el token expire.
             </p>
           </div>
+
+          <button type="submit" disabled={savingToken} className="btn btn-dark">
+            <span>{savingToken ? 'Validando token…' : 'Vincular con Access Token'}</span>
+          </button>
+        </form>
+      </section>
+
+      {/* ---------------- Database ---------------- */}
+      <section className="card">
+        <div className="card-head">
+          <div className="flex items-start gap-3">
+            <span className="kpi-icon kpi-icon-success">
+              <ShieldCheck className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="card-title">Base de datos cloud · Neon PostgreSQL</h2>
+              <p className="card-sub">
+                Persistencia de tokens OAuth, listas de empaque, control de calidad y logs de
+                escaneo.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2.5">
-          <p className="text-slate-700 leading-relaxed font-medium">
-            El sistema cuenta con soporte nativo para <b>Neon PostgreSQL Serverless</b>. Si agregas tu variable <code className="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[11px]">DATABASE_URL</code> en el panel de Vercel (o en tu archivo <code className="bg-slate-200 px-1.5 py-0.5 rounded font-mono text-[11px]">.env</code>), se crearán y sincronizarán automáticamente las tablas:
-          </p>
-          <ul className="list-disc list-inside text-slate-600 space-y-1 pl-1 font-mono text-[11px]">
-            <li><b>ml_auth</b>: Tokens de acceso y credenciales @GRANA3DOK</li>
-            <li><b>ml_settings</b>: Preferencias y configuración de la tienda</li>
-            <li><b>ml_packing_metadata</b>: Control de calidad, checklist y estados de empaque</li>
-            <li><b>ml_scan_logs</b>: Auditoría histórica de cada escaneo QR y código de barras</li>
-          </ul>
+        <div className="card-body">
+          <div className="rounded-2xl border border-line bg-muted/60 p-4 text-xs leading-relaxed text-ink-muted">
+            <p>
+              El sistema soporta <b className="font-bold text-ink">Neon PostgreSQL Serverless</b>.
+              Si agregás la variable{' '}
+              <code className="rounded bg-card px-1.5 py-0.5 font-mono text-[11px] text-ink ring-1 ring-line">
+                DATABASE_URL
+              </code>{' '}
+              en el panel de Vercel (o en tu archivo{' '}
+              <code className="rounded bg-card px-1.5 py-0.5 font-mono text-[11px] text-ink ring-1 ring-line">
+                .env
+              </code>
+              ), se crean y sincronizan automáticamente las tablas:
+            </p>
+            <ul className="mt-2.5 space-y-1.5 pl-1">
+              {[
+                ['ml_auth', 'Tokens de acceso y credenciales @GRANA3DOK'],
+                ['ml_settings', 'Preferencias y configuración de la tienda'],
+                ['ml_packing_metadata', 'Control de calidad, checklist y estados de empaque'],
+                ['ml_scan_logs', 'Auditoría histórica de cada escaneo QR y código de barras'],
+              ].map(([table, description]) => (
+                <li key={table} className="flex flex-wrap items-baseline gap-x-2">
+                  <code className="rounded bg-card px-1.5 py-0.5 font-mono text-[11px] font-bold text-ink ring-1 ring-line">
+                    {table}
+                  </code>
+                  <span>{description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
-
+      </section>
     </div>
   );
 }

@@ -334,106 +334,90 @@ export default function MobileTerminal({ connection }) {
   });
 
   return (
-    <div className="space-y-4 pb-24 max-w-lg mx-auto animate-in fade-in select-none">
+    <div className="page pb-24">
+      <div className="mx-auto w-full max-w-lg select-none space-y-4">
       
-      {/* Top Mobile Warehouse Card */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white p-5 rounded-3xl shadow-xl border border-slate-700/80">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-yellow-400 text-slate-950 rounded-2xl shadow-md">
-              <Smartphone className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-1.5">
-                <h2 className="font-extrabold text-base text-white tracking-tight">Terminal Móvil de Empaque</h2>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              </div>
-              <p className="text-[11px] text-slate-300 font-medium">Lector en depósito @GRANA3DOK</p>
-            </div>
+      {/* Encabezado de la terminal */}
+      <div className="page-head">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink shadow-glow">
+            <Smartphone className="h-5 w-5" />
           </div>
-
-          {/* Sound & Voice Controls */}
-          <div className="flex items-center space-x-1.5">
-            <button
-              onClick={() => setVoiceEnabled(!voiceEnabled)}
-              className={`p-2.5 rounded-2xl border transition ${
-                voiceEnabled 
-                  ? 'bg-yellow-400/20 border-yellow-400/50 text-yellow-300' 
-                  : 'bg-slate-800/80 border-slate-700 text-slate-500'
-              }`}
-              title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
-            >
-              {voiceEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-            </button>
-
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
-              title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
-            >
-              {soundEnabled ? <Volume2 className="w-4 h-4 text-yellow-400" /> : <VolumeX className="w-4 h-4" />}
-            </button>
+          <div>
+            <h1 className="page-title">Terminal Móvil de Empaque</h1>
+            <p className="page-sub flex items-center gap-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success animate-pulse-ring" aria-hidden="true" />
+              <span>Lector en depósito @GRANA3DOK</span>
+            </p>
           </div>
         </div>
 
-        {/* Packing Progress */}
-        <div className="mt-4 pt-3.5 border-t border-slate-700/80">
-          <div className="flex justify-between items-end mb-1.5">
-            <div>
-              <span className="text-2xl font-black text-white">{packedCount}</span>
-              <span className="text-xs text-slate-300 font-bold ml-1">/ {shipments.length} paquetes</span>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-black px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/30">
-                {progressPercent}% Completado
-              </span>
-            </div>
-          </div>
+        {/* Controles de sonido y voz */}
+        <div className="toolbar">
+          <button
+            onClick={() => setVoiceEnabled(!voiceEnabled)}
+            className={`btn btn-icon ${voiceEnabled ? 'btn-soft' : 'btn-outline'}`}
+            title={voiceEnabled ? 'Voz en español activada' : 'Voz silenciada'}
+          >
+            {voiceEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          </button>
 
-          <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/60">
-            <div 
-              className="h-full bg-gradient-to-r from-amber-400 via-yellow-400 to-emerald-400 transition-all duration-500 rounded-full shadow-sm"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+          <button
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={`btn btn-icon ${soundEnabled ? 'btn-soft' : 'btn-outline'}`}
+            title={soundEnabled ? 'Silenciar beeps' : 'Activar sonido'}
+          >
+            {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </button>
         </div>
       </div>
 
-      {/* Tabs Switcher */}
-      <div className="grid grid-cols-3 gap-1 bg-slate-200/70 dark:bg-slate-800/80 p-1 rounded-2xl font-bold text-xs">
+        {/* Packing Progress */}
+      {/* Progreso de empaque */}
+      <div className="card card-pad space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle">Paquetes empaquetados</p>
+            <p className="mt-1.5 font-display text-3xl font-extrabold leading-none text-ink">
+              <span className="tabular">{packedCount}</span>
+              <span className="ml-1 text-sm font-bold text-ink-muted">
+                / <span className="tabular">{shipments.length}</span> paquetes
+              </span>
+            </p>
+          </div>
+          <span className="badge badge-brand">
+            <span className="tabular">{progressPercent}%</span> Completado
+          </span>
+        </div>
+
+        <div className="progress">
+          <div className="progress-bar" style={{ width: `${progressPercent}%` }} />
+        </div>
+      </div>
+
+      {/* Selector de pestañas */}
+      <div className="segmented grid w-full grid-cols-3 gap-1">
         <button
           onClick={() => setActiveTab('scanner')}
-          className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
-            activeTab === 'scanner'
-              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs font-extrabold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
+          className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'scanner' ? 'segmented-btn-active' : ''}`}
         >
-          <QrCode className="w-3.5 h-3.5 text-yellow-500" />
+          <QrCode className="h-4 w-4" />
           <span>Escanear</span>
         </button>
 
         <button
           onClick={() => setActiveTab('shipments')}
-          className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
-            activeTab === 'shipments'
-              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs font-extrabold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
+          className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'shipments' ? 'segmented-btn-active' : ''}`}
         >
-          <Layers className="w-3.5 h-3.5 text-blue-500" />
-          <span>Envíos ({pendingCount})</span>
+          <Layers className="h-4 w-4" />
+          <span>Envíos <span className="tabular">({pendingCount})</span></span>
         </button>
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`py-2 rounded-xl transition flex items-center justify-center space-x-1.5 ${
-            activeTab === 'history'
-              ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs font-extrabold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-          }`}
+          className={`segmented-btn flex items-center justify-center gap-1.5 py-2.5 text-xs ${activeTab === 'history' ? 'segmented-btn-active' : ''}`}
         >
-          <History className="w-3.5 h-3.5 text-emerald-500" />
+          <History className="h-4 w-4" />
           <span>Historial</span>
         </button>
       </div>

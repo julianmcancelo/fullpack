@@ -58,6 +58,7 @@ export default {
           strong: token('--brand-strong'),
           ink: token('--brand-ink'),
           soft: token('--brand-soft'),
+          'soft-ink': token('--brand-soft-ink'),
           50: '#FFFDF0',
           100: '#FFF9D6',
           200: '#FFF2A8',

@@ -34,7 +34,7 @@ export default function App() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [usersAdminModalOpen, setUsersAdminModalOpen] = useState(false);
   const [shipments, setShipments] = useState([]);
-  
+
   // Real-time new sale listener state
   const [newSaleAlert, setNewSaleAlert] = useState(null);
   const knownOrderIdsRef = useRef(new Set());
@@ -84,10 +84,7 @@ export default function App() {
   const refreshAll = async () => {
     try {
       setRefreshing(true);
-      await Promise.all([
-        loadConnectionStatus(),
-        loadDashboardStats(),
-      ]);
+      await Promise.all([loadConnectionStatus(), loadDashboardStats()]);
     } finally {
       setRefreshing(false);
     }
@@ -108,19 +105,19 @@ export default function App() {
 
         if (!initialOrdersLoadedRef.current) {
           // Initialize known orders set
-          orders.forEach(o => knownOrderIdsRef.current.add(String(o.id)));
+          orders.forEach((o) => knownOrderIdsRef.current.add(String(o.id)));
           initialOrdersLoadedRef.current = true;
           return;
         }
 
         // Check for any newly incoming order not in known set
-        const brandNewOrders = orders.filter(o => !knownOrderIdsRef.current.has(String(o.id)));
+        const brandNewOrders = orders.filter((o) => !knownOrderIdsRef.current.has(String(o.id)));
 
         if (brandNewOrders.length > 0) {
           const latestOrder = brandNewOrders[0];
-          
+
           // Add all to known set
-          brandNewOrders.forEach(o => knownOrderIdsRef.current.add(String(o.id)));
+          brandNewOrders.forEach((o) => knownOrderIdsRef.current.add(String(o.id)));
 
           // Trigger celebratory sale feedback
           playCashRegisterSound();
@@ -131,7 +128,11 @@ export default function App() {
           setNewSaleAlert(latestOrder);
 
           // Browser Push Notification
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          if (
+            typeof window !== 'undefined' &&
+            'Notification' in window &&
+            Notification.permission === 'granted'
+          ) {
             const item = (latestOrder.order_items && latestOrder.order_items[0]?.item) || {};
             new Notification('🎉 ¡Nueva Venta en Mercado Libre!', {
               body: `${item.title || 'Producto'} - $${(latestOrder.total_amount || 0).toLocaleString('es-AR')} ARS (Comprador: ${latestOrder.buyer?.nickname || 'Cliente'})`,
@@ -161,17 +162,19 @@ export default function App() {
           onOpenLogin={() => setLoginModalOpen(true)}
           onOpenRequestAccess={() => setLoginModalOpen(true)}
         />
-        <LoginModal
-          isOpen={loginModalOpen}
-          onClose={() => setLoginModalOpen(false)}
-        />
+        <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
       </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-yellow-400 selection:text-slate-950">
-      
+    <div className="relative isolate flex min-h-screen flex-col bg-app font-sans text-ink transition-colors selection:bg-brand selection:text-brand-ink">
+      {/* Ambient brand glow behind the whole app */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[420px] bg-radial-brand opacity-70"
+      />
+
       {/* Live New Sale Celebration Toast */}
       <NewSaleNotification
         sale={newSaleAlert}
@@ -196,16 +199,10 @@ export default function App() {
       />
 
       {/* SaaS Login & Google/Token Auth Modal */}
-      <LoginModal
-        isOpen={loginModalOpen}
-        onClose={() => setLoginModalOpen(false)}
-      />
+      <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
 
       {/* SaaS Users Admin Approval Modal */}
-      <UsersAdminModal
-        isOpen={usersAdminModalOpen}
-        onClose={() => setUsersAdminModalOpen(false)}
-      />
+      <UsersAdminModal isOpen={usersAdminModalOpen} onClose={() => setUsersAdminModalOpen(false)} />
 
       {/* Top Header */}
       <Navbar
@@ -219,18 +216,12 @@ export default function App() {
       />
 
       {/* Main App Layout */}
-      <div className="flex-1 max-w-[1700px] w-full mx-auto flex flex-col md:flex-row pb-16 md:pb-0 px-2 sm:px-4 lg:px-6">
-        
+      <div className="mx-auto flex w-full max-w-[1700px] flex-1 flex-col px-3 pb-24 sm:px-4 md:flex-row md:pb-0 lg:px-6">
         {/* Desktop Sidebar */}
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          connection={connection}
-        />
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} connection={connection} />
 
         {/* Dynamic Page Content */}
-        <main className="flex-1 p-3 sm:p-5 lg:p-6 min-w-0">
-          
+        <main className="min-w-0 flex-1 px-0 py-4 sm:py-5 lg:px-8 lg:py-7">
           {/* Show connection warning if not connected and not on settings page */}
           {!connection?.connected && activeTab !== 'settings' && (
             <ConnectionBanner onGoToSettings={() => setActiveTab('settings')} />
@@ -247,31 +238,18 @@ export default function App() {
           )}
 
           {activeTab === 'stock' && (
-            <StockManager
-              connection={connection}
-              onRefreshData={loadDashboardStats}
-            />
+            <StockManager connection={connection} onRefreshData={loadDashboardStats} />
           )}
 
-          {activeTab === 'orders' && (
-            <OrdersManager connection={connection} />
-          )}
+          {activeTab === 'orders' && <OrdersManager connection={connection} />}
 
-          {activeTab === 'shipments' && (
-            <ShipmentsManager connection={connection} />
-          )}
+          {activeTab === 'shipments' && <ShipmentsManager connection={connection} />}
 
-          {activeTab === 'mobile_terminal' && (
-            <MobileTerminal connection={connection} />
-          )}
+          {activeTab === 'mobile_terminal' && <MobileTerminal connection={connection} />}
 
-          {activeTab === 'questions' && (
-            <QuestionsManager connection={connection} />
-          )}
+          {activeTab === 'questions' && <QuestionsManager connection={connection} />}
 
-          {activeTab === 'calculator' && (
-            <FeeCalculator />
-          )}
+          {activeTab === 'calculator' && <FeeCalculator />}
 
           {activeTab === 'settings' && (
             <Settings
@@ -282,9 +260,7 @@ export default function App() {
               onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
             />
           )}
-
         </main>
-
       </div>
 
       {/* Dedicated Native-style Bottom Mobile Navigation Bar */}
@@ -293,7 +269,6 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenScanner={() => setScannerOpen(true)}
       />
-
     </div>
   );
 }

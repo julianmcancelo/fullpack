@@ -4,25 +4,19 @@ import {
   Filter, 
   Package, 
   ExternalLink, 
-  Save, 
   Check, 
-  AlertTriangle, 
   Play, 
   Pause, 
   Layers, 
   RefreshCw,
   Edit2,
   X,
-  Plus,
-  Minus,
   Download,
   Percent,
   CheckSquare,
   Square,
   ChevronLeft,
   ChevronRight,
-  TrendingUp,
-  Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
@@ -270,179 +264,215 @@ export default function StockManager({ connection, onRefreshData }) {
   );
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header and Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="page">
+
+      {/* Encabezado y acciones */}
+      <div className="page-head">
         <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Gestión de Stock y Publicaciones</h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-yellow-100 text-yellow-900 border border-yellow-300 text-xs font-bold">
-              {items.length} productos
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="page-title">Gestión de Stock y Publicaciones</h1>
+            <span className="badge badge-brand tabular">{items.length} productos</span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Sincronización bidireccional directa con Mercado Libre. Edita precios, stock y estados en vivo.
+          <p className="page-sub">
+            Sincronización bidireccional directa con Mercado Libre. Editá precios, stock y estados en vivo.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          
-          {/* Export to CSV */}
+        <div className="toolbar">
+          {/* Exportar a CSV */}
           <button
             onClick={handleExportCsv}
             disabled={items.length === 0}
-            className="px-3.5 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs"
+            className="btn btn-outline btn-sm"
             title="Exportar inventario a formato Excel / CSV"
           >
-            <Download className="w-4 h-4 text-slate-500" />
+            <Download className="h-4 w-4 text-ink-subtle" />
             <span className="hidden sm:inline">Exportar CSV</span>
           </button>
 
-          {/* Refresh button */}
+          {/* Recargar publicaciones */}
           <button
             onClick={loadItems}
-            className="px-3.5 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs"
+            className="btn btn-outline btn-sm"
+            title="Recargar publicaciones desde Mercado Libre"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-yellow-600' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand-600' : 'text-ink-subtle'}`} />
             <span>Recargar</span>
           </button>
         </div>
       </div>
 
-      {/* Action / Alert Banner */}
+      {/* Aviso de resultado */}
       {actionMessage && (
         <div
-          className={`p-4 rounded-xl flex items-center justify-between text-xs font-medium ${
+          className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3.5 text-xs font-semibold shadow-card ${
             actionMessage.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border border-rose-200'
+              ? 'border-success/30 bg-success-soft text-success'
+              : 'border-danger/30 bg-danger-soft text-danger'
           }`}
         >
           <span>{actionMessage.text}</span>
-          <button onClick={() => setActionMessage(null)} className="p-1 hover:opacity-75">
-            <X className="w-4 h-4" />
+          <button
+            onClick={() => setActionMessage(null)}
+            className="rounded-lg p-1 transition hover:bg-card/60"
+            title="Cerrar aviso"
+            aria-label="Cerrar aviso"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Bulk Operations Toolbar (When items are selected) */}
+      {/* Acciones masivas (con publicaciones seleccionadas) */}
       {selectedItemIds.length > 0 && (
-        <div className="bg-slate-900 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
-          <div className="flex items-center space-x-2 text-xs">
-            <CheckSquare className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{selectedItemIds.length} publicaciones seleccionadas</span>
+        <div className="stat-strip animate-fade-in justify-between border-brand/40 bg-brand-soft">
+          <div className="flex items-center gap-2 text-xs font-bold text-ink">
+            <CheckSquare className="h-4 w-4 text-brand-600" />
+            <span className="tabular">{selectedItemIds.length} publicaciones seleccionadas</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowBulkPriceModal(true)}
-              className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-bold rounded-xl text-xs flex items-center space-x-1 transition"
+              className="btn btn-primary btn-sm"
             >
-              <Percent className="w-3.5 h-3.5" />
+              <Percent className="h-3.5 w-3.5" />
               <span>Ajustar % Precios</span>
             </button>
 
             <button
               onClick={() => handleBulkStatus('paused')}
               disabled={applyingBulk}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl text-xs transition"
+              className="btn btn-outline btn-sm"
             >
-              Pausar Seleccionadas
+              Pausar seleccionadas
             </button>
 
             <button
               onClick={() => handleBulkStatus('active')}
               disabled={applyingBulk}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs transition"
+              className="btn btn-success btn-sm"
             >
-              Activar Seleccionadas
+              Activar seleccionadas
             </button>
 
             <button
               onClick={() => setSelectedItemIds([])}
-              className="p-1.5 text-slate-400 hover:text-white"
+              className="btn btn-ghost btn-icon-sm"
               title="Deseleccionar todas"
+              aria-label="Deseleccionar todas"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* Filters & Search Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-        
-        {/* Search Bar */}
+      {/* Buscador y filtros */}
+      <div className="card flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+        {/* Buscador */}
         <form onSubmit={handleSearchSubmit} className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
           <input
             type="text"
             placeholder="Buscar por título, SKU o ID de publicación (MLA...)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition"
+            className="input input-search"
           />
         </form>
 
-        {/* Status Filter Buttons */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { id: 'all', label: 'Todas' },
-            { id: 'active', label: 'Activas' },
-            { id: 'paused', label: 'Pausadas' },
-            { id: 'low_stock', label: 'Stock Bajo' },
-            { id: 'out_of_stock', label: 'Agotadas' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                statusFilter === tab.id
-                  ? 'bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950 shadow-xs font-bold'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Filtros de estado */}
+        <div className="flex min-w-0 items-center gap-2">
+          <Filter className="h-3.5 w-3.5 shrink-0 text-ink-subtle" aria-hidden="true" />
+          <div className="no-scrollbar -mx-0.5 overflow-x-auto px-0.5">
+            <div className="segmented">
+              {[
+                { id: 'all', label: 'Todas' },
+                { id: 'active', label: 'Activas' },
+                { id: 'paused', label: 'Pausadas' },
+                { id: 'low_stock', label: 'Stock Bajo' },
+                { id: 'out_of_stock', label: 'Agotadas' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStatusFilter(tab.id)}
+                  className={`segmented-btn whitespace-nowrap ${
+                    statusFilter === tab.id ? 'segmented-btn-active' : ''
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-
       </div>
 
-      {/* Listings Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+      {/* Tabla de publicaciones */}
+      <div className="card overflow-hidden">
+        <div className="table-wrap rounded-none border-0 bg-transparent shadow-none">
+          <table className="table">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-200/80 dark:border-slate-800 uppercase tracking-wider font-semibold">
-                <th className="py-3.5 px-4 w-10">
+              <tr>
+                <th className="w-10">
                   <button
                     onClick={handleToggleSelectAll}
-                    className="p-1 hover:text-slate-900 text-slate-400"
+                    className="btn btn-ghost btn-icon-sm"
+                    title="Seleccionar todas las publicaciones de la página"
+                    aria-label="Seleccionar todas las publicaciones de la página"
                   >
                     {selectedItemIds.length === paginatedItems.length && paginatedItems.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-yellow-600" />
+                      <CheckSquare className="h-4 w-4 text-brand-600" />
                     ) : (
-                      <Square className="w-4 h-4" />
+                      <Square className="h-4 w-4" />
                     )}
                   </button>
                 </th>
-                <th className="py-3.5 px-3">Publicación</th>
-                <th className="py-3.5 px-3">Estado</th>
-                <th className="py-3.5 px-3">Precio</th>
-                <th className="py-3.5 px-3">Stock Disponible</th>
-                <th className="py-3.5 px-3">Ventas</th>
-                <th className="py-3.5 px-3">Logística</th>
-                <th className="py-3.5 px-3 text-right">Acciones</th>
+                <th>Publicación</th>
+                <th>Estado</th>
+                <th>Precio</th>
+                <th>Stock Disponible</th>
+                <th>Ventas</th>
+                <th>Logística</th>
+                <th className="text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-400">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
-                    <p className="text-xs">Consultando publicaciones en vivo con Mercado Libre...</p>
+                  <td colSpan={8} className="py-6">
+                    <div className="space-y-3" aria-hidden="true">
+                      <div className="flex items-center gap-3">
+                        <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+                        <div className="flex-1 space-y-2">
+                          <div className="skeleton h-3 w-2/3" />
+                          <div className="skeleton h-3 w-1/3" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+                        <div className="flex-1 space-y-2">
+                          <div className="skeleton h-3 w-1/2" />
+                          <div className="skeleton h-3 w-1/4" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+                        <div className="flex-1 space-y-2">
+                          <div className="skeleton h-3 w-3/5" />
+                          <div className="skeleton h-3 w-1/3" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+                        <div className="flex-1 space-y-2">
+                          <div className="skeleton h-3 w-2/5" />
+                          <div className="skeleton h-3 w-1/5" />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="sr-only">Consultando publicaciones en vivo con Mercado Libre...</p>
                   </td>
                 </tr>
               ) : paginatedItems.length > 0 ? (
@@ -456,51 +486,52 @@ export default function StockManager({ connection, onRefreshData }) {
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-slate-50/80 transition ${
-                        isSelected ? 'bg-yellow-50/50' : ''
-                      }`}
+                      className={isSelected ? 'bg-brand-soft/70' : undefined}
                     >
-                      {/* Checkbox */}
-                      <td className="py-3 px-4">
+                      {/* Selección */}
+                      <td>
                         <button
                           onClick={() => handleToggleSelectItem(item.id)}
-                          className="p-1 text-slate-400 hover:text-slate-900"
+                          className="btn btn-ghost btn-icon-sm"
+                          title="Seleccionar publicación"
+                          aria-label="Seleccionar publicación"
                         >
                           {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-yellow-600" />
+                            <CheckSquare className="h-4 w-4 text-brand-600" />
                           ) : (
-                            <Square className="w-4 h-4" />
+                            <Square className="h-4 w-4" />
                           )}
                         </button>
                       </td>
 
-                      {/* Product details */}
-                      <td className="py-3 px-3 max-w-sm">
-                        <div className="flex items-start space-x-3">
+                      {/* Detalle del producto */}
+                      <td className="td-strong max-w-sm">
+                        <div className="flex items-start gap-3">
                           {item.thumbnail ? (
                             <img
                               src={item.thumbnail}
                               alt=""
-                              className="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0 bg-white shadow-xs"
+                              className="h-11 w-11 shrink-0 rounded-xl border border-line bg-muted object-cover shadow-xs"
                             />
                           ) : (
-                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
-                              <Package className="w-6 h-6 text-slate-400" />
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-muted text-ink-subtle">
+                              <Package className="h-5 w-5" />
                             </div>
                           )}
                           <div className="min-w-0">
-                            <h4 className="font-bold text-slate-900 line-clamp-2 leading-snug">
+                            <h4 className="line-clamp-2 font-bold leading-snug text-ink">
                               {item.title}
                             </h4>
-                            <div className="flex items-center space-x-2 mt-1">
-                              <span className="text-[11px] font-mono text-slate-400">{item.id}</span>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-[11px] font-medium tabular text-ink-subtle">{item.id}</span>
                               {hasVariations && (
                                 <button
                                   onClick={() => setSelectedVariationItem(item)}
-                                  className="inline-flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+                                  className="badge badge-info transition hover:brightness-[1.03]"
+                                  title="Ver y editar variantes"
                                 >
-                                  <Layers className="w-3 h-3" />
-                                  <span>{item.variations.length} variantes</span>
+                                  <Layers className="h-3 w-3" />
+                                  <span className="tabular">{item.variations.length} variantes</span>
                                 </button>
                               )}
                             </div>
@@ -508,65 +539,65 @@ export default function StockManager({ connection, onRefreshData }) {
                         </div>
                       </td>
 
-                      {/* Status */}
-                      <td className="py-3 px-3">
+                      {/* Estado */}
+                      <td>
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            item.status === 'active'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-slate-100 text-slate-600'
+                          className={`badge ${
+                            item.status === 'active' ? 'badge-success' : 'badge-neutral'
                           }`}
                         >
                           {item.status === 'active' ? 'Activa' : 'Pausada'}
                         </span>
                       </td>
 
-                      {/* Price Edit */}
-                      <td className="py-3 px-3">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-400 font-semibold">$</span>
+                      {/* Edición de precio */}
+                      <td>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-ink-subtle">$</span>
                           <input
                             type="number"
                             value={currentPriceVal}
                             onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                            className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-yellow-400 outline-none"
+                            className="input input-sm tabular w-24 font-bold"
                           />
                           {editingPrice[item.id] !== undefined && (
                             <button
                               onClick={() => saveItemPrice(item)}
                               disabled={isSaving}
                               title="Guardar precio en ML"
-                              className="p-1.5 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-slate-900 transition shadow-xs"
+                              aria-label="Guardar precio en Mercado Libre"
+                              className="btn btn-primary btn-icon-sm"
                             >
-                              <Check className="w-3.5 h-3.5" />
+                              <Check className="h-3.5 w-3.5" />
                             </button>
                           )}
                         </div>
                       </td>
 
-                      {/* Stock Edit */}
-                      <td className="py-3 px-3">
+                      {/* Edición de stock */}
+                      <td>
                         {hasVariations ? (
                           <button
                             onClick={() => setSelectedVariationItem(item)}
-                            className="text-xs font-bold text-blue-600 hover:underline flex items-center space-x-1 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200"
+                            className="btn btn-soft-accent btn-xs"
+                            title="Editar el stock de las variantes"
                           >
-                            <span>{item.available_quantity} unidades</span>
-                            <Edit2 className="w-3 h-3 text-blue-500" />
+                            <span className="tabular">{item.available_quantity} unidades</span>
+                            <Edit2 className="h-3 w-3" />
                           </button>
                         ) : (
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center gap-1.5">
                             <input
                               type="number"
                               min="0"
                               value={currentStockVal}
                               onChange={(e) => handleStockChange(item.id, e.target.value)}
-                              className={`w-20 px-2 py-1 border rounded-lg text-xs font-extrabold outline-none focus:ring-2 focus:ring-yellow-400 ${
+                              className={`input input-sm tabular w-20 text-center font-bold ${
                                 currentStockVal === 0
-                                  ? 'bg-rose-50 border-rose-300 text-rose-700'
+                                  ? 'border-danger/40 bg-danger-soft text-danger'
                                   : currentStockVal <= 5
-                                  ? 'bg-amber-50 border-amber-300 text-amber-800'
-                                  : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
+                                  ? 'border-warning/40 bg-warning-soft text-warning'
+                                  : ''
                               }`}
                             />
                             {editingStock[item.id] !== undefined && (
@@ -574,25 +605,26 @@ export default function StockManager({ connection, onRefreshData }) {
                                 onClick={() => saveItemStock(item)}
                                 disabled={isSaving}
                                 title="Guardar stock en ML"
-                                className="p-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition shadow-xs"
+                                aria-label="Guardar stock en Mercado Libre"
+                                className="btn btn-primary btn-icon-sm"
                               >
-                                <Check className="w-3.5 h-3.5" />
+                                <Check className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </div>
                         )}
                       </td>
 
-                      {/* Sold quantity */}
-                      <td className="py-3 px-3">
-                        <span className="text-xs font-semibold text-slate-700">
+                      {/* Ventas */}
+                      <td>
+                        <span className="tabular font-semibold text-ink-muted">
                           {item.sold_quantity || 0} u.
                         </span>
                       </td>
 
-                      {/* Shipping Mode */}
-                      <td className="py-3 px-3">
-                        <span className="text-[11px] font-bold text-slate-700">
+                      {/* Modo de envío */}
+                      <td>
+                        <span className="badge badge-neutral">
                           {item.shipping?.logistic_type === 'fulfillment'
                             ? '⚡ FULL'
                             : item.shipping?.logistic_type === 'self_service'
@@ -603,38 +635,40 @@ export default function StockManager({ connection, onRefreshData }) {
                         </span>
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          
-                          {/* Toggle pause / unpause */}
+                      {/* Acciones */}
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+
+                          {/* Pausar / activar */}
                           <button
                             onClick={() => handleToggleStatus(item)}
                             disabled={isSaving}
                             title={item.status === 'active' ? 'Pausar publicación en ML' : 'Activar publicación en ML'}
-                            className={`p-1.5 rounded-lg border text-xs font-semibold transition ${
+                            aria-label={item.status === 'active' ? 'Pausar publicación en Mercado Libre' : 'Activar publicación en Mercado Libre'}
+                            className={`btn btn-outline btn-icon-sm ${
                               item.status === 'active'
-                                ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
-                                : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                                ? 'text-warning'
+                                : 'text-success'
                             }`}
                           >
                             {item.status === 'active' ? (
-                              <Pause className="w-3.5 h-3.5" />
+                              <Pause className="h-3.5 w-3.5" />
                             ) : (
-                              <Play className="w-3.5 h-3.5" />
+                              <Play className="h-3.5 w-3.5" />
                             )}
                           </button>
 
-                          {/* Link to live ML listing */}
+                          {/* Ver publicación en Mercado Libre */}
                           {item.permalink && (
                             <a
                               href={item.permalink}
                               target="_blank"
                               rel="noopener noreferrer"
                               title="Ver en Mercado Libre"
-                              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+                              aria-label="Ver en Mercado Libre"
+                              className="btn btn-outline btn-icon-sm text-ink-muted"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ExternalLink className="h-3.5 w-3.5" />
                             </a>
                           )}
                         </div>
@@ -645,9 +679,14 @@ export default function StockManager({ connection, onRefreshData }) {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-400">
-                    <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-xs">No se encontraron publicaciones con los filtros seleccionados.</p>
+                  <td colSpan={8}>
+                    <div className="empty">
+                      <div className="empty-icon">
+                        <Package className="h-6 w-6" />
+                      </div>
+                      <p className="empty-title">Sin publicaciones</p>
+                      <p className="empty-text">No se encontraron publicaciones con los filtros seleccionados.</p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -655,92 +694,97 @@ export default function StockManager({ connection, onRefreshData }) {
           </table>
         </div>
 
-        {/* Pagination Bar */}
+        {/* Paginación */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+          <div className="card-foot text-xs text-ink-muted">
             <div>
-              Mostrando página <b>{currentPage}</b> de <b>{totalPages}</b> ({items.length} publicaciones en total)
+              Mostrando página <b className="tabular text-ink">{currentPage}</b> de{' '}
+              <b className="tabular text-ink">{totalPages}</b> ({items.length} publicaciones en total)
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg disabled:opacity-40 font-semibold hover:bg-slate-100 flex items-center space-x-1"
+                className="btn btn-outline btn-sm"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="h-3.5 w-3.5" />
                 <span>Anterior</span>
               </button>
               <button
                 onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg disabled:opacity-40 font-semibold hover:bg-slate-100 flex items-center space-x-1"
+                className="btn btn-outline btn-sm"
               >
                 <span>Siguiente</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Bulk Price Percentage Modal */}
+      {/* Modal: ajuste masivo de precios */}
       {showBulkPriceModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <h3 className="font-bold text-base text-slate-900 flex items-center space-x-2">
-                <Percent className="w-5 h-5 text-yellow-600" />
+        <div className="overlay">
+          <div className="modal">
+            <div className="modal-head">
+              <h3 className="modal-title flex items-center gap-2">
+                <Percent className="h-5 w-5 text-brand-600" />
                 <span>Ajustar Precios Masivamente</span>
               </h3>
-              <button onClick={() => setShowBulkPriceModal(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => setShowBulkPriceModal(false)}
+                className="modal-close"
+                title="Cerrar"
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="py-4 space-y-4 text-xs">
-              <p className="text-slate-600">
-                Se actualizarán los precios de <b>{selectedItemIds.length} publicaciones seleccionadas</b> directamente en Mercado Libre.
+            <div className="modal-body text-xs">
+              <p className="text-ink-muted">
+                Se actualizarán los precios de <b className="text-ink">{selectedItemIds.length} publicaciones seleccionadas</b> directamente en Mercado Libre.
               </p>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Porcentaje de variación (%):
-                </label>
-                <div className="flex items-center space-x-2">
+              <div className="field">
+                <label className="label">Porcentaje de variación (%):</label>
+                <div className="input-group">
                   <input
                     type="number"
                     value={bulkPercentage}
                     onChange={(e) => setBulkPercentage(parseFloat(e.target.value) || 0)}
                     placeholder="Ej: 10 o -5"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-yellow-400"
+                    className="input tabular font-bold"
                   />
-                  <span className="font-bold text-slate-600">%</span>
+                  <span className="flex items-center px-1 font-bold text-ink-muted">%</span>
                 </div>
-                <div className="flex items-center space-x-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
                   {[5, 10, 15, 20, -5].map((val) => (
                     <button
                       key={val}
                       onClick={() => setBulkPercentage(val)}
-                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
+                      className="btn btn-outline btn-xs tabular"
                     >
                       {val > 0 ? `+${val}%` : `${val}%`}
                     </button>
                   ))}
                 </div>
+                <p className="help">Usá valores negativos para bajar los precios.</p>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+            <div className="modal-foot">
               <button
                 onClick={() => setShowBulkPriceModal(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl font-semibold text-xs hover:bg-slate-50"
+                className="btn btn-outline btn-sm"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleApplyBulkPrice}
                 disabled={applyingBulk}
-                className="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-sm"
+                className="btn btn-primary btn-sm"
               >
                 <span>{applyingBulk ? 'Actualizando...' : 'Aplicar Cambio en Mercado Libre'}</span>
               </button>
@@ -749,29 +793,31 @@ export default function StockManager({ connection, onRefreshData }) {
         </div>
       )}
 
-      {/* Variations Modal */}
+      {/* Modal: variantes de la publicación */}
       {selectedVariationItem && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-xl border border-slate-200 max-h-[90vh] flex flex-col">
-            
-            <div className="flex items-start justify-between pb-4 border-b border-slate-200">
-              <div>
-                <h3 className="font-bold text-base text-slate-900">
+        <div className="overlay">
+          <div className="modal modal-lg">
+
+            <div className="modal-head">
+              <div className="min-w-0">
+                <h3 className="modal-title">
                   Variantes de Publicación
                 </h3>
-                <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                <p className="modal-sub line-clamp-1">
                   {selectedVariationItem.title}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedVariationItem(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="modal-close"
+                title="Cerrar"
+                aria-label="Cerrar"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="py-4 overflow-y-auto space-y-3 flex-1">
+            <div className="modal-body">
               {selectedVariationItem.variations?.map((v) => {
                 const varLabel = v.attribute_combinations
                   ? v.attribute_combinations.map((a) => `${a.name}: ${a.value_name}`).join(' | ')
@@ -782,22 +828,22 @@ export default function StockManager({ connection, onRefreshData }) {
                 return (
                   <div
                     key={v.id}
-                    className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-3"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-muted/60 p-3.5"
                   >
-                    <div>
-                      <h5 className="font-bold text-xs text-slate-900">{varLabel}</h5>
-                      <span className="text-[10px] font-mono text-slate-400">{v.id}</span>
+                    <div className="min-w-0">
+                      <h5 className="text-xs font-bold text-ink">{varLabel}</h5>
+                      <span className="font-mono text-[10px] tabular text-ink-subtle">{v.id}</span>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[11px] text-slate-500 font-medium">Stock:</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-ink-muted">Stock:</span>
                         <input
                           type="number"
                           min="0"
                           value={currentVarStock}
                           onChange={(e) => handleStockChange(v.id, e.target.value)}
-                          className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-yellow-400"
+                          className="input input-sm tabular w-20 text-center font-bold"
                         />
                       </div>
 
@@ -805,7 +851,7 @@ export default function StockManager({ connection, onRefreshData }) {
                         <button
                           onClick={() => saveItemStock(selectedVariationItem, v.id)}
                           disabled={isSaving}
-                          className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition"
+                          className="btn btn-primary btn-xs"
                         >
                           Guardar
                         </button>
@@ -816,10 +862,10 @@ export default function StockManager({ connection, onRefreshData }) {
               })}
             </div>
 
-            <div className="pt-4 border-t border-slate-200 flex justify-end">
+            <div className="modal-foot">
               <button
                 onClick={() => setSelectedVariationItem(null)}
-                className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800"
+                className="btn btn-outline btn-sm"
               >
                 Cerrar
               </button>

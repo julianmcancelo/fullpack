@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  ShieldCheck, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  RefreshCw, 
-  UserCheck, 
-  UserX, 
-  Mail, 
-  Calendar,
+import {
+  Users,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  RefreshCw,
   AlertTriangle,
-  X
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -50,7 +45,9 @@ export default function UsersAdminModal({ isOpen, onClose }) {
       setSuccessMsg(null);
 
       await api.approveUser(adminEmail, userId, newStatus);
-      setSuccessMsg(`Usuario ${newStatus === 'active' ? 'aprobado y activado' : 'actualizado'} con éxito.`);
+      setSuccessMsg(
+        `Usuario ${newStatus === 'active' ? 'aprobado y activado' : 'actualizado'} con éxito.`,
+      );
       await loadUsers();
     } catch (err) {
       setError(err.message);
@@ -61,103 +58,106 @@ export default function UsersAdminModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const pendingUsers = users.filter(u => u.status === 'pending');
-  const activeUsers = users.filter(u => u.status === 'active');
-  const rejectedUsers = users.filter(u => u.status === 'rejected');
+  const pendingUsers = users.filter((u) => u.status === 'pending');
+  const activeUsers = users.filter((u) => u.status === 'active');
+  const rejectedUsers = users.filter((u) => u.status === 'rejected');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 sm:p-8 relative overflow-hidden max-h-[90vh] flex flex-col">
-        
+    <div className="overlay">
+      <div className="modal modal-lg">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-yellow-400 flex items-center justify-center text-slate-950 font-black shadow-xs">
-              <Users className="w-5 h-5" />
-            </div>
+        <div className="modal-head">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-gradient text-brand-ink shadow-glow">
+              <Users className="h-5 w-5" strokeWidth={2.5} />
+            </span>
             <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                Panel de Autorización de Cuentas (SaaS)
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Solo tú ({adminEmail}) tienes permiso para aprobar y autorizar acceso.
+              <h2 className="modal-title">Autorización de cuentas</h2>
+              <p className="modal-sub">
+                Sólo vos (<b className="font-bold text-ink-muted">{adminEmail}</b>) podés aprobar y
+                autorizar el acceso.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 transition"
-          >
-            <X className="w-4 h-4" />
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="modal-close">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Feedback messages */}
-        {error && (
-          <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 text-xs font-semibold">
-            {error}
-          </div>
-        )}
-        {successMsg && (
-          <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
-            {successMsg}
+        {/* Feedback */}
+        {(error || successMsg) && (
+          <div className="space-y-2 px-5 pt-4">
+            {error && (
+              <div className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-xs font-semibold text-danger">
+                <AlertTriangle className="mt-px h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            {successMsg && (
+              <div className="flex items-start gap-2 rounded-xl border border-success/30 bg-success-soft px-3.5 py-2.5 text-xs font-semibold text-success">
+                <CheckCircle2 className="mt-px h-4 w-4 shrink-0" />
+                <span>{successMsg}</span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-6">
-          
-          {/* Section: Pending Approvals (High Priority) */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-amber-500" />
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  Cuentas Esperando Aprobación ({pendingUsers.length})
-                </h3>
-              </div>
-            </div>
+        {/* Content */}
+        <div className="modal-body">
+          {/* Pending approvals */}
+          <section>
+            <header className="mb-3 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-warning" />
+              <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-ink">
+                Esperando aprobación
+              </h3>
+              <span className="badge badge-warning">{pendingUsers.length}</span>
+            </header>
 
             {pendingUsers.length > 0 ? (
               <div className="space-y-2.5">
                 {pendingUsers.map((u) => (
                   <div
                     key={u.id}
-                    className="p-4 rounded-2xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    className="flex flex-col gap-3 rounded-2xl border border-warning/40 bg-warning-soft p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <img
                         src={u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.email}`}
                         alt=""
-                        className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-amber-300 p-0.5 shrink-0"
+                        className="avatar h-10 w-10 border-warning/40 bg-card p-0.5"
                       />
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-sm text-slate-900 dark:text-white">{u.name || u.email}</span>
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 uppercase">
-                            Pendiente
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-bold text-ink">
+                            {u.name || u.email}
                           </span>
+                          <span className="badge badge-warning">Pendiente</span>
                         </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 font-mono mt-0.5">{u.email}</p>
+                        <p className="mt-0.5 truncate font-mono text-[11px] text-ink-muted">
+                          {u.email}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <button
+                        type="button"
                         onClick={() => handleUpdateStatus(u.id, 'active')}
                         disabled={actionLoading === u.id}
-                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center space-x-1 transition shadow-xs"
+                        className="btn btn-success btn-sm"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Aprobar y Habilitar</span>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Aprobar y habilitar</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleUpdateStatus(u.id, 'rejected')}
                         disabled={actionLoading === u.id}
-                        className="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 font-bold text-xs transition"
+                        className="btn btn-danger-soft btn-sm"
                       >
-                        <XCircle className="w-3.5 h-3.5" />
+                        <XCircle className="h-3.5 w-3.5" />
                         <span>Rechazar</span>
                       </button>
                     </div>
@@ -165,54 +165,57 @@ export default function UsersAdminModal({ isOpen, onClose }) {
                 ))}
               </div>
             ) : (
-              <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
-                No hay solicitudes de cuentas pendientes en este momento.
+              <div className="rounded-2xl border border-dashed border-line bg-muted/50 px-4 py-5 text-center text-xs text-ink-subtle">
+                No hay solicitudes pendientes en este momento.
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Section: Active Users */}
-          <div>
-            <div className="flex items-center space-x-2 mb-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                Usuarios Autorizados & Activos ({activeUsers.length})
+          {/* Active users */}
+          <section>
+            <header className="mb-3 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-ink">
+                Usuarios autorizados
               </h3>
-            </div>
+              <span className="badge badge-success">{activeUsers.length}</span>
+            </header>
 
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+            <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
               {activeUsers.map((u) => {
                 const isSuperAdmin = u.email === adminEmail;
                 return (
-                  <div key={u.id} className="p-3.5 bg-white dark:bg-slate-900 flex items-center justify-between gap-3">
-                    <div className="flex items-center space-x-3 min-w-0">
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between gap-3 bg-card p-3.5 transition-colors hover:bg-muted/60"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
                       <img
                         src={u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.email}`}
                         alt=""
-                        className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0"
+                        className="avatar h-8 w-8 bg-muted"
                       />
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{u.name || u.email}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-xs font-bold text-ink">
+                            {u.name || u.email}
+                          </span>
                           {isSuperAdmin ? (
-                            <span className="text-[9px] font-black px-2 py-0.5 rounded bg-yellow-400 text-slate-950 uppercase">
-                              SuperAdmin (Tú)
-                            </span>
+                            <span className="badge badge-brand">SuperAdmin (vos)</span>
                           ) : (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 uppercase">
-                              Activo
-                            </span>
+                            <span className="badge badge-success">Activo</span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-400 truncate">{u.email}</p>
+                        <p className="truncate text-[11px] text-ink-subtle">{u.email}</p>
                       </div>
                     </div>
 
                     {!isSuperAdmin && (
                       <button
+                        type="button"
                         onClick={() => handleUpdateStatus(u.id, 'rejected')}
                         disabled={actionLoading === u.id}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:border-rose-300 text-[11px] font-bold transition"
+                        className="btn btn-ghost btn-xs shrink-0 hover:text-danger"
                       >
                         Suspender
                       </button>
@@ -221,21 +224,19 @@ export default function UsersAdminModal({ isOpen, onClose }) {
                 );
               })}
             </div>
-          </div>
-
+          </section>
         </div>
 
         {/* Footer */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-          <button
-            onClick={loadUsers}
-            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center space-x-2 transition"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Actualizar Lista</span>
+        <div className="modal-foot">
+          <button type="button" onClick={loadUsers} className="btn btn-outline btn-sm">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Actualizar lista</span>
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-primary btn-sm">
+            Listo
           </button>
         </div>
-
       </div>
     </div>
   );

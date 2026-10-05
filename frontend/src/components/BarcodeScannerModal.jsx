@@ -7,8 +7,6 @@ import {
   AlertCircle, 
   X, 
   Zap, 
-  Package, 
-  Sparkles, 
   RefreshCw,
   Volume2
 } from 'lucide-react';
@@ -154,22 +152,22 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+    <div className="overlay p-3 sm:p-4">
       <div 
-        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="modal modal-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
-            <div className="p-2 bg-yellow-400/20 text-yellow-600 dark:text-yellow-400 rounded-xl">
-              <QrCode className="w-5 h-5" />
+        {/* Cabecera */}
+        <div className="modal-head items-center">
+          <div className="flex items-center gap-3">
+            <div className="kpi-icon kpi-icon-brand">
+              <QrCode className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+              <h3 className="modal-title">
                 Escáner de Empaque & Verificación
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="modal-sub">
                 Lee el QR o código de barras de la etiqueta de Mercado Envíos
               </p>
             </div>
@@ -177,73 +175,84 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
 
           <button 
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            aria-label="Cerrar el escáner"
+            title="Cerrar"
+            className="modal-close"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="px-4 sm:px-5 pt-3 flex items-center space-x-2 border-b border-slate-100 dark:border-slate-800">
+        {/* Selector de modo */}
+        <div className="flex items-center gap-1 border-b border-line px-4 pt-3 sm:px-5">
           <button
             onClick={() => setActiveTab('camera')}
-            className={`pb-2.5 px-3 font-bold text-xs flex items-center space-x-1.5 transition border-b-2 ${
+            className={`flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 pb-2.5 text-xs font-bold transition ${
               activeTab === 'camera'
-                ? 'border-yellow-400 text-slate-950 dark:text-white'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                ? 'border-brand text-ink'
+                : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
-            <Camera className="w-4 h-4" />
+            <Camera className="h-4 w-4" />
             <span>Cámara en Vivo (Móvil / Web)</span>
           </button>
 
           <button
             onClick={() => setActiveTab('laser')}
-            className={`pb-2.5 px-3 font-bold text-xs flex items-center space-x-1.5 transition border-b-2 ${
+            className={`flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 pb-2.5 text-xs font-bold transition ${
               activeTab === 'laser'
-                ? 'border-yellow-400 text-slate-950 dark:text-white'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                ? 'border-brand text-ink'
+                : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
-            <Barcode className="w-4 h-4" />
+            <Barcode className="h-4 w-4" />
             <span>Pistola Lectora / Manual</span>
           </button>
         </div>
 
-        {/* Body content */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        {/* Cuerpo */}
+        <div className="modal-body">
           
-          {/* Camera View */}
+          {/* Vista de cámara */}
           {activeTab === 'camera' && (
             <div className="space-y-3">
-              <div className="relative rounded-2xl overflow-hidden border-2 border-dashed border-yellow-400/60 bg-slate-950 flex flex-col items-center justify-center min-h-[260px]">
-                <div id="reader" className="w-full h-full max-w-xs"></div>
+              <div className="relative flex min-h-[260px] flex-col items-center justify-center overflow-hidden rounded-2xl border border-line bg-slate-950">
+                <div id="reader" className="h-full w-full max-w-xs"></div>
+
+                {/* Marco de escaneo con esquinas de marca */}
+                <div className="pointer-events-none absolute inset-6 rounded-2xl" aria-hidden="true">
+                  <span className="absolute left-0 top-0 h-8 w-8 rounded-tl-xl border-l-2 border-t-2 border-brand" />
+                  <span className="absolute right-0 top-0 h-8 w-8 rounded-tr-xl border-r-2 border-t-2 border-brand" />
+                  <span className="absolute bottom-0 left-0 h-8 w-8 rounded-bl-xl border-b-2 border-l-2 border-brand" />
+                  <span className="absolute bottom-0 right-0 h-8 w-8 rounded-br-xl border-b-2 border-r-2 border-brand" />
+                </div>
+
                 {!isScanningCamera && !cameraError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs">
-                    <RefreshCw className="w-6 h-6 animate-spin text-yellow-400 mb-2" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-ink-subtle">
+                    <RefreshCw className="h-6 w-6 animate-spin text-brand" />
                     <span>Iniciando cámara...</span>
                   </div>
                 )}
               </div>
 
               {cameraError && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl flex items-start space-x-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning-soft p-3 text-xs text-warning">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{cameraError}</span>
                 </div>
               )}
 
-              <p className="text-center text-[11px] text-slate-400">
+              <p className="text-center text-[11px] text-ink-subtle">
                 Apunta la cámara al código QR o código de barras de la etiqueta impresa.
               </p>
             </div>
           )}
 
-          {/* Laser Gun / Manual View */}
+          {/* Vista pistola lectora / manual */}
           {activeTab === 'laser' && (
             <div className="space-y-4">
               <form onSubmit={handleLaserSubmit} className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="label">
                   Escanea con la pistola lectora o escribe el código:
                 </label>
                 <div className="relative">
@@ -254,20 +263,20 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
                     autoFocus
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-2 border-yellow-400 rounded-2xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400"
+                    className="input pr-28 font-bold"
                   />
                   <button
                     type="submit"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950 font-bold text-xs rounded-xl hover:opacity-90"
+                    className="btn btn-primary btn-sm absolute right-2 top-1/2 -translate-y-1/2"
                   >
                     Verificar
                   </button>
                 </div>
               </form>
 
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                <p className="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
-                  <Zap className="w-3.5 h-3.5 text-yellow-500" />
+              <div className="space-y-1 rounded-2xl border border-line bg-muted p-3.5 text-xs text-ink-muted">
+                <p className="flex items-center gap-1.5 font-bold text-ink">
+                  <Zap className="h-3.5 w-3.5 text-brand-600" />
                   <span>Modo Pistola de Código de Barras:</span>
                 </p>
                 <p className="text-[11px]">
@@ -277,35 +286,55 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
             </div>
           )}
 
-          {/* Last Scanned Live Result Feedback Card */}
+          {/* Resultado del último escaneo */}
           {lastScannedResult && (
             <div 
-              className={`p-4 rounded-2xl border transition-all animate-in zoom-in-95 ${
+              className={`card animate-pop ${
                 lastScannedResult.success
-                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100'
-                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700 text-rose-950 dark:text-rose-100'
+                  ? 'border-success/30 bg-card'
+                  : 'border-danger/30 bg-danger-soft'
               }`}
             >
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3 p-4">
                 {lastScannedResult.success ? (
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span className="kpi-icon kpi-icon-success shrink-0">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </span>
                 ) : (
-                  <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <span className="kpi-icon kpi-icon-danger shrink-0">
+                    <AlertCircle className="h-5 w-5" />
+                  </span>
                 )}
 
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-extrabold text-sm">
+                  <span className={`badge ${lastScannedResult.success ? 'badge-success' : 'badge-danger'}`}>
+                    {lastScannedResult.success ? 'Paquete verificado' : 'Sin coincidencias'}
+                  </span>
+
+                  <h4 className="mt-2 font-display text-sm font-extrabold text-ink">
                     {lastScannedResult.message}
                   </h4>
 
                   {lastScannedResult.shipment && (
-                    <div className="mt-2 pt-2 border-t border-emerald-200 dark:border-emerald-800/80 text-xs space-y-1">
-                      <p className="font-semibold text-emerald-900 dark:text-emerald-200">
-                        Comprador: <b>{lastScannedResult.shipment.buyer?.first_name ? `${lastScannedResult.shipment.buyer.first_name} ${lastScannedResult.shipment.buyer.last_name || ''}` : lastScannedResult.shipment.buyer?.nickname}</b>
-                      </p>
-                      <p className="text-[11px] text-emerald-800 dark:text-emerald-300 truncate">
-                        Artículos: {lastScannedResult.shipment.items?.map(it => `${it.quantity}x ${it.item?.title || 'Producto'}`).join(', ')}
-                      </p>
+                    <div className="mt-3 text-xs">
+                      <div className="flex items-start justify-between gap-3 border-b border-line py-2.5">
+                        <span className="text-ink-subtle">Comprador</span>
+                        <span className="text-right font-bold text-ink">
+                          {lastScannedResult.shipment.buyer?.first_name ? `${lastScannedResult.shipment.buyer.first_name} ${lastScannedResult.shipment.buyer.last_name || ''}` : lastScannedResult.shipment.buyer?.nickname}
+                        </span>
+                      </div>
+                      <div className="flex items-start justify-between gap-3 border-b border-line py-2.5">
+                        <span className="shrink-0 text-ink-subtle">Artículos</span>
+                        <span className="min-w-0 truncate text-right font-semibold text-ink-muted">
+                          {lastScannedResult.shipment.items?.map(it => `${it.quantity}x ${it.item?.title || 'Producto'}`).join(', ')}
+                        </span>
+                      </div>
+                      <div className="flex items-start justify-between gap-3 py-2.5">
+                        <span className="text-ink-subtle">Orden</span>
+                        <span className="tabular font-bold text-ink">
+                          #{lastScannedResult.shipment.order_id}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -315,15 +344,26 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
 
         </div>
 
-        {/* Footer */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-          <div className="flex items-center space-x-1.5 text-slate-400">
-            <Volume2 className="w-4 h-4 text-slate-500" />
-            <span className="text-[11px]">Sonido de confirmación activo</span>
+        {/* Pie */}
+        <div className="modal-foot justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="flex items-center gap-1.5 text-[11px] text-ink-subtle">
+              <Volume2 className="h-4 w-4 text-ink-muted" />
+              <span>Sonido de confirmación activo</span>
+            </span>
+            {lastScannedResult && (
+              <button
+                onClick={() => setLastScannedResult(null)}
+                className="btn btn-outline btn-sm"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Escanear otro
+              </button>
+            )}
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-xl font-bold"
+            className="btn btn-primary"
           >
             Listo / Cerrar
           </button>
