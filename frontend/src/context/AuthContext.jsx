@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { loginWithFirebaseGoogle, logoutFirebase, onAuthStateChanged, auth } from '../services/firebase';
 
 const AuthContext = createContext();
 
@@ -24,6 +25,30 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // Sync with Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser && fbUser.email) {
+        try {
+          const res = await api.googleLogin({
+            email: fbUser.email,
+            name: fbUser.displayName || fbUser.email.split('@')[0],
+            avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.email}`,
+            googleId: fbUser.uid,
+          });
+          if (res.user) {
+            setCurrentUser(res.user);
+            setSessionToken(res.token);
+          }
+        } catch (e) {
+          console.warn('Backend sync note on firebase auth state:', e.message);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('ml_saas_user', JSON.stringify(currentUser));
@@ -40,8 +65,21 @@ export function AuthProvider({ children }) {
     }
   }, [sessionToken]);
 
-  const loginWithGoogle = async (googleUser) => {
-    const res = await api.googleLogin(googleUser);
+  const loginWithGoogle = async () => {
+    // 1. Popup with Official Firebase Google Auth
+    const fbUser = await loginWithFirebaseGoogle();
+    if (!fbUser || !fbUser.email) {
+      throw new Error('No se pudo autenticar la cuenta de Google.');
+    }
+
+    // 2. Sync / Authorize in Backend & Neon Postgres
+    const res = await api.googleLogin({
+      email: fbUser.email,
+      name: fbUser.displayName || fbUser.email.split('@')[0],
+      avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fbUser.email}`,
+      googleId: fbUser.uid,
+    });
+
     if (res.user) {
       setCurrentUser(res.user);
       setSessionToken(res.token);
@@ -58,7 +96,10 @@ export function AuthProvider({ children }) {
     return res;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await logoutFirebase();
+    } catch {}
     setCurrentUser(null);
     setSessionToken(null);
     localStorage.removeItem('ml_saas_user');

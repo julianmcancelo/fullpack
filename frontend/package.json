@@ -12,6 +12,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "canvas-confetti": "^1.9.4",
+    "firebase": "^12.19.0",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^1.52.0",
     "papaparse": "^5.7.0",
