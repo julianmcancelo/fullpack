@@ -16,6 +16,7 @@ import MobileTerminal from './pages/MobileTerminal';
 import Settings from './pages/Settings';
 import LoginModal from './components/LoginModal';
 import UsersAdminModal from './components/UsersAdminModal';
+import LandingGate from './components/LandingGate';
 import { api } from './services/api';
 import { useAuth } from './context/AuthContext';
 import { playCashRegisterSound } from './utils/audio';
@@ -151,6 +152,22 @@ export default function App() {
     const interval = setInterval(checkNewOrders, 15000);
     return () => clearInterval(interval);
   }, [connection?.connected]);
+
+  // If user is not logged in, display the minimalist Landing Gate
+  if (!currentUser) {
+    return (
+      <>
+        <LandingGate
+          onOpenLogin={() => setLoginModalOpen(true)}
+          onOpenRequestAccess={() => setLoginModalOpen(true)}
+        />
+        <LoginModal
+          isOpen={loginModalOpen}
+          onClose={() => setLoginModalOpen(false)}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-yellow-400 selection:text-slate-950">

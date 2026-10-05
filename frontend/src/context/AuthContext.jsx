@@ -10,16 +10,7 @@ export function AuthProvider({ children }) {
     try {
       const saved = localStorage.getItem('ml_saas_user');
       if (saved) return JSON.parse(saved);
-      // Pre-seed default SuperAdmin for seamless experience
-      return {
-        id: 1,
-        email: ADMIN_EMAIL,
-        name: 'Julián Cancelo (Admin)',
-        role: 'admin',
-        status: 'active',
-        avatar: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
-        authProvider: 'google',
-      };
+      return null;
     } catch {
       return null;
     }
@@ -27,7 +18,7 @@ export function AuthProvider({ children }) {
 
   const [sessionToken, setSessionToken] = useState(() => {
     try {
-      return localStorage.getItem('ml_saas_token') || 'superadmin-session-active';
+      return localStorage.getItem('ml_saas_token') || null;
     } catch {
       return null;
     }
