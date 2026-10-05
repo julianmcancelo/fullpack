@@ -517,62 +517,46 @@ export default function MobileTerminal({ connection }) {
               </button>
             </form>
 
-          {/* DYNAMIC SCANNED RESULT FEEDBACK CARD */}
+          {/* Tarjeta de resultado del escaneo */}
           {lastScanned && (
-            <div 
-              className={`p-4 rounded-3xl border shadow-xl animate-in zoom-in-95 space-y-3 ${
+            <div className="card card-accent animate-pop overflow-hidden">
+              {/* Cabecera de estado */}
+              <div className={`flex items-start gap-3 border-b p-5 ${
                 lastScanned.status === 'NEWLY_PACKED'
-                  ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-400/40'
+                  ? 'border-success/30 bg-success-soft text-success'
                   : lastScanned.status === 'ALREADY_PACKED'
-                  ? 'bg-amber-500/15 dark:bg-amber-950/50 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 ring-2 ring-amber-400/40'
-                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
-              }`}
-            >
-              {/* Header result */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-2.5">
-                  {lastScanned.status === 'NEWLY_PACKED' && (
-                    <div className="p-2.5 bg-emerald-500 text-white rounded-2xl shadow-md">
-                      <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                  )}
-                  {lastScanned.status === 'ALREADY_PACKED' && (
-                    <div className="p-2.5 bg-amber-500 text-slate-950 rounded-2xl shadow-md animate-pulse">
-                      <AlertTriangle className="w-6 h-6" />
-                    </div>
-                  )}
-                  {lastScanned.status === 'NOT_FOUND' && (
-                    <div className="p-2.5 bg-rose-500 text-white rounded-2xl shadow-md">
-                      <AlertCircle className="w-6 h-6" />
-                    </div>
-                  )}
+                  ? 'border-warning/30 bg-warning-soft text-warning'
+                  : 'border-danger/30 bg-danger-soft text-danger'
+              }`}>
+                {lastScanned.status === 'NEWLY_PACKED' && (
+                  <CheckCircle2 className="h-8 w-8 shrink-0" />
+                )}
+                {lastScanned.status === 'ALREADY_PACKED' && (
+                  <AlertTriangle className="h-8 w-8 shrink-0 animate-pulse" />
+                )}
+                {lastScanned.status === 'NOT_FOUND' && (
+                  <AlertCircle className="h-8 w-8 shrink-0" />
+                )}
 
-                  <div>
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                      {lastScanned.status === 'NEWLY_PACKED' && '✅ ¡Nuevo Paquete Empaquetado!'}
-                      {lastScanned.status === 'ALREADY_PACKED' && '⚠️ ¡ATENCIÓN: PAQUETE YA LEÍDO!'}
-                      {lastScanned.status === 'NOT_FOUND' && '❌ Código No Encontrado'}
-                      {lastScanned.status === 'UNPACKED' && '↩️ Paquete Desmarcado'}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5">
-                      <Clock className="w-3 h-3 inline" />
-                      <span>{lastScanned.timestamp}</span>
-                      {lastScanned.scanCount > 1 && (
-                        <span className="font-bold text-amber-600 dark:text-amber-400">
-                          • Lectura #{lastScanned.scanCount}
-                        </span>
-                      )}
-                    </p>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-display text-base font-extrabold leading-tight text-current">
+                    {lastScanned.status === 'NEWLY_PACKED' && '¡Nuevo Paquete Empaquetado!'}
+                    {lastScanned.status === 'ALREADY_PACKED' && '¡ATENCIÓN: PAQUETE YA LEÍDO!'}
+                    {lastScanned.status === 'NOT_FOUND' && 'Código No Encontrado'}
+                    {lastScanned.status === 'UNPACKED' && 'Paquete Desmarcado'}
+                  </h3>
+                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold opacity-80">
+                    <Clock className="inline h-3 w-3" />
+                    <span className="tabular">{lastScanned.timestamp}</span>
+                    {lastScanned.scanCount > 1 && (
+                      <span className="font-extrabold">
+                        • Lectura #<span className="tabular">{lastScanned.scanCount}</span>
+                      </span>
+                    )}
+                  </p>
                 </div>
 
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black shadow-xs ${
-                  lastScanned.status === 'NEWLY_PACKED'
-                    ? 'bg-emerald-500 text-white'
-                    : lastScanned.status === 'ALREADY_PACKED'
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'bg-rose-500 text-white'
-                }`}>
+                <span className="badge badge-solid shrink-0">
                   {lastScanned.status === 'NEWLY_PACKED' && 'LISTO OK'}
                   {lastScanned.status === 'ALREADY_PACKED' && 'DUPLICADO'}
                   {lastScanned.status === 'NOT_FOUND' && 'NO ENCONTRADO'}
@@ -580,215 +564,227 @@ export default function MobileTerminal({ connection }) {
                 </span>
               </div>
 
-              {/* Message text */}
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                {lastScanned.message}
-              </p>
+              <div className="space-y-4 p-5">
+                {/* Mensaje del resultado */}
+                <p className="text-sm font-extrabold leading-snug text-ink">
+                  {lastScanned.message}
+                </p>
 
-              {/* Scanned Shipment Details & Actions */}
-              {lastScanned.shipment && (
-                <div className="bg-white/95 dark:bg-slate-900/95 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-500">Envío #{lastScanned.shipment.id}</span>
-                    <span className="font-black text-slate-900 dark:text-white">Orden #{lastScanned.shipment.order_id}</span>
-                  </div>
-
-                  {/* Items in order with big quantity badge */}
-                  <div className="space-y-2 pt-1">
-                    {(lastScanned.shipment.items || []).map((it, idx) => (
-                      <div key={idx} className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">
-                            {it.item?.title || 'Producto'}
-                          </p>
-                          {it.item?.seller_sku && (
-                            <p className="text-[10px] font-mono text-slate-500">
-                              SKU: <b>{it.item.seller_sku}</b>
-                            </p>
-                          )}
-                        </div>
-
-                        {/* HUGE QUANTITY BADGE TO PREVENT WAREHOUSE MISTAKES */}
-                        <div className="px-3 py-1.5 rounded-xl bg-yellow-400 text-slate-950 font-black text-sm shrink-0 shadow-xs text-center">
-                          x{it.quantity}
-                        </div>
+                {/* Paquete activo */}
+                {lastScanned.shipment && (
+                  <div className="overflow-hidden rounded-2xl border border-line bg-muted">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-subtle">Orden</span>
+                        <span className="font-display text-lg font-extrabold tabular text-ink">#{lastScanned.shipment.order_id}</span>
                       </div>
-                    ))}
-                  </div>
+                      <span className="badge badge-neutral">
+                        {lastScanned.shipment.logistic_type === 'self_service' ? 'FLEX' : lastScanned.shipment.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
+                      </span>
+                    </div>
 
-                  <div className="text-[11px] text-slate-600 dark:text-slate-400 pt-1 flex justify-between">
-                    <span>Comprador: <b>{lastScanned.shipment.buyer?.first_name ? `${lastScanned.shipment.buyer.first_name} ${lastScanned.shipment.buyer.last_name || ''}` : lastScanned.shipment.buyer?.nickname}</b></span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                      {lastScanned.shipment.receiver_address?.city?.name || 'Mercado Envíos'}
-                    </span>
-                  </div>
+                    <div className="px-4">
+                      <div className="flex items-center justify-between border-b border-line py-2.5">
+                        <span className="text-xs font-bold text-ink-subtle">Envío</span>
+                        <span className="text-xs font-extrabold tabular text-ink">#{lastScanned.shipment.id}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-line py-2.5">
+                        <span className="text-xs font-bold text-ink-subtle">Comprador</span>
+                        <span className="text-right text-xs font-extrabold text-ink">
+                          {lastScanned.shipment.buyer?.first_name ? `${lastScanned.shipment.buyer.first_name} ${lastScanned.shipment.buyer.last_name || ''}` : lastScanned.shipment.buyer?.nickname}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-xs font-bold text-ink-subtle">Destino</span>
+                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-ink">
+                          <MapPin className="h-3.5 w-3.5 text-ink-subtle" />
+                          {lastScanned.shipment.receiver_address?.city?.name || 'Mercado Envíos'}
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* Action Buttons */}
-                  <div className="pt-2 flex gap-2">
-                    <a
-                      href={api.downloadLabelUrl(lastScanned.shipment.id, 'pdf')}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 py-2.5 rounded-xl bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md"
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span>Imprimir Etiqueta PDF</span>
-                    </a>
+                    {/* Artículos con la cantidad bien visible */}
+                    <div className="space-y-2 border-t border-line p-3">
+                      {(lastScanned.shipment.items || []).map((it, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card p-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-1 text-sm font-bold text-ink">
+                              {it.item?.title || 'Producto'}
+                            </p>
+                            {it.item?.seller_sku && (
+                              <p className="font-mono text-[10px] text-ink-subtle">
+                                SKU: <b className="text-ink-muted">{it.item.seller_sku}</b>
+                              </p>
+                            )}
+                          </div>
 
-                    {/* Button to undo packing */}
-                    <button
-                      onClick={() => handleUnpackShipment(lastScanned.shipment.id)}
-                      className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center space-x-1 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50"
-                      title="Desmarcar este empaque y devolverlo a pendientes"
-                    >
-                      <Undo2 className="w-3.5 h-3.5" />
-                      <span>Desmarcar</span>
-                    </button>
+                          {/* Cantidad gigante para evitar errores en el depósito */}
+                          <div className="shrink-0 rounded-xl bg-brand px-3 py-1.5 text-center text-base font-extrabold tabular text-brand-ink shadow-xs">
+                            x{it.quantity}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Acciones del paquete */}
+                    <div className="flex flex-col gap-2 border-t border-line p-3 sm:flex-row">
+                      <a
+                        href={api.downloadLabelUrl(lastScanned.shipment.id, 'pdf')}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-outline btn-block flex-1"
+                      >
+                        <Printer className="h-4 w-4" />
+                        <span>Imprimir Etiqueta PDF</span>
+                      </a>
+
+                      {/* Devolver el paquete a pendientes */}
+                      <button
+                        onClick={() => handleUnpackShipment(lastScanned.shipment.id)}
+                        className="btn btn-danger-soft btn-block sm:w-auto"
+                        title="Desmarcar este empaque y devolverlo a pendientes"
+                      >
+                        <Undo2 className="h-4 w-4" />
+                        <span>Desmarcar</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 2: SHIPMENTS LIST */}
-      {activeTab === 'shipments' && (
-        <div className="space-y-3">
-          {/* Filter Pills */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            <button
-              onClick={() => setFilterStatus('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
-                filterStatus === 'all'
-                  ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950'
-                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600'
-              }`}
-            >
-              Todos ({shipments.length})
-            </button>
-            <button
-              onClick={() => setFilterStatus('pending')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
-                filterStatus === 'pending'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600'
-              }`}
-            >
-              Pendientes ({pendingCount})
-            </button>
-            <button
-              onClick={() => setFilterStatus('packed')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
-                filterStatus === 'packed'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600'
-              }`}
-            >
-              Empaquetados ({packedCount})
-            </button>
-          </div>
+        {/* TAB 2: SHIPMENTS LIST */}
+        {activeTab === 'shipments' && (
+          <div className="space-y-3">
+            {/* Filtros de estado */}
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+              <button
+                onClick={() => setFilterStatus('all')}
+                className={`btn btn-sm shrink-0 tabular ${filterStatus === 'all' ? 'btn-dark' : 'btn-outline'}`}
+              >
+                Todos ({shipments.length})
+              </button>
 
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por orden, cliente o producto..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400"
-            />
-          </div>
+              <button
+                onClick={() => setFilterStatus('pending')}
+                className={`btn btn-sm shrink-0 tabular ${filterStatus === 'pending' ? 'border border-warning/30 bg-warning-soft text-warning' : 'btn-outline'}`}
+              >
+                Pendientes ({pendingCount})
+              </button>
 
-          {/* List items */}
-          <div className="space-y-2.5">
-            {loading ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-yellow-500" />
-                <span>Cargando despachos...</span>
-              </div>
-            ) : filteredShipments.length > 0 ? (
-              filteredShipments.map((s) => {
-                const isPacked = Boolean(s.packing?.packed);
-                const itemsList = s.items || [];
+              <button
+                onClick={() => setFilterStatus('packed')}
+                className={`btn btn-sm shrink-0 tabular ${filterStatus === 'packed' ? 'border border-success/30 bg-success-soft text-success' : 'btn-outline'}`}
+              >
+                Empaquetados ({packedCount})
+              </button>
+            </div>
 
-                return (
-                  <div
-                    key={s.id}
-                    className={`p-4 rounded-3xl border shadow-xs transition ${
-                      isPacked
-                        ? 'bg-emerald-500/10 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-xs text-slate-900 dark:text-white">
-                            Orden #{s.order_id}
-                          </span>
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {s.logistic_type === 'self_service' ? 'FLEX' : s.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
-                          </span>
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+              <input
+                type="text"
+                placeholder="Buscar por orden, cliente o producto..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input input-search py-3"
+              />
+            </div>
+
+            {/* Cola de paquetes */}
+            <div className="space-y-2.5">
+              {loading ? (
+                <div className="card card-pad space-y-3">
+                  <div className="skeleton h-4 w-40" />
+                  <div className="skeleton h-12 w-full" />
+                  <div className="skeleton h-4 w-24" />
+                  <p className="text-center text-xs font-bold text-ink-subtle">Cargando despachos...</p>
+                </div>
+              ) : filteredShipments.length > 0 ? (
+                filteredShipments.map((s) => {
+                  const isPacked = Boolean(s.packing?.packed);
+                  const itemsList = s.items || [];
+
+                  return (
+                    <div
+                      key={s.id}
+                      className="card card-hover p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-display text-sm font-extrabold tabular text-ink">
+                              Orden #{s.order_id}
+                            </span>
+                            <span className="badge badge-neutral">
+                              {s.logistic_type === 'self_service' ? 'FLEX' : s.logistic_type === 'cross_docking' ? 'COLECTA' : 'CORREO'}
+                            </span>
+                            <span className={`badge ${isPacked ? 'badge-success' : 'badge-warning'}`}>
+                              {isPacked ? 'Empaquetado' : 'Pendiente'}
+                            </span>
+                          </div>
+
+                          <div className="mt-2 space-y-1">
+                            {itemsList.map((it, idx) => (
+                              <p key={idx} className="line-clamp-1 text-xs font-bold text-ink-muted">
+                                <span className="font-extrabold tabular text-ink">[{it.quantity}x]</span> {it.item?.title || 'Artículo'}
+                              </p>
+                            ))}
+                          </div>
+
+                          <p className="mt-1.5 text-[11px] text-ink-subtle">
+                            Comprador: <b className="text-ink-muted">{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</b>
+                          </p>
                         </div>
 
-                        <div className="mt-1 space-y-1">
-                          {itemsList.map((it, idx) => (
-                            <p key={idx} className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
-                              <span className="text-yellow-600 dark:text-yellow-400 font-black">[{it.quantity}x]</span> {it.item?.title || 'Artículo'}
-                            </p>
-                          ))}
-                        </div>
-
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          Comprador: <b>{s.buyer?.first_name ? `${s.buyer.first_name} ${s.buyer.last_name || ''}` : s.buyer?.nickname}</b>
-                        </p>
+                        {isPacked && (
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-success/30 bg-success-soft text-success">
+                            <Check className="h-4 w-4" />
+                          </span>
+                        )}
                       </div>
 
-                      {isPacked && (
-                        <span className="p-1.5 rounded-full bg-emerald-500 text-white shrink-0 shadow-xs">
-                          <Check className="w-4 h-4" />
-                        </span>
-                      )}
-                    </div>
+                      {/* Acciones del paquete */}
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
+                        <a
+                          href={api.downloadLabelUrl(s.id, 'pdf')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-sm btn-outline"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          <span>Etiqueta</span>
+                        </a>
 
-                    {/* Action buttons */}
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                      <a
-                        href={api.downloadLabelUrl(s.id, 'pdf')}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center space-x-1"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>Etiqueta</span>
-                      </a>
-
-                      <button
-                        onClick={() => handleTogglePacking(s.id, isPacked)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center space-x-1 ${
-                          isPacked
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-                            : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
-                        }`}
-                      >
-                        <PackageCheck className="w-3.5 h-3.5" />
-                        <span>{isPacked ? 'Desmarcar' : 'Listo para Despacho'}</span>
-                      </button>
+                        <button
+                          onClick={() => handleTogglePacking(s.id, isPacked)}
+                          className={`btn btn-lg ${isPacked ? 'btn-danger-soft' : 'btn-success'}`}
+                        >
+                          <PackageCheck className="h-4 w-4" />
+                          <span>{isPacked ? 'Desmarcar' : 'Listo para Despacho'}</span>
+                        </button>
+                      </div>
                     </div>
+                  );
+                })
+              ) : (
+                <div className="card">
+                  <div className="empty">
+                    <div className="empty-icon">
+                      <Boxes className="h-6 w-6" />
+                    </div>
+                    <p className="empty-title">No se encontraron paquetes con ese filtro</p>
+                    <p className="empty-text">Cambiá el estado del filtro o limpiá la búsqueda para ver todos los envíos disponibles.</p>
                   </div>
-                );
-              })
-            ) : (
-              <div className="p-8 text-center text-slate-400 text-xs bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-                <PackageCheck className="w-8 h-8 mx-auto mb-2 opacity-40 text-emerald-500" />
-                <p>No se encontraron paquetes con ese filtro.</p>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* TAB 3: SCAN HISTORY (NEON DB AUDIT) */}
       {activeTab === 'history' && (

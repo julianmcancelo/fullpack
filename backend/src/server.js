@@ -9,6 +9,7 @@ const itemsRoutes = require('./routes/items.routes');
 const ordersRoutes = require('./routes/orders.routes');
 const shipmentsRoutes = require('./routes/shipments.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const statsRoutes = require('./routes/stats.routes');
 const questionsRoutes = require('./routes/questions.routes');
 const usersRoutes = require('./routes/users.routes');
 
@@ -47,9 +48,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(` Mercado Libre Manager Backend corriendo en http://localhost:${PORT}`);
-  console.log(` Modo Demo y Rutas de API listas.`);
-});
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.listen(PORT, () => {
+    console.log(` Mercado Libre Manager Backend corriendo en http://localhost:${PORT}`);
+    console.log(` Modo Demo y Rutas de API listas.`);
+  });
+}
 
 module.exports = app;
