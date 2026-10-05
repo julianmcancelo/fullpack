@@ -33,7 +33,30 @@ export async function fetchApi(endpoint, options = {}) {
 
 // Auth & Settings API
 export const api = {
-  // Connection status & Auth
+  // SaaS Multi-tenant Users & Google/Token Auth
+  googleLogin: (payload) =>
+    fetchApi('/users/google-login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  requestOtpCode: (email, name = '') =>
+    fetchApi('/users/request-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, name }),
+    }),
+  verifyOtpCode: (email, code) =>
+    fetchApi('/users/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    }),
+  getUsersList: () => fetchApi('/users/list'),
+  approveUser: (adminEmail, userId, status) =>
+    fetchApi('/users/approve', {
+      method: 'POST',
+      body: JSON.stringify({ adminEmail, userId, status }),
+    }),
+
+  // Mercado Libre Connection status & Auth
   getStatus: () => fetchApi('/auth/status'),
   getAuthUrl: () => fetchApi('/auth/url'),
   exchangeCode: (code) =>

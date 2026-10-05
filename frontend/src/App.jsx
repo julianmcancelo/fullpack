@@ -14,11 +14,15 @@ import QuestionsManager from './pages/QuestionsManager';
 import FeeCalculator from './pages/FeeCalculator';
 import MobileTerminal from './pages/MobileTerminal';
 import Settings from './pages/Settings';
+import LoginModal from './components/LoginModal';
+import UsersAdminModal from './components/UsersAdminModal';
 import { api } from './services/api';
+import { useAuth } from './context/AuthContext';
 import { playCashRegisterSound } from './utils/audio';
 import confetti from 'canvas-confetti';
 
 export default function App() {
+  const { currentUser, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [connection, setConnection] = useState(null);
   const [stats, setStats] = useState(null);
@@ -26,6 +30,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [usersAdminModalOpen, setUsersAdminModalOpen] = useState(false);
   const [shipments, setShipments] = useState([]);
   
   // Real-time new sale listener state
@@ -172,6 +178,18 @@ export default function App() {
         onShipmentPacked={() => loadDashboardStats()}
       />
 
+      {/* SaaS Login & Google/Token Auth Modal */}
+      <LoginModal
+        isOpen={loginModalOpen}
+        onClose={() => setLoginModalOpen(false)}
+      />
+
+      {/* SaaS Users Admin Approval Modal */}
+      <UsersAdminModal
+        isOpen={usersAdminModalOpen}
+        onClose={() => setUsersAdminModalOpen(false)}
+      />
+
       {/* Top Header */}
       <Navbar
         connection={connection}
@@ -179,6 +197,8 @@ export default function App() {
         refreshing={refreshing}
         onNavigate={setActiveTab}
         onOpenCommand={setCommandOpen}
+        onOpenLogin={() => setLoginModalOpen(true)}
+        onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
       />
 
       {/* Main App Layout */}
@@ -241,6 +261,8 @@ export default function App() {
               connection={connection}
               onRefreshStatus={loadConnectionStatus}
               onRefreshAllData={refreshAll}
+              onOpenLogin={() => setLoginModalOpen(true)}
+              onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
             />
           )}
 

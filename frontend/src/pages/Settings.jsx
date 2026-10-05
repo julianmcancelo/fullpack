@@ -12,11 +12,16 @@ import {
   Copy,
   Check,
   Zap,
-  Lock
+  Lock,
+  Users,
+  LogIn,
+  UserCheck
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-export default function Settings({ connection, onRefreshStatus, onRefreshAllData }) {
+export default function Settings({ connection, onRefreshStatus, onRefreshAllData, onOpenLogin, onOpenUsersAdmin }) {
+  const { currentUser, isAdmin, adminEmail } = useAuth();
   const [settings, setSettings] = useState({
     appId: '',
     clientSecret: '',
@@ -167,6 +172,59 @@ export default function Settings({ connection, onRefreshStatus, onRefreshAllData
           </button>
         </div>
       )}
+
+      {/* SaaS User Account & Security Banner */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center space-x-3.5">
+          <img
+            src={currentUser?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser?.email || 'admin'}`}
+            alt=""
+            className="w-12 h-12 rounded-2xl bg-yellow-400 p-0.5 border border-yellow-500/30 shrink-0"
+          />
+          <div>
+            <div className="flex items-center space-x-2">
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                {currentUser?.name || currentUser?.email || 'Usuario SaaS'}
+              </h3>
+              {isAdmin ? (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-yellow-400 text-slate-950 uppercase">
+                  SuperAdmin
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 uppercase">
+                  Autorizado
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{currentUser?.email || adminEmail}</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              {isAdmin 
+                ? 'Tienes el control total de seguridad y autorización para nuevas cuentas que ingresen.' 
+                : `Cuenta autorizada por el administrador (${adminEmail}).`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 shrink-0">
+          {isAdmin && (
+            <button
+              onClick={onOpenUsersAdmin}
+              className="px-3.5 py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black rounded-xl text-xs flex items-center space-x-1.5 transition shadow-xs"
+            >
+              <Users className="w-4 h-4" />
+              <span>Aprobar Usuarios</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenLogin}
+            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs flex items-center space-x-1.5 transition"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Cambiar Cuenta</span>
+          </button>
+        </div>
+      </div>
 
       {/* Active Connected Account Status Card */}
       {connection?.connected ? (

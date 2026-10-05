@@ -9,8 +9,8 @@ const itemsRoutes = require('./routes/items.routes');
 const ordersRoutes = require('./routes/orders.routes');
 const shipmentsRoutes = require('./routes/shipments.routes');
 const settingsRoutes = require('./routes/settings.routes');
-const statsRoutes = require('./routes/stats.routes');
 const questionsRoutes = require('./routes/questions.routes');
+const usersRoutes = require('./routes/users.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,6 +22,7 @@ app.use(morgan('dev'));
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/items', itemsRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/shipments', shipmentsRoutes);

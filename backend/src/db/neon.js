@@ -79,6 +79,33 @@ async function initNeonDb() {
           details JSONB,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS ml_users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          avatar TEXT,
+          role VARCHAR(50) DEFAULT 'user', -- 'admin' or 'user'
+          status VARCHAR(50) DEFAULT 'pending', -- 'active', 'pending', 'rejected'
+          auth_provider VARCHAR(50) DEFAULT 'email', -- 'google' or 'email'
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_login_at TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ml_login_tokens (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          code VARCHAR(10) NOT NULL,
+          token TEXT UNIQUE NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Ensure SuperAdmin jcancelo.dev@gmail.com is always pre-seeded and active
+        INSERT INTO ml_users (email, name, role, status, auth_provider)
+        VALUES ('jcancelo.dev@gmail.com', 'Julián Cancelo (Admin)', 'admin', 'active', 'google')
+        ON CONFLICT (email) DO UPDATE SET role = 'admin', status = 'active';
       `);
 
       // Migration check for existing tables (ensure new columns exist)
@@ -86,9 +113,8 @@ async function initNeonDb() {
         DO $$ 
         BEGIN
           BEGIN
-            ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS scan_count INT DEFAULT 0;
-            ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS first_scanned_at TIMESTAMP;
-            ALTER TABLE ml_packing_metadata ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMP;
+            ALTER TABLE ml_users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'pending';
+            ALTER TABLE ml_users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'email';
           EXCEPTION WHEN OTHERS THEN
             NULL;
           END;
@@ -328,6 +354,152 @@ async function getRecentScanLogsFromNeon(limit = 50) {
   }
 }
 
+// SaaS Multi-user and Approval Operations
+async function findUserByEmailInNeon(email) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const res = await p.query('SELECT * FROM ml_users WHERE LOWER(email) = LOWER($1)', [email.trim()]);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      avatar: r.avatar,
+      role: r.role,
+      status: r.status,
+      authProvider: r.auth_provider,
+      createdAt: r.created_at,
+      lastLoginAt: r.last_login_at,
+    };
+  } catch (e) {
+    console.warn('Neon findUserByEmail error:', e.message);
+    return null;
+  }
+}
+
+async function getAllUsersFromNeon() {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await initNeonDb();
+    const res = await p.query('SELECT * FROM ml_users ORDER BY id ASC');
+    return res.rows.map(r => ({
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      avatar: r.avatar,
+      role: r.role,
+      status: r.status,
+      authProvider: r.auth_provider,
+      createdAt: r.created_at,
+      lastLoginAt: r.last_login_at,
+    }));
+  } catch (e) {
+    console.warn('Neon getAllUsers error:', e.message);
+    return [];
+  }
+}
+
+async function upsertUserInNeon({ email, name, avatar, role = 'user', status = 'pending', authProvider = 'email' }) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const cleanEmail = email.trim().toLowerCase();
+    const isAdmin = cleanEmail === 'jcancelo.dev@gmail.com';
+    const finalRole = isAdmin ? 'admin' : role;
+    const finalStatus = isAdmin ? 'active' : status;
+
+    const res = await p.query(
+      `INSERT INTO ml_users (email, name, avatar, role, status, auth_provider, last_login_at)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+       ON CONFLICT (email) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, ml_users.name),
+         avatar = COALESCE(EXCLUDED.avatar, ml_users.avatar),
+         last_login_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [cleanEmail, name, avatar || null, finalRole, finalStatus, authProvider]
+    );
+
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      avatar: r.avatar,
+      role: r.role,
+      status: r.status,
+      authProvider: r.auth_provider,
+      createdAt: r.created_at,
+      lastLoginAt: r.last_login_at,
+    };
+  } catch (e) {
+    console.warn('Neon upsertUser error:', e.message);
+    return null;
+  }
+}
+
+async function updateUserStatusInNeon(userId, newStatus) {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await p.query('UPDATE ml_users SET status = $1 WHERE id = $2', [newStatus, userId]);
+    return true;
+  } catch (e) {
+    console.warn('Neon updateUserStatus error:', e.message);
+    return false;
+  }
+}
+
+async function createLoginTokenInNeon(email, code, token, expireMinutes = 15) {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initNeonDb();
+    const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
+    await p.query(
+      `INSERT INTO ml_login_tokens (email, code, token, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [email.trim().toLowerCase(), code, token, expiresAt]
+    );
+    return { email, code, token, expiresAt };
+  } catch (e) {
+    console.warn('Neon createLoginToken error:', e.message);
+    return null;
+  }
+}
+
+async function verifyLoginTokenInNeon(email, codeOrToken) {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    const cleanEmail = email.trim().toLowerCase();
+    const res = await p.query(
+      `SELECT * FROM ml_login_tokens 
+       WHERE LOWER(email) = LOWER($1) 
+         AND (code = $2 OR token = $2)
+         AND used = FALSE 
+         AND expires_at > CURRENT_TIMESTAMP
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail, codeOrToken.trim()]
+    );
+
+    if (res.rows.length === 0) return false;
+
+    // Mark as used
+    await p.query('UPDATE ml_login_tokens SET used = TRUE WHERE id = $1', [res.rows[0].id]);
+    return true;
+  } catch (e) {
+    console.warn('Neon verifyLoginToken error:', e.message);
+    return false;
+  }
+}
+
 module.exports = {
   getConnectionString,
   initNeonDb,
@@ -340,4 +512,10 @@ module.exports = {
   savePackingMetadataToNeon,
   logScanToNeon,
   getRecentScanLogsFromNeon,
+  findUserByEmailInNeon,
+  getAllUsersFromNeon,
+  upsertUserInNeon,
+  updateUserStatusInNeon,
+  createLoginTokenInNeon,
+  verifyLoginTokenInNeon,
 };
