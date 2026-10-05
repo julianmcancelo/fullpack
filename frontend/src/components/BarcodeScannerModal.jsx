@@ -5,6 +5,7 @@ import {
   Camera, 
   CheckCircle2, 
   AlertCircle, 
+  AlertTriangle,
   X, 
   Zap, 
   RefreshCw,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import confetti from 'canvas-confetti';
-import { playSuccessBeep, playErrorBeep } from '../utils/audio';
+import { playSuccessBeep, playWarningBeep, playErrorBeep, speakSpanish } from '../utils/audio';
 import { api } from '../services/api';
 
 export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShipmentPacked }) {
@@ -93,49 +94,59 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
     if (!rawCode || !rawCode.trim()) return;
     const cleanCode = rawCode.trim();
 
-    // Look for matching shipment by ID, Order ID, Tracking Number, or embedded text
-    const matched = shipments.find(s => 
-      String(s.id).includes(cleanCode) ||
-      String(s.order_id).includes(cleanCode) ||
-      (s.tracking_number && s.tracking_number.toLowerCase() === cleanCode.toLowerCase()) ||
-      cleanCode.includes(String(s.id)) ||
-      cleanCode.includes(String(s.order_id))
-    );
+    try {
+      const res = await api.scanShipment(cleanCode, true);
 
-    if (matched) {
-      playSuccessBeep();
-      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+      if (res.found && res.shipment) {
+        if (res.alreadyPacked) {
+          playWarningBeep();
+          speakSpanish('Atención, paquete ya leído previamente');
 
-      try {
-        await api.updateShipmentPacking(matched.id, {
-          packed: true,
-          printed: true,
-          qualityChecked: true,
-        });
+          const packedTimeStr = res.firstScannedAt 
+            ? new Date(res.firstScannedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            : 'anteriormente';
 
-        if (onShipmentPacked) {
-          onShipmentPacked(matched.id);
+          setLastScannedResult({
+            success: true,
+            isDuplicate: true,
+            code: cleanCode,
+            shipment: res.shipment,
+            scanCount: res.scanCount || 2,
+            message: `⚠️ ¡ATENCIÓN! Este paquete ya fue leído y empaquetado a las ${packedTimeStr} (Lectura #${res.scanCount || 2}).`,
+          });
+        } else {
+          playSuccessBeep();
+          speakSpanish('Listo');
+          confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+
+          if (onShipmentPacked) {
+            onShipmentPacked(res.shipment.id);
+          }
+
+          setLastScannedResult({
+            success: true,
+            isDuplicate: false,
+            code: cleanCode,
+            shipment: res.shipment,
+            scanCount: 1,
+            message: `¡Orden #${res.shipment.order_id} confirmada y marcada como empaquetada!`,
+          });
         }
-
-        setLastScannedResult({
-          success: true,
-          code: cleanCode,
-          shipment: matched,
-          message: `¡Orden #${matched.order_id} confirmada y empaquetada!`,
-        });
-      } catch (err) {
+      } else {
+        playErrorBeep();
+        speakSpanish('Código no encontrado');
         setLastScannedResult({
           success: false,
           code: cleanCode,
-          message: `Error al actualizar: ${err.message}`,
+          message: `No se encontró ningún pedido pendiente con el código: "${cleanCode}".`,
         });
       }
-    } else {
+    } catch (err) {
       playErrorBeep();
       setLastScannedResult({
         success: false,
         code: cleanCode,
-        message: `No se encontró ningún pedido pendiente con el código: "${cleanCode}".`,
+        message: `Error al procesar escaneo: ${err.message}`,
       });
     }
 
@@ -290,13 +301,19 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
           {lastScannedResult && (
             <div 
               className={`card animate-pop ${
-                lastScannedResult.success
+                lastScannedResult.isDuplicate
+                  ? 'border-amber-400/50 bg-amber-500/10'
+                  : lastScannedResult.success
                   ? 'border-success/30 bg-card'
                   : 'border-danger/30 bg-danger-soft'
               }`}
             >
               <div className="flex items-start gap-3 p-4">
-                {lastScannedResult.success ? (
+                {lastScannedResult.isDuplicate ? (
+                  <span className="kpi-icon bg-amber-500 text-slate-950 shrink-0">
+                    <AlertTriangle className="h-5 w-5" />
+                  </span>
+                ) : lastScannedResult.success ? (
                   <span className="kpi-icon kpi-icon-success shrink-0">
                     <CheckCircle2 className="h-5 w-5" />
                   </span>
@@ -307,11 +324,17 @@ export default function BarcodeScannerModal({ isOpen, onClose, shipments, onShip
                 )}
 
                 <div className="min-w-0 flex-1">
-                  <span className={`badge ${lastScannedResult.success ? 'badge-success' : 'badge-danger'}`}>
-                    {lastScannedResult.success ? 'Paquete verificado' : 'Sin coincidencias'}
+                  <span className={`badge ${
+                    lastScannedResult.isDuplicate 
+                      ? 'bg-amber-400 text-slate-950 font-black' 
+                      : lastScannedResult.success 
+                      ? 'badge-success' 
+                      : 'badge-danger'
+                  }`}>
+                    {lastScannedResult.isDuplicate ? '⚠️ Ya escaneado previamente' : lastScannedResult.success ? '✅ Paquete verificado' : 'Sin coincidencias'}
                   </span>
 
-                  <h4 className="mt-2 font-display text-sm font-extrabold text-ink">
+                  <h4 className={`mt-2 font-display text-sm font-extrabold ${lastScannedResult.isDuplicate ? 'text-amber-950 dark:text-amber-200' : 'text-ink'}`}>
                     {lastScannedResult.message}
                   </h4>
 
