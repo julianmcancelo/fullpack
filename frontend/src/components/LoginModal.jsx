@@ -28,6 +28,88 @@ export default function LoginModal({ isOpen, onClose }) {
   const [successMsg, setSuccessMsg] = useState(null);
   const [debugOtp, setDebugOtp] = useState(null);
   const [pendingUser, setPendingUser] = useState(null);
+  const googleBtnRef = React.useRef(null);
+
+  // Helper to parse JWT from Google Identity Services without external libs
+  const parseJwt = (token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const handleGoogleCredentialResponse = async (response) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const payload = parseJwt(response.credential);
+      if (!payload || !payload.email) {
+        throw new Error('No se pudo verificar la cuenta de Google.');
+      }
+
+      const res = await loginWithGoogle({
+        email: payload.email,
+        name: payload.name || payload.email.split('@')[0],
+        avatar: payload.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${payload.email}`,
+        googleId: payload.sub,
+      });
+
+      if (res.success) {
+        onClose();
+      }
+    } catch (err) {
+      if (err.message?.includes('pending_approval') || err.message?.includes('pendiente')) {
+        setAuthMode('pending_approval');
+        setPendingUser({ email: err.user?.email || 'Tu correo' });
+      } else {
+        setError(err.message || 'Error al validar credencial de Google');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mount Google One-Tap & Render Button if available
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const initGoogleGis = () => {
+      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: '841022012035-7196.apps.googleusercontent.com', // Standard OAuth client format
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          if (googleBtnRef.current) {
+            window.google.accounts.id.renderButton(googleBtnRef.current, {
+              theme: 'outline',
+              size: 'large',
+              width: '100%',
+              text: 'continue_with',
+              shape: 'pill',
+            });
+          }
+        } catch (e) {
+          console.warn('GIS Init note:', e.message);
+        }
+      }
+    };
+
+    const timer = setTimeout(initGoogleGis, 300);
+    return () => clearTimeout(timer);
+  }, [isOpen, authMode]);
 
   if (!isOpen) return null;
 
@@ -176,9 +258,18 @@ export default function LoginModal({ isOpen, onClose }) {
               <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
             </div>
 
-            {/* Google Sign-in Button */}
+            {/* Google GIS Render Button Container */}
+            <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]"></div>
+
+            {/* Fallback Direct Google Sign-in Button */}
             <button
-              onClick={() => setAuthMode('otp_request')}
+              onClick={() => {
+                if (window.google?.accounts?.id) {
+                  window.google.accounts.id.prompt();
+                } else {
+                  setAuthMode('otp_request');
+                }
+              }}
               disabled={loading}
               className="w-full py-3 px-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center space-x-3 transition shadow-xs"
             >
@@ -188,7 +279,7 @@ export default function LoginModal({ isOpen, onClose }) {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
-              <span>Continuar con Google / Correo</span>
+              <span>Continuar con Google</span>
             </button>
 
             {/* Email OTP Magic Token */}
