@@ -300,13 +300,25 @@ fun TerminalScreen(
                     }
                 }
 
+                if (state.sessionDone.isNotEmpty()) {
+                    item {
+                        MlSectionHeader(
+                            title = "Leídos en esta sesión",
+                            subtitle = "${state.sessionDone.size} verificados por vos",
+                        )
+                    }
+                    items(items = state.sessionDone, key = { item -> "done-${item.id}" }) { shipment ->
+                        TerminalQueueCard(shipment = shipment)
+                    }
+                }
+
                 item {
                     MlSectionHeader(
                         title = "Cola de paquetes",
-                        subtitle = if (state.queue.isEmpty()) {
+                        subtitle = if (state.pendingQueue.isEmpty()) {
                             "Sin pendientes"
                         } else {
-                            "${state.queue.size} pendientes de empaque"
+                            "${state.pendingQueue.size} pendientes de empaque"
                         },
                         trailing = {
                             MlButton(
@@ -320,7 +332,7 @@ fun TerminalScreen(
                     )
                 }
 
-                if (state.queue.isEmpty()) {
+                if (state.pendingQueue.isEmpty()) {
                     item {
                         MlEmptyState(
                             icon = Icons.Outlined.CheckCircle,
@@ -337,7 +349,7 @@ fun TerminalScreen(
                         )
                     }
                 } else {
-                    items(items = state.queue) { shipment ->
+                    items(items = state.pendingQueue) { shipment ->
                         TerminalQueueCard(shipment = shipment)
                     }
                 }

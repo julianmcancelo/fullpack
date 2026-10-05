@@ -93,6 +93,8 @@ data class TerminalUiState(
     val noteTarget: Shipment? = null,
     val noteDraft: String = "",
     val feedback: TerminalFeedback? = null,
+    /** Paquetes verificados en esta sesión: constancia visible de lo ya leído. */
+    val sessionDone: List<Shipment> = emptyList(),
 ) {
     /** Progreso 0..1 de paquetes empaquetados sobre el total del día. */
     val progress: Float
@@ -103,6 +105,17 @@ data class TerminalUiState(
 
     val isDispatchMode: Boolean
         get() = mode == ScanMode.DISPATCH
+
+    /**
+     * Cola visible: se excluye lo ya verificado en esta sesión para que lo
+     * leído no "desaparezca" sin dejar rastro (queda en [sessionDone]).
+     */
+    val pendingQueue: List<Shipment>
+        get() {
+            if (sessionDone.isEmpty()) return queue
+            val doneIds = sessionDone.mapNotNull { it.id }.toSet()
+            return queue.filterNot { item -> item.id in doneIds }
+        }
 }
 
 /**
@@ -359,6 +372,9 @@ class TerminalViewModel(
                         )
                     }
                 }
+                // Constancia de sesión: lo empaquetado queda visible arriba aunque
+                // salga de la cola del servidor.
+                if (empaquetadoAhora) rememberDone(shipment)
 
                 showCard(
                     card = card,
@@ -488,6 +504,12 @@ class TerminalViewModel(
                             ),
                         )
                     }
+                    if (packed) {
+                        val done = _state.value.scanCard?.shipment
+                            ?.takeIf { it.id == shipmentId }?.copy(packing = packing)
+                            ?: _state.value.queue.firstOrNull { it.id == shipmentId }?.copy(packing = packing)
+                        if (done != null) rememberDone(done)
+                    }
                     refreshQueueSilently()
                 }
 
@@ -602,6 +624,15 @@ class TerminalViewModel(
 
     fun dismissError() {
         _state.update { it.copy(error = null) }
+    }
+
+    /** Guarda un paquete verificado en la constancia de sesión (máx. 20). */
+    private fun rememberDone(shipment: Shipment) {
+        val id = shipment.id ?: return
+        _state.update { current ->
+            val rest = current.sessionDone.filterNot { it.id == id }.take(19)
+            current.copy(sessionDone = listOf(shipment) + rest)
+        }
     }
 
     private fun refreshQueueSilently() {
