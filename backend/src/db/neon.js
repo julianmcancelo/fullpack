@@ -20,12 +20,48 @@ function getPool() {
       ssl: {
         rejectUnauthorized: false,
       },
-      max: 10,
+      // En serverless conviven varias instancias y varias consultas por
+      // request (validar sesión + datos). Un pool chico provoke timeouts que
+      // se traducían en sesiones "perdidas" y 401 falsos.
+      max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 15000,
+      query_timeout: 15000,
+    });
+
+    // Si Neon corta una conexión ociosa (habitual en planetes serverless), el
+    // pool la reemplaza sola en la próxima consulta; sin esto pg lanza
+    // "Connection terminated" de forma intermitente.
+    pool.on('error', (err) => {
+      console.warn('Neon pool error (recuperado en la próxima consulta):', err.message);
     });
   }
   return pool;
+}
+
+/**
+ * Ejecuta una consulta reintentando ante fallos transitorios de conexión.
+ *
+ * Neon (serverless) cierra conexiones o saturadas con facilidad; un único
+ * fallo transitorio no debe traducirse en un 401 para el usuario.
+ */
+async function query(sql, params = [], attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    const p = getPool();
+    if (!p) throw new Error('Sin conexión a la base de datos');
+    try {
+      return await p.query(sql, params);
+    } catch (err) {
+      lastErr = err;
+      // El error viene de la conexión, no de la consulta: no reintentar.
+      if (err && err.code === '22P02') throw err;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 120 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 async function initNeonDb() {
@@ -595,7 +631,7 @@ async function createSessionInNeon(email, daysValid = 30) {
     const crypto = require('crypto');
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + daysValid * 24 * 3600 * 1000);
-    await p.query(
+    await query(
       'INSERT INTO ml_sessions (token, email, expires_at) VALUES ($1, $2, $3)',
       [String(email).trim().toLowerCase(), token, expiresAt]
     );
@@ -611,7 +647,7 @@ async function getSessionFromNeon(token) {
   if (!p) return null;
   try {
     await initNeonDb();
-    const res = await p.query(
+    const res = await query(
       'SELECT * FROM ml_sessions WHERE token = $1 AND expires_at > CURRENT_TIMESTAMP',
       [String(token || '').trim()]
     );
@@ -629,7 +665,7 @@ async function deleteSessionFromNeon(token) {
   if (!p) return false;
   try {
     await initNeonDb();
-    await p.query('DELETE FROM ml_sessions WHERE token = $1', [String(token || '').trim()]);
+    await query('DELETE FROM ml_sessions WHERE token = $1', [String(token || '').trim()]);
     return true;
   } catch (e) {
     console.warn('Neon deleteSession error:', e.message);

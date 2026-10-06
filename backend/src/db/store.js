@@ -560,25 +560,30 @@ async function verifyLoginToken(email, codeOrToken) {
 // ---------------------------------------------------------------------------
 async function createSession(email, daysValid = 30) {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  try {
-    const neonSession = await neon.createSessionInNeon(cleanEmail, daysValid);
-    if (neonSession) return neonSession;
-  } catch (e) {
-    console.warn('Neon createSession fallback:', e.message);
+
+  // La sesión debe vivir en Neon: es el único almacén compartido entre
+  // instancias serverless. Un token guardado solo en la memoria de esta
+  // instancia sería válido acá y 401 en la siguiente petición.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const created = await neon.createSessionInNeon(cleanEmail, daysValid);
+      if (!created) continue;
+
+      // Verificación de escritura: si el token no se puede leer de vuelta,
+      // la escritura no quedó y no hay que entregarlo.
+      const readBack = await neon.getSessionFromNeon(created.token);
+      if (readBack && readBack.email === cleanEmail) return created;
+
+      console.warn(`createSession: escritura no verificable (intento ${attempt + 1}/3)`);
+    } catch (e) {
+      console.warn(`createSession: ${e.message} (intento ${attempt + 1}/3)`);
+    }
+    await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
   }
-  const crypto = require('crypto');
-  const db = readDb();
-  if (!db.sessions) db.sessions = [];
-  const session = {
-    email: cleanEmail,
-    token: crypto.randomBytes(32).toString('hex'),
-    expiresAt: new Date(Date.now() + daysValid * 24 * 3600 * 1000).toISOString(),
-    createdAt: new Date().toISOString(),
-  };
-  db.sessions.push(session);
-  if (db.sessions.length > 500) db.sessions = db.sessions.slice(-500);
-  writeDb(db);
-  return session;
+
+  // Sin base compartida no hay sesión válida posible: es preferible fallar
+  // que devolver un token que va a producir 401 al siguiente request.
+  throw new Error('No se pudo abrir la sesión (base de datos no disponible). Intentá de nuevo.');
 }
 
 async function getSessionByToken(token) {

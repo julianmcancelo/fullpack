@@ -2,11 +2,28 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const store = require('../db/store');
+const neon = require('../db/neon');
 const { requireSession, requireAdmin } = require('../middleware/session');
 
 // POST /api/users/google-login
 // Handles Google OAuth sign-in / verification
 router.post('/google-login', async (req, res) => {
+  try {
+    // Sin base compartida no hay sesiones válidas: mejor un 503 explícito
+    // (el frontend reintenta) que un token que va a dar 401 después.
+    if (!(await neon.isNeonConnected())) {
+      return res.status(503).json({
+        error: 'service_unavailable',
+        message: 'Base de datos no disponible. Intentá en unos segundos.',
+      });
+    }
+  } catch {
+    return res.status(503).json({
+      error: 'service_unavailable',
+      message: 'Base de datos no disponible. Intentá en unos segundos.',
+    });
+  }
+
   try {
     const { email, name, avatar, googleId } = req.body;
     if (!email) {
@@ -128,6 +145,17 @@ router.post('/request-code', async (req, res) => {
 
 // POST /api/users/verify-code (Verify 6-digit OTP or magic token)
 router.post('/verify-code', async (req, res) => {
+  try {
+    if (!(await neon.isNeonConnected())) {
+      return res.status(503).json({
+        error: 'service_unavailable',
+        message: 'Base de datos no disponible. Intentá en unos segundos.',
+      });
+    }
+  } catch {
+    return res.status(503).json({ error: 'service_unavailable', message: 'Base de datos no disponible.' });
+  }
+
   try {
     const { email, code } = req.body;
     if (!email || !code) {
