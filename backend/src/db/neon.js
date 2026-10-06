@@ -245,6 +245,9 @@ async function isNeonConnected() {
  * Diagnóstico del esquema de sesiones:Amount de filas y lectura real.
  * Sirve para distinguir "no hay sesión" de "la consulta falla".
  */
+/**
+ * Diagnóstico del almacén de sesiones (usado por scripts de verificación).
+ */
 async function debugSessionsInNeon() {
   const out = { pool: Boolean(getPool()), initialized: isInitialized, count: null, sample: null, error: null };
   const p = getPool();
