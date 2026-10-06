@@ -941,7 +941,7 @@ module.exports = {
   clearAllUsersInNeon,
   clearPackingMetadataInNeon,
   createPairingSessionInNeon,
-  getPairingSessionInNeon,
+  getPairingSessionFromNeon,
   claimPairingSessionInNeon,
   createDeviceInNeon,
   getDeviceByTokenFromNeon,
