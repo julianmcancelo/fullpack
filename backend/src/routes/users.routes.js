@@ -382,6 +382,38 @@ router.get('/supervisable', requireSession, requireAdmin, async (req, res) => {
   }
 });
 
+// DELETE /api/users/:id (SuperAdmin only) - borra una cuenta de la plataforma.
+//
+// Exists como operación puntual para no depender del reset total. Borra el
+// usuario, sus sesiones, sus dispositivos vinculados y su cuenta de Mercado
+// Libre; no toca la de los demás.
+router.delete('/:id', requireSession, requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const users = await store.getAllUsers();
+    const target = users.find((u) => String(u.id) === String(id));
+    if (!target) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+    if (store.isSuperAdminEmail(target.email)) {
+      return res.status(400).json({
+        error: 'No se puede borrar la cuenta del SuperAdmin.',
+      });
+    }
+
+    const result = await store.deleteUser(id);
+    if (!result.ok) return res.status(500).json({ error: result.error });
+
+    res.json({
+      success: true,
+      message: `Cuenta de ${target.email} eliminada de la plataforma.`,
+      revokedSessions: result.revokedSessions,
+      unlinkedMl: result.unlinkedMl,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/users/reset-platform (SuperAdmin only)
 // Deja la plataforma como recién creada: sin cuentas de Mercado Libre, sin
 // sesiones, sin packing previo y con un único usuario (el admin).

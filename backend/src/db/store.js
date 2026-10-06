@@ -616,6 +616,54 @@ async function revokeAllSessions(email) {
 }
 
 /**
+ * Elimina por completo una cuenta de la plataforma.
+ *
+ * Deja la plataforma como si esa persona nunca hubiera entrado: sin usuario,
+ * sin sesiones, sin dispositivos vinculados y sin su cuenta de Mercado Libre.
+ * Los datos de los demás usuarios no se tocan.
+ *
+ * @param {string|number} userId
+ * @returns {Promise<{ ok: boolean, error?: string, revokedSessions?: number, unlinkedMl?: boolean }>}
+ */
+async function deleteUser(userId) {
+  const db = readDb();
+  const user = (db.users || []).find((u) => String(u.id) === String(userId));
+  if (!user) return { ok: false, error: 'Usuario no encontrado' };
+  if (isSuperAdminEmail(user.email)) {
+    return { ok: false, error: 'No se puede borrar la cuenta del SuperAdmin.' };
+  }
+
+  const email = String(user.email).trim().toLowerCase();
+  const revokedSessions = await revokeAllSessions(email);
+
+  // Vinculación con Mercado Libre y metadata de empaque propia.
+  let unlinkedMl = false;
+  try {
+    await neon.query('DELETE FROM ml_auth WHERE LOWER(email) = LOWER($1)', [email]);
+    unlinkedMl = true;
+  } catch (e) {
+    console.warn('deleteUser (ml_auth):', e.message);
+  }
+  try {
+    await neon.query('DELETE FROM ml_packing_metadata WHERE LOWER(email) = LOWER($1)', [email]);
+  } catch (e) {
+    console.warn('deleteUser (packing_metadata):', e.message);
+  }
+  try {
+    await neon.query('DELETE FROM ml_users WHERE LOWER(email) = LOWER($1)', [email]);
+  } catch (e) {
+    console.warn('deleteUser (neon users):', e.message);
+  }
+
+  // Espejo local en JSON.
+  db.users = (db.users || []).filter((u) => String(u.id) !== String(userId));
+  db.loginTokens = (db.loginTokens || []).filter((t) => t.email !== email);
+  writeDb(db);
+
+  return { ok: true, revokedSessions, unlinkedMl };
+}
+
+/**
  * Resumen de plataforma para el SuperAdmin: conteos por estado, cuentas de
  * Mercado Libre vinculadas y sesiones activas.
  */
@@ -1041,6 +1089,7 @@ module.exports = {
   updateUserRole,
   setUserSuspended,
   revokeAllSessions,
+  deleteUser,
   getPlatformOverview,
   getSupervisableAccounts,
   createLoginToken,
