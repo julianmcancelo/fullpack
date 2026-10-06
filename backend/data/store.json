@@ -16,6 +16,7 @@
     "permalink": "",
     "siteId": "MLA"
   },
+  "authByEmail": {},
   "packingMetadata": {},
   "scanLogs": [],
   "users": [
@@ -32,5 +33,7 @@
   ],
   "loginTokens": [],
   "pairingSessions": [],
-  "devices": []
+  "devices": [],
+  "sessions": [],
+  "pendingFactoryReset": true
 }

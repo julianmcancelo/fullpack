@@ -275,6 +275,38 @@ export default function Settings({
     }
   };
 
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState(null);
+
+  const handleFactoryReset = async () => {
+    if (
+      !window.confirm(
+        'Esto borra TODAS las cuentas de Mercado Libre, las sesiones abiertas y el historial de empaque de todos los usuarios.\n\n' +
+          'Solo puede deshacerse volviendo a vincular cada cuenta.\n\n' +
+          '¿Continuar?'
+      )
+    ) {
+      return;
+    }
+    if (!window.confirm('Última confirmación: se borra todo. ¿Seguís?')) return;
+
+    try {
+      setResetting(true);
+      setResetMsg(null);
+      const res = await api.resetPlatform();
+      setResetMsg({
+        type: 'success',
+        text: res?.message || 'Plataforma reseteada. Cada usuario debe vincular su cuenta de nuevo.',
+      });
+      if (onRefreshStatus) await onRefreshStatus();
+      if (onRefreshAllData) await onRefreshAllData();
+    } catch (err) {
+      setResetMsg({ type: 'error', text: `Error al resetear: ${err.message}` });
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     setCopiedRedirect(true);
@@ -902,21 +934,19 @@ export default function Settings({
             preferencia de tu sistema operativo.
           </p>
           <div className="segmented shrink-0" role="group" aria-label="Tema de la interfaz">
-            {THEME_OPTIONS.map(({ id, label, Icon, description }) => (
-              <React.Fragment key={id}>
-                <button
-                  type="button"
-                  onClick={() => setMode(id)}
-                  aria-pressed={mode === id}
-                  className={`segmented-btn flex items-center gap-1.5 ${
-                    mode === id ? 'segmented-btn-active' : ''
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{label}</span>
-                </button>
-                <span className="text-[10px] text-ink-muted/{mode === id ? 'block' : 'hidden'} sm:block ml-2">{description}</span>
-              </React.Fragment>
+            {THEME_OPTIONS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMode(id)}
+                aria-pressed={mode === id}
+                className={`segmented-btn flex items-center gap-1.5 ${
+                  mode === id ? 'segmented-btn-active' : ''
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -964,6 +994,58 @@ export default function Settings({
             </button>
           )}
         </div>
+
+        {/* Reset total de la plataforma: solo SuperAdmin */}
+        {isAdmin && (
+          <div className="border-t border-danger/20 px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-ink">
+                    Resetear toda la plataforma
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-ink-muted">
+                    Borra <b className="text-ink">todas</b> las cuentas de Mercado Libre, las
+                    sesiones abiertas y el historial de empaque. Cada usuario vuelve a estado
+                    inicial y debe vincular su cuenta desde cero. Acción irreversible.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleFactoryReset}
+                disabled={resetting}
+                className="btn btn-danger-soft w-full shrink-0 sm:w-auto"
+              >
+                {resetting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                <span>{resetting ? 'Reseteando…' : 'Resetear plataforma'}</span>
+              </button>
+            </div>
+
+            {resetMsg && (
+              <p
+                role="status"
+                className={`mt-3 flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-semibold ${
+                  resetMsg.type === 'success'
+                    ? 'border-success/30 bg-success-soft text-success'
+                    : 'border-danger/30 bg-danger-soft text-danger'
+                }`}
+              >
+                {resetMsg.type === 'success' ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                )}
+                <span className="min-w-0 break-words">{resetMsg.text}</span>
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {loading && <p className="sr-only">Cargando configuración guardada…</p>}

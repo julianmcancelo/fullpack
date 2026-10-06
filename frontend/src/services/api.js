@@ -64,6 +64,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ userId, status }),
     }),
+  // DESTRUCTIVO: borra todas las cuentas de ML, sesiones y packing.
+  // Solo SuperAdmin (el backend lo exige).
+  resetPlatform: () =>
+    fetchApi('/users/reset-platform', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
   getMe: () => fetchApi('/users/me'),
   logoutSession: () => fetchApi('/users/logout', { method: 'POST' }),
 

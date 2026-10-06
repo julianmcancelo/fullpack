@@ -133,10 +133,19 @@ function writeDb(data) {
 
 // Background sync from Neon if available.
 // NOTA: no se deduce "reset" del store local: un usuario nuevo sin credenciales
-// locales NO puede implicar que Neon deba vaciarse. El reset es explícito vía
-// POST /api/admin/reset (requireSession + requireAdmin).
+// locales NO puede implicar que Neon deba vaciarse. El reset se dispara solo si
+// el store bundleado trae el flag explícito `pendingFactoryReset`, que se apaga
+// en cuanto se ejecuta.
 (async () => {
   try {
+    const db0 = readDb();
+
+    if (db0.pendingFactoryReset) {
+      const result = await factoryResetAll();
+      console.log('[store] reset de plataforma ejecutado:', JSON.stringify(result.neon));
+      return;
+    }
+
     const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const neonAuth = adminEmail ? await neon.getAuthFromNeon(adminEmail) : null;
     if (neonAuth && neonAuth.accessToken) {
@@ -307,6 +316,8 @@ async function factoryResetAll() {
         },
       ]
     : [];
+  // El flag es de un solo uso: se apaga en cuanto el reset se aplicó.
+  db.pendingFactoryReset = false;
   writeDb(db);
 
   return { success: true, neon: neonResults, keptAdmin: adminEmail || null };
