@@ -10,6 +10,7 @@ const {
 const { clearAuthAsync } = require('../db/store');
 const { optionalSession, requireSession } = require('../middleware/session');
 const { resolveMlEmail } = require('../middleware/mlContext');
+const { resolveRedirectUri, getPostAuthRedirect } = require('../services/oauthOrigin');
 
 // Todas las rutas resuelven el email ML del llamante (sesión web o dispositivo
 // móvil). Sin identidad se usa el legado de cuenta única (Fase 2).
@@ -30,25 +31,31 @@ router.get('/status', async (req, res) => {
 });
 
 // GET /api/auth/url (embebe `state` con la sesión para atar los tokens al usuario)
-router.get('/url', (req, res) => {
+// Exige sesión: sin ella el `state` iría vacío y el callback no podría saber a
+// qué usuario pertenecen los tokens, así que la conexión quedaría huérfana.
+router.get('/url', requireSession, (req, res) => {
   try {
     const state = req.session ? req.session.token : '';
-    const url = getAuthUrl(state);
-    res.json({ url });
+    const url = getAuthUrl(state, req);
+    res.json({ url, redirectUri: resolveRedirectUri(req) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 // POST /api/auth/exchange-code (Direct code exchange)
-router.post('/exchange-code', async (req, res) => {
+// Sin sesión, `resolveMlEmail` cae a la cuenta del admin: cualquier visitante
+// podría conectar la cuenta de Mercado Libre del administrador. Se exige
+// sesión para que los tokens siempre vayan a quien los pidió. La app móvil
+// no usa este endpoint: sigue autenticando por token de dispositivo.
+router.post('/exchange-code', requireSession, async (req, res) => {
   try {
     const { code } = req.body;
     if (!code) {
       return res.status(400).json({ error: 'El código de autorización es requerido.' });
     }
     const cleanCode = code.trim().replace(/^code=/, '');
-    const result = await exchangeCodeForToken(cleanCode, resolveMlEmail(req));
+    const result = await exchangeCodeForToken(cleanCode, resolveMlEmail(req), req);
     res.json({ success: true, auth: result });
   } catch (err) {
     const msg = err.response?.data?.message || err.response?.data?.error_description || err.message;
@@ -61,15 +68,17 @@ router.post('/exchange-code', async (req, res) => {
 // quedan guardados bajo SU email, no en una cuenta global.
 router.get('/callback', async (req, res) => {
   const { code, error, error_description, state } = req.query;
-  const host = req.get('host') || '';
-  const base = host.includes('localhost') ? 'http://localhost:5173' : `https://${host}`;
 
   if (error) {
-    return res.redirect(`${base}/settings?auth_error=${encodeURIComponent(error_description || error)}`);
+    return res.redirect(
+      getPostAuthRedirect(req, { error: error_description || String(error) })
+    );
   }
 
   if (!code) {
-    return res.status(400).send('No se proporcionó el código de autorización de Mercado Libre.');
+    return res
+      .status(400)
+      .send('No se proporcionó el código de autorización de Mercado Libre.');
   }
 
   try {
@@ -80,16 +89,20 @@ router.get('/callback', async (req, res) => {
       if (session) email = session.email;
     }
     if (!email) {
+      // Sin sesión no hay dueño para los tokens: no se guardan en una cuenta
+      // global compartida, se pide volver a empezar autenticado.
       return res.redirect(
-        `${base}/settings?auth_error=${encodeURIComponent('Sesión expirada. Volvé a la app e iniciá de nuevo la conexión.')}`
+        getPostAuthRedirect(req, {
+          error: 'Sesión expirada. Volvé a la app e iniciá de nuevo la conexión.',
+        })
       );
     }
-    await exchangeCodeForToken(code, email);
-    res.redirect(`${base}/settings?auth_success=true`);
+    await exchangeCodeForToken(String(code), email, req);
+    res.redirect(getPostAuthRedirect(req, { success: true }));
   } catch (err) {
     console.error('Callback error:', err.response?.data || err.message);
-    const msg = err.response?.data?.message || err.message;
-    res.redirect(`${base}/settings?auth_error=${encodeURIComponent(msg)}`);
+    const msg = err.response?.data?.message || err.error || err.message;
+    res.redirect(getPostAuthRedirect(req, { error: msg }));
   }
 });
 

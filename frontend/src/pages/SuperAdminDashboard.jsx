@@ -197,7 +197,7 @@ export default function SuperAdminDashboard({ onNavigate }) {
           </div>
           <p className="page-sub text-pretty">
             Gestionás las cuentas de la plataforma. La operación de Mercado Libre de cada
-            usuario seAdministrationa aparte, en su propio tablero.
+            usuario se administra aparte, en su propio tablero.
           </p>
         </div>
 

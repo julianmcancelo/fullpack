@@ -75,8 +75,14 @@ export default function OnboardingWizard({
     setBusy(true);
     setError(null);
     try {
-      const current = await api.getSettings().catch(() => ({}));
-      await api.saveSettings({ ...current, appId: appId.trim(), clientSecret: clientSecret.trim(), siteId });
+      // Sólo se envían los campos editables: `redirectUri` y `clientSecret`
+      // guardado los resuelve el backend, y reenviarlos pisaría la
+      // configuración real.
+      await api.saveSettings({
+        appId: appId.trim(),
+        clientSecret: clientSecret.trim(),
+        siteId,
+      });
       const res = await api.getAuthUrl();
       if (res?.url) {
         window.location.href = res.url;

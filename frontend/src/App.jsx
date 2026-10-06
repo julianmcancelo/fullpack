@@ -66,6 +66,11 @@ export default function App() {
     setWizardVerify(false);
   };
 
+  // Resultado de la autorización de Mercado Libre. `/api/auth/callback` vuelve
+  // a la raíz con `?auth_success=1` o `?auth_error=...`; antes sólo se leía el
+  // caso feliz y un fallo dejaba al usuario sin ninguna explicación.
+  const [authNotice, setAuthNotice] = useState(null);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth_success')) {
@@ -76,6 +81,11 @@ export default function App() {
       } catch {}
       setWizardVerify(true);
       setWizardOpen(true);
+      setAuthNotice({ type: 'success', text: 'Tu cuenta de Mercado Libre quedó vinculada.' });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('auth_error')) {
+      setActiveTab('settings');
+      setAuthNotice({ type: 'error', text: params.get('auth_error') });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -369,6 +379,32 @@ export default function App() {
         onClose={() => setNewQuestionAlert(null)}
         onViewQuestions={handleViewQuestions}
       />
+
+      {/* Resultado de la autorización de Mercado Libre */}
+      {authNotice && (
+        <div
+          role="status"
+          className="fixed inset-x-0 top-3 z-[70] mx-auto w-[min(92vw,34rem)]"
+        >
+          <div
+            className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${
+              authNotice.type === 'error'
+                ? 'border-danger/40 bg-danger-soft text-danger'
+                : 'border-success/40 bg-success-soft text-success'
+            }`}
+          >
+            <span className="min-w-0 flex-1 break-words">{authNotice.text}</span>
+            <button
+              type="button"
+              onClick={() => setAuthNotice(null)}
+              className="shrink-0 rounded-lg px-2 py-0.5 font-semibold opacity-70 transition hover:opacity-100"
+              aria-label="Cerrar aviso"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Asistente de primera conexión con Mercado Libre */}
       {wizardOpen && currentUser && (

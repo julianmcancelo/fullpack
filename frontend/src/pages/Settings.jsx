@@ -87,7 +87,11 @@ export default function Settings({
   const [settings, setSettings] = useState({
     appId: '',
     clientSecret: '',
-    redirectUri: 'http://localhost:3001/api/auth/callback',
+    hasSecret: false,
+    // El backend envía el `redirect_uri` que realmente usa (ignora
+    // placeholders), así que este campo nunca queda apuntando a un destino
+    // que no reciba el código de Mercado Libre.
+    redirectUri: '',
     siteId: 'MLA',
     lowStockThreshold: 5,
   });
@@ -127,8 +131,11 @@ export default function Settings({
           setSettings((prev) => ({
             ...prev,
             appId: res.appId || '',
-            clientSecret: res.clientSecret || '',
-            redirectUri: res.redirectUri || 'http://localhost:3001/api/auth/callback',
+            // El backend ya no devuelve el secreto: el campo queda vacío y
+            // se muestra "guardado". Enviarlo vacío no borra el valor real.
+            clientSecret: '',
+            hasSecret: Boolean(res.hasSecret),
+            redirectUri: res.effectiveRedirectUri || res.redirectUri || '',
             siteId: res.siteId || 'MLA',
             lowStockThreshold: res.lowStockThreshold || 5,
           }));
@@ -170,7 +177,15 @@ export default function Settings({
     try {
       setSavingSettings(true);
       setStatusMsg(null);
-      await api.saveSettings(settings);
+      // `redirectUri` no se envía: es de sólo lectura y lo deriva el backend
+      // del dominio real. Guardarlo desde un deployment de preview dejaría
+      // apuntando producción al host equivocado.
+      await api.saveSettings({
+        appId: settings.appId,
+        clientSecret: settings.clientSecret,
+        siteId: settings.siteId,
+        lowStockThreshold: settings.lowStockThreshold,
+      });
       setStatusMsg({ type: 'success', text: 'Configuración guardada correctamente.' });
     } catch (err) {
       setStatusMsg({ type: 'error', text: `Error al guardar: ${err.message}` });
@@ -542,22 +557,30 @@ export default function Settings({
                     En <b className="font-bold text-ink">Redirect URI</b> pegá exactamente:
                     <span className="my-2 flex items-center gap-2 rounded-lg border border-line bg-muted px-2.5 py-2">
                       <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-ink">
-                        {settings.redirectUri}
+                        {settings.redirectUri || 'No se pudo determinar'}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(settings.redirectUri)}
-                        title="Copiar URI"
-                        aria-label="Copiar URI"
-                        className="btn btn-ghost btn-icon-sm shrink-0"
-                      >
-                        {copiedRedirect ? (
-                          <Check className="h-4 w-4 text-success" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </button>
+                      {settings.redirectUri ? (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(settings.redirectUri)}
+                          title="Copiar URI"
+                          aria-label="Copiar URI"
+                          className="btn btn-ghost btn-icon-sm shrink-0"
+                        >
+                          {copiedRedirect ? (
+                            <Check className="h-4 w-4 text-success" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      ) : null}
                     </span>
+                    {!settings.redirectUri && (
+                      <span className="mt-1.5 block text-[11px] text-danger">
+                        El servidor no pudo deducir el dominio público. Definí
+                        ML_PUBLIC_URL en las variables de entorno.
+                      </span>
+                    )}
                   </li>
                   <li>
                     Copiá tu <b className="font-bold text-ink">APP ID</b> y{' '}

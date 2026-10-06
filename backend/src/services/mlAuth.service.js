@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { getSettings, getAuth, getAuthAsync, updateAuth, updateAuthAsync, clearAuth, clearAuthAsync } = require('../db/store');
+const { resolveRedirectUri } = require('./oauthOrigin');
 
 const ML_TOKEN_URL = 'https://api.mercadolibre.com/oauth/token';
 const ML_USERS_ME_URL = 'https://api.mercadolibre.com/users/me';
@@ -15,22 +16,43 @@ const AUTH_DOMAINS = {
   MPE: 'https://auth.mercadolibre.com.pe/authorization',
 };
 
-function getAuthUrl(sessionToken = '') {
+/**
+ * URL de autorización de Mercado Libre.
+ *
+ * @param {string} sessionToken `state`: ata los tokens a quien inició el flujo.
+ * @param {import('express').Request} [req] para deducir el `redirect_uri`.
+ * @returns {string}
+ */
+function getAuthUrl(sessionToken = '', req = null) {
   const settings = getSettings();
   if (!settings.appId) {
     throw new Error('Debes configurar tu APP_ID en la sección de Ajustes primero.');
   }
+  const redirectUri = resolveRedirectUri(req);
+  if (!redirectUri) {
+    throw new Error('No se pudo determinar la URL de retorno de autorización (redirect_uri).');
+  }
   const domain = AUTH_DOMAINS[settings.siteId] || 'https://auth.mercadolibre.com.ar/authorization';
-  const redirectUri = encodeURIComponent(settings.redirectUri);
   // `state` ata los tokens resultantes a la cuenta que inició el flujo (Fase 2).
   const state = sessionToken ? `&state=${encodeURIComponent(String(sessionToken).trim())}` : '';
-  return `${domain}?response_type=code&client_id=${settings.appId}&redirect_uri=${redirectUri}${state}`;
+  return `${domain}?response_type=code&client_id=${encodeURIComponent(String(settings.appId).trim())}&redirect_uri=${encodeURIComponent(redirectUri)}${state}`;
 }
 
-async function exchangeCodeForToken(code, email = '') {
+/**
+ * Canjea el código de autorización por tokens y los guarda bajo `email`.
+ *
+ * @param {string} code
+ * @param {string} email email dueño de los tokens
+ * @param {import('express').Request} [req] mismo `redirect_uri` que en la autorización
+ */
+async function exchangeCodeForToken(code, email = '', req = null) {
   const settings = getSettings();
   if (!settings.appId || !settings.clientSecret) {
     throw new Error('Faltan APP_ID o CLIENT_SECRET en los ajustes.');
+  }
+  const redirectUri = resolveRedirectUri(req);
+  if (!redirectUri) {
+    throw new Error('No se pudo determinar la URL de retorno de autorización (redirect_uri).');
   }
 
   const params = new URLSearchParams({
@@ -38,7 +60,7 @@ async function exchangeCodeForToken(code, email = '') {
     client_id: String(settings.appId).trim(),
     client_secret: String(settings.clientSecret).trim(),
     code: String(code).trim(),
-    redirect_uri: String(settings.redirectUri).trim(),
+    redirect_uri: redirectUri,
   });
 
   const response = await axios.post(ML_TOKEN_URL, params.toString(), {
