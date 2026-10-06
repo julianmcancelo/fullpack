@@ -2,7 +2,6 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
-  signInWithPopup, 
   signInWithRedirect,
   signOut,
   onAuthStateChanged
@@ -22,12 +21,19 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
+/**
+ * Redirección a Google mediante Firebase.
+ *
+ * Antes se usaba `signInWithPopup`, pero con `Cross-Origin-Opener-Policy` el
+ * popup se abre en un contexto de navegación separado: `window.closed` deja de
+ * ser observable y el login se quedaba esperando para siempre. El redirect no
+ * depende de poder observar el popup, así que es el camino estable.
+ */
 export async function loginWithFirebaseGoogle() {
   googleProvider.setCustomParameters({
     prompt: 'select_account'
   });
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
+  await signInWithRedirect(auth, googleProvider);
 }
 
 export async function logoutFirebase() {

@@ -79,21 +79,37 @@ export function AuthProvider({ children }) {
     }
   }, [sessionToken]);
 
-  const loginWithGoogle = async () => {
-    // 1. Popup with Official Firebase Google Auth
-    const fbUser = await loginWithFirebaseGoogle();
-    if (!fbUser || !fbUser.email) {
-      throw new Error('No se pudo autenticar la cuenta de Google.');
+  /**
+   * Inicia sesión con Google y registra/autoriza la cuenta en el backend.
+   *
+   * Acepta dos formas:
+   * 1. `credential`: datos ya resueltos por Google Identity Services (botón /
+   *    One Tap). Es el camino normal: no hay popup que monitorizar.
+   * 2. Sin argumento: se delega en Firebase, que redirige al proveedor (nunca
+   *    popup: `window.closed` no es observable con Cross-Origin-Opener-Policy y
+   *    el login se quedaba colgado). Tras volver, el listener de
+   *    `onAuthStateChanged` completa el alta en el backend.
+   */
+  const loginWithGoogle = async (credential = null) => {
+    // Camino 1: el credential ya trae la identidad verificada por Google.
+    const profile =
+      credential && credential.email
+        ? {
+            email: credential.email,
+            name: credential.name || credential.email.split('@')[0],
+            avatar: credential.avatar || '',
+            googleId: credential.googleId || '',
+          }
+        : null;
+
+    if (!profile) {
+      // Camino 2: redirect. La página se va y vuelve; el listener de
+      // onAuthStateChanged (arriba) hace el alta en el backend al volver.
+      await loginWithFirebaseGoogle();
+      return { success: true, redirecting: true };
     }
 
-    // 2. Sync / Authorize in Backend & Neon Postgres
-    const res = await api.googleLogin({
-      email: fbUser.email,
-      name: fbUser.displayName || fbUser.email.split('@')[0],
-      avatar: fbUser.photoURL || '',
-      googleId: fbUser.uid,
-    });
-
+    const res = await api.googleLogin(profile);
     if (res.user) {
       setCurrentUser(res.user);
       setSessionToken(res.token);
