@@ -96,22 +96,35 @@ export function AuthProvider({ children }) {
   // (incluido el SuperAdmin) sin tener cuenta de Google.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser && fbUser.email) {
-        try {
-          const idToken = await fbUser.getIdToken();
-          const res = await api.googleLogin({
-            idToken,
-            email: fbUser.email,
-            name: fbUser.displayName || fbUser.email.split('@')[0],
-            avatar: fbUser.photoURL || '',
-          });
-          if (res.user) {
-            setCurrentUser(res.user);
-            setSessionToken(res.token);
-          }
-        } catch (e) {
-          console.warn('Backend sync note on firebase auth state:', e.message);
+      if (!fbUser || !fbUser.email) return;
+
+      try {
+        const idToken = await fbUser.getIdToken();
+        const res = await api.googleLogin({
+          idToken,
+          email: fbUser.email,
+          name: fbUser.displayName || fbUser.email.split('@')[0],
+          avatar: fbUser.photoURL || '',
+        });
+        if (res.user) {
+          setCurrentUser(res.user);
+          setSessionToken(res.token);
         }
+      } catch (e) {
+        // Antes esto sólo iba a la consola: el modal quedaba girando para
+        // siempre sin explicación. Ahora se emite el evento que escucha el
+        // LoginModal, que muestra el motivo real del rechazo.
+        console.warn('[auth] Google no completó el ingreso:', e.message);
+        window.dispatchEvent(
+          new CustomEvent('ml:google-login-failed', {
+            detail: {
+              blocked: false,
+              message:
+                e.message ||
+                'El servidor rechazó el acceso con Google. Probá de nuevo en unos minutos.',
+            },
+          })
+        );
       }
     });
 

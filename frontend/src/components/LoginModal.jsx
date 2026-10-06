@@ -228,7 +228,10 @@ export default function LoginModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const mailOff = mailStatus ? mailStatus.configured === false : false;
-  const senderHint = mailStatus?.sender ? `Enviamos desde ${mailStatus.sender}` : null;
+  // `onboarding@resend.dev` sólo entrega a la dirección de la cuenta de
+  // Resend: el correo sale, pero no llega a ningún otro usuario.
+  const senderLimited = Boolean(mailStatus?.restrictedSender);
+  const senderHint = mailStatus?.sender ? `Enviamos desde ${mailStatus.sender}.` : null;
 
   return (
     <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
@@ -327,8 +330,18 @@ export default function LoginModal({ isOpen, onClose }) {
               ) : (
                 <p className="text-[11px] leading-relaxed text-ink-subtle">
                   Te mandamos un código de 6 dígitos al correo. Vence en 15 minutos.
-                  {senderHint ? ` ${senderHint}.` : ''}
+                  {senderHint ? ` ${senderHint}` : ''}
                 </p>
+              )}
+
+              {senderLimited && !mailOff && (
+                <div className="rounded-xl border border-warning/30 bg-warning-soft p-3 text-[11px] leading-relaxed text-ink-muted">
+                  <p className="font-extrabold text-warning">Envío en modo prueba</p>
+                  <p className="mt-1">
+                    El correo sale sólo a la dirección registrada en Resend. Todavía no
+                    llega a otros usuarios.
+                  </p>
+                </div>
               )}
 
               <button type="submit" disabled={loading || mailOff} className="btn btn-primary btn-block py-3.5">

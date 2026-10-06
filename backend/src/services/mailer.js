@@ -42,12 +42,30 @@ function getSenderDomain() {
   return '';
 }
 
+/**
+ * Remitente por defecto de Resend.
+ *
+ * `onboarding@resend.dev` existe sin configurar nada, pero Resend sólo
+ * permite enviarlo a la dirección de la propia cuenta. Para mandar a
+ * cualquier usuario hay que usar un dominio verificado, así que conviene
+ * dejarlo explícito en `RESEND_FROM` (ver `getSenderDomain()`).
+ */
+const RESEND_ONBOARDING = 'Plataforma <onboarding@resend.dev>';
+
+function getResendFrom() {
+  if (RESEND_FROM) return RESEND_FROM;
+  if (MAIL_FROM && MAIL_FROM.includes('@')) {
+    return MAIL_FROM_NAME ? `${MAIL_FROM_NAME} <${MAIL_FROM}>` : MAIL_FROM;
+  }
+  return RESEND_ONBOARDING;
+}
+
 async function sendWithResend({ to, subject, html, text, replyTo }) {
   const { Resend } = require('resend');
   const resend = new Resend(RESEND_API_KEY);
 
   const payload = {
-    from: RESEND_FROM || `${MAIL_FROM_NAME} <${MAIL_FROM}>`,
+    from: getResendFrom(),
     to: [to],
     subject,
     html,
@@ -135,11 +153,14 @@ function getStatus() {
   return {
     configured: isConfigured(),
     transport: getTransport(),
-    sender: MAIL_FROM,
+    sender: getResendFrom(),
     senderDomain: getSenderDomain(),
     hasSmtp: Boolean(SMTP_URL),
     hasResend: Boolean(RESEND_API_KEY),
     fromName: MAIL_FROM_NAME,
+    // `onboarding@resend.dev` sólo entrega a la dirección de la cuenta de
+    // Resend. Para llegar a otros usuarios hace falta un dominio verificado.
+    restrictedSender: getSenderDomain() === 'resend.dev',
   };
 }
 
