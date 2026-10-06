@@ -16,8 +16,8 @@ object Constants {
     /** Versión de la app (se envía en `POST /pair/claim` como `appVersion`). */
     const val APP_VERSION: String = "1.1.0"
 
-    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+5`). */
-    const val APP_VERSION_CODE: Int = 5
+    /** Version code: se compara con el `+N` del tag del GitHub Release (`v1.1.0+6`). */
+    const val APP_VERSION_CODE: Int = 6
 
     /** Repo público donde se publican los APK (`Ajustes → Buscar actualizaciones`). */
     const val GITHUB_OWNER: String = "julianmcancelo"
