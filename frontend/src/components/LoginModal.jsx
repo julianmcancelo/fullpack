@@ -74,37 +74,6 @@ export default function LoginModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  // Handle Google Login Simulation / One-Tap
-  const handleGoogleSignIn = async (customEmail = null, customName = null) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const targetEmail = customEmail || email || adminEmail;
-      const targetName = customName || name || (targetEmail.includes('jcancelo') ? 'Julián Cancelo (Admin)' : targetEmail.split('@')[0]);
-
-      const res = await loginWithGoogle({
-        email: targetEmail,
-        name: targetName,
-        avatar: '',
-        googleId: `google_${Date.now()}`,
-      });
-
-      if (res.success) {
-        onClose();
-      }
-    } catch (err) {
-      if (err.message?.includes('pending_approval') || err.message?.includes('pendiente')) {
-        setAuthMode('pending_approval');
-        setPendingUser({ email: customEmail || email });
-      } else {
-        setError(err.message || 'Error al iniciar sesión con Google');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Step 1: Request OTP Code
   const handleRequestOtp = async (e) => {
     e.preventDefault();

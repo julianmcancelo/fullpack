@@ -89,15 +89,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Sync with Firebase Auth state
+  //
+  // Se manda el `idToken` de Firebase, no el email: el backend valida esa
+  // credencial contra Google. Mandar sólo el email significaba que cualquiera
+  // que llamara a la API podía pedir un token de sesión a nombre de otro
+  // (incluido el SuperAdmin) sin tener cuenta de Google.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.email) {
         try {
+          const idToken = await fbUser.getIdToken();
           const res = await api.googleLogin({
+            idToken,
             email: fbUser.email,
             name: fbUser.displayName || fbUser.email.split('@')[0],
             avatar: fbUser.photoURL || '',
-            googleId: fbUser.uid,
           });
           if (res.user) {
             setCurrentUser(res.user);
@@ -129,41 +135,20 @@ export function AuthProvider({ children }) {
   }, [sessionToken]);
 
   /**
-   * Inicia sesión con Google y registra/autoriza la cuenta en el backend.
+   * Inicia sesión con Google.
    *
-   * Acepta dos formas:
-   * 1. `credential`: datos ya resueltos por Google Identity Services (botón /
-   *    One Tap). Es el camino normal: no hay popup que monitorizar.
-   * 2. Sin argumento: se delega en Firebase, que redirige al proveedor (nunca
-   *    popup: `window.closed` no es observable con Cross-Origin-Opener-Policy y
-   *    el login se quedaba colgado). Tras volver, el listener de
-   *    `onAuthStateChanged` completa el alta en el backend.
+   * Sin argumentos: delega en Firebase, que redirige al proveedor. Nunca popup:
+   * con `Cross-Origin-Opener-Policy` `window.closed` no es observable y el login
+   * quedaba colgado. Al volver, el listener de `onAuthStateChanged` (arriba)
+   * pide el `idToken` y completa el alta.
+   *
+   * NO se acepta un perfil armado a mano: el backend exige el `idToken` de
+   * Firebase y valida esa credencial contra Google. Aceptar `{email}` suelta
+   * permitía pedir un token de sesión a nombre de cualquiera.
    */
-  const loginWithGoogle = async (credential = null) => {
-    // Camino 1: el credential ya trae la identidad verificada por Google.
-    const profile =
-      credential && credential.email
-        ? {
-            email: credential.email,
-            name: credential.name || credential.email.split('@')[0],
-            avatar: credential.avatar || '',
-            googleId: credential.googleId || '',
-          }
-        : null;
-
-    if (!profile) {
-      // Camino 2: redirect. La página se va y vuelve; el listener de
-      // onAuthStateChanged (arriba) hace el alta en el backend al volver.
-      await loginWithFirebaseGoogle();
-      return { success: true, redirecting: true };
-    }
-
-    const res = await api.googleLogin(profile);
-    if (res.user) {
-      setCurrentUser(res.user);
-      setSessionToken(res.token);
-    }
-    return res;
+  const loginWithGoogle = async () => {
+    await loginWithFirebaseGoogle();
+    return { success: true, redirecting: true };
   };
 
   const loginWithOtp = async (email, code) => {

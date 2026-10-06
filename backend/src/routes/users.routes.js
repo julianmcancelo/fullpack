@@ -4,10 +4,11 @@ const crypto = require('crypto');
 const store = require('../db/store');
 const neon = require('../db/neon');
 const mailer = require('../services/mailer');
+const { verifyGoogleIdToken } = require('../services/googleIdentity');
 const { requireSession, requireAdmin, requireSuperAdmin } = require('../middleware/session');
 
 // POST /api/users/google-login
-// Handles Google OAuth sign-in / verification
+// Exige un `idToken` de Firebase y valida esa credencial contra Google.
 router.post('/google-login', async (req, res) => {
   try {
     // Sin base compartida no hay sesiones válidas: mejor un 503 explícito
@@ -25,13 +26,22 @@ router.post('/google-login', async (req, res) => {
     });
   }
 
+  // La identidad sale del idToken verificado por Google, nunca del cuerpo del
+  // POST. Antes se confiaba en `req.body.email`: con un `curl` que dijera el
+  // email del SuperAdmin se obtenía un token de sesión de esa persona.
+  let identity;
   try {
-    const { email, name, avatar, googleId } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'El email de Google es requerido.' });
-    }
+    identity = await verifyGoogleIdToken(req.body?.idToken);
+  } catch (err) {
+    return res.status(err.statusCode || 401).json({
+      error: 'invalid_google_token',
+      message: err.message,
+    });
+  }
 
-    const cleanEmail = email.trim().toLowerCase();
+  try {
+    const cleanEmail = identity.email;
+    const { name, avatar } = identity;
     const isSuperAdmin = store.isSuperAdminEmail(cleanEmail);
     const existentes = await store.getAllUsers();
     const esPrimero = !existentes || existentes.length === 0;
