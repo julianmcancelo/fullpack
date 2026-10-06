@@ -102,6 +102,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, code }),
     }),
+  // Configuración de correo (público: la UI de acceso lo consulta antes de
+  // que el usuario tenga sesión, para no prometer un envío imposible).
+  getMailStatus: () => fetchApi('/users/mail-status'),
   // --- Gestión de la plataforma (exclusiva del SuperAdmin) ---
   getUsersList: () => fetchApi('/users/list'),
   getPlatformOverview: () => fetchApi('/users/overview'),

@@ -118,6 +118,7 @@ router.post('/request-code', async (req, res) => {
 
     // Check or register user
     let user = await store.findUserByEmail(cleanEmail);
+    const existiaAntes = Boolean(user);
     if (!user) {
       user = await store.upsertUser({
         email: cleanEmail,
@@ -142,29 +143,42 @@ router.post('/request-code', async (req, res) => {
 
     await store.createLoginToken(cleanEmail, otpCode, token, 15);
 
-    // Envío real del correo. Sin transporte configurado NO se dice "enviado":
-    // se devuelve el código para que el usuario pueda entrar igual.
-    const mail = await mailer.sendAccessCode({ to: cleanEmail, code: otpCode, minutes: 15 });
-
-    const allowDebugOtp = process.env.ALLOW_DEBUG_OTP === 'true';
-    const payload = {
-      success: true,
-      message: mail.delivered
-        ? `Código de acceso enviado a ${cleanEmail}. Expira en 15 minutos.`
-        : `Código de acceso generado para ${cleanEmail}. Expira en 15 minutos.`,
-      email: cleanEmail,
-      status: user.status,
-    };
-
-    if (!mail.delivered || allowDebugOtp) {
-      payload.code = otpCode;
-      payload.deliveredByEmail = mail.delivered;
-      if (!mail.delivered) {
-        payload.notice =
-          'El envío de correo no está configurado en el servidor, por eso te mostramos el código acá.';
+    // Aviso al SuperAdmin si la cuenta es nueva: así sabe que tiene una
+    // solicitud esperando sin abrir la plataforma.
+    if (!existiaAntes && !isSuperAdmin) {
+      const admin = store.getSuperAdminEmail();
+      if (admin) {
+        mailer
+          .sendAccessRequestNotice({ to: admin, email: cleanEmail, name })
+          .catch(() => {});
       }
     }
-    res.json(payload);
+
+    // Envío real del correo.
+    //
+    // Si no hay transporte configurado NO se dice "enviado" y NO se devuelve
+    // el código: exponerlo en la respuesta convertía este endpoint en una
+    // forma de autenticarse sin correo. Sin correo no hay acceso por código.
+    const mail = await mailer.sendAccessCode({ to: cleanEmail, code: otpCode, minutes: 15 });
+
+    if (!mail.delivered) {
+      console.warn(`[auth] correo no entregado a ${cleanEmail}: ${mail.reason}`);
+      return res.status(503).json({
+        error: 'mail_unavailable',
+        message:
+          'No pudimos enviarte el código por correo. Intentá de nuevo en unos minutos.',
+        mailTransport: mail.transport || 'none',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Te enviamos un código de acceso a ${cleanEmail}. Vence en 15 minutos.`,
+      email: cleanEmail,
+      status: user.status,
+      deliveredByEmail: true,
+      expiresInMinutes: 15,
+    });
   } catch (err) {
     console.error('Request code error:', err);
     res.status(500).json({ error: err.message || 'Error al generar código' });
@@ -230,6 +244,19 @@ router.post('/verify-code', async (req, res) => {
   } catch (err) {
     console.error('Verify code error:', err);
     res.status(500).json({ error: err.message || 'Error al verificar código' });
+  }
+});
+
+// GET /api/users/mail-status
+//
+// Configuración de correo para la UI de acceso: si hay transporte, cuál es y
+// desde qué dominio sale. Nunca expone credenciales, así que va sin sesión:
+// el frontend lo necesita mostrar antes de que el usuario tenga cuenta.
+router.get('/mail-status', (req, res) => {
+  try {
+    res.json({ success: true, ...mailer.getStatus() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
