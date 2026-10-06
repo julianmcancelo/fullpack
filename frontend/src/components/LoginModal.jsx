@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { diagnoseGoogleLogin, googleLoginWarning } from '../services/authCompat';
 
 export default function LoginModal({ isOpen, onClose }) {
   const { loginWithGoogle, loginWithOtp, adminEmail } = useAuth();
@@ -28,12 +29,48 @@ export default function LoginModal({ isOpen, onClose }) {
   const [debugOtp, setDebugOtp] = useState(null);
   const [otpNotice, setOtpNotice] = useState(null);
   const [pendingUser, setPendingUser] = useState(null);
+  const [googleWarning, setGoogleWarning] = useState(null);
 
   // Nota: el login de Google se hace por Firebase (redirect), no con Google
-  // Identity Services. El `client_id` de GIS estabatomado del App ID de
+  // Identity Services. El `client_id` de GIS estaba tomado del App ID de
   // Mercado Libre, que no es un proyecto de Google: Google rechazaba el
   // credential y el botón no avanzaba. Firebase ya tiene su cliente OAuth
   // válido y es la única fuente de verdad para autenticar con Google.
+
+  // En Edge con "Tracking Prevention" el almacenamiento en iframes de Google
+  // queda bloqueado y el login con Google se cuelga en silencio. Se detecta
+  // al abrir el modal y se avisa en vez de dejar que el usuario falle.
+  React.useEffect(() => {
+    if (!isOpen) return undefined;
+    let active = true;
+    diagnoseGoogleLogin()
+      .then((diag) => {
+        if (active) setGoogleWarning(googleLoginWarning(diag));
+      })
+      .catch(() => {
+        if (active) setGoogleWarning(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
+
+  // Si la vuelta desde Google falló (lo emite AuthContext al detectar que el
+  // navegador bloqueó el almacenamiento), se explica acá en vez de dejar el
+  // botón girando para siempre.
+  React.useEffect(() => {
+    const onFailed = (e) => {
+      setLoading(false);
+      setGoogleWarning({
+        title: e.detail?.blocked
+          ? 'Este navegador bloqueó el acceso con Google'
+          : 'No pudimos completar el acceso con Google',
+        body: e.detail?.message || 'Intentá de nuevo o usá el acceso con correo y código.',
+      });
+    };
+    window.addEventListener('ml:google-login-failed', onFailed);
+    return () => window.removeEventListener('ml:google-login-failed', onFailed);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -176,10 +213,14 @@ export default function LoginModal({ isOpen, onClose }) {
                   try {
                     setLoading(true);
                     setError(null);
+                    setSuccessMsg(null);
+                    setOtpNotice(null);
                     await loginWithGoogle();
                     // Con redirect la página se va y vuelve: no cerramos el
                     // modal ni liberamos el botón, el listener de Firebase
-                    // completa el ingreso al volver.
+                    // completa el ingreso al volver. El botón queda deshabilitado
+                    // a propósito: si la vuelta fallara, el aviso de arriba
+                    // explica por qué y ofrece el correo como salida.
                     setError('Te redirigimos a Google… volvé en un momento.');
                   } catch (err) {
                     if (err.message?.includes('pending_approval') || err.message?.includes('pendiente')) {
@@ -201,6 +242,32 @@ export default function LoginModal({ isOpen, onClose }) {
                 </svg>
                 <span className="font-bold">Continuar con Google</span>
               </button>
+
+              {/* Aviso honesto cuando este navegador rompe el login con
+                  Google. No se oculta el botón: se explica el problema y se
+                  ofrece el camino que sí funciona. */}
+              {googleWarning && (
+                <div
+                  className="rounded-2xl border border-warning/40 bg-warning-soft px-3.5 py-3 text-xs"
+                  role="alert"
+                >
+                  <p className="flex items-start gap-2 font-extrabold text-warning">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{googleWarning.title}</span>
+                  </p>
+                  <p className="mt-1.5 leading-relaxed text-ink-muted">
+                    {googleWarning.body}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('otp_request')}
+                    className="btn btn-outline btn-sm mt-2.5"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    <span>Usar correo y código</span>
+                  </button>
+                </div>
+              )}
 
               <div className="flex items-center gap-3 py-1">
                 <span className="divider flex-1" />

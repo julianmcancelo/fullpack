@@ -62,19 +62,45 @@ async function optionalSession(req, res, next) {
   return next();
 }
 
+/**
+ * Exige rol de supervisor: `admin` o `superadmin`.
+ *
+ * Deliberadamente NO incluye la gestión de cuentas de la plataforma. Esa es
+ * `requireSuperAdmin`.
+ */
 function requireAdmin(req, res, next) {
-  const user = req.user;
-  const isAdmin = Boolean(
-    user && (user.role === 'admin' || store.isAdminEmail(user.email))
-  );
-  if (!isAdmin) {
+  if (!store.isSupervisor(req.user)) {
     return res.status(403).json({
       success: false,
       error: 'forbidden',
-      message: 'Solo la cuenta administradora puede hacer esto.',
+      message: 'Necesitás permisos de administrador para hacer esto.',
     });
   }
   return next();
 }
 
-module.exports = { requireSession, optionalSession, requireAdmin, extractSessionToken };
+/**
+ * Exige rol `superadmin`: el dueño de la plataforma.
+ *
+ * Aprobar, rechazar, suspender, cambiar roles, revocar sesiones y resetear la
+ * plataforma son acciones de SuperAdmin. Un `admin` (que supervisa la
+ * operación de otros) queda fuera por diseño.
+ */
+function requireSuperAdmin(req, res, next) {
+  if (!req.user || !store.isSuperAdminEmail(req.user.email)) {
+    return res.status(403).json({
+      success: false,
+      error: 'forbidden',
+      message: 'Sólo el SuperAdmin puede gestionar las cuentas de la plataforma.',
+    });
+  }
+  return next();
+}
+
+module.exports = {
+  requireSession,
+  optionalSession,
+  requireAdmin,
+  requireSuperAdmin,
+  extractSessionToken,
+};

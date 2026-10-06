@@ -185,9 +185,49 @@ function getSettings() {
   return settings;
 }
 
-function isAdminEmail(email) {
-  const cfg = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+// Roles de la plataforma, del más alto al más bajo:
+//   superadmin -> dueño de la plataforma: gestiona las cuentas de usuario
+//                 (aprobar, suspender, cambiar rol, resetear).
+//   admin      -> supervisa la operación de las cuentas de los demás
+//                 (stock, órdenes, envíos) pero no gestiona cuentas.
+//   user       -> opera únicamente su propia cuenta de Mercado Libre.
+const ROLES = ['superadmin', 'admin', 'user'];
+const DEFAULT_ROLE = 'user';
+
+/** Email del dueño de la plataforma, definido por `ADMIN_EMAIL`. */
+function getSuperAdminEmail() {
+  return String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+}
+
+/**
+ * ¿Es el dueño de la plataforma? Da igual el `role` guardado: la fuente de
+ * verdad es `ADMIN_EMAIL`. El rol guardado se usa para el resto de admins.
+ */
+function isSuperAdminEmail(email) {
+  const cfg = getSuperAdminEmail();
   return !!cfg && String(email || '').trim().toLowerCase() === cfg;
+}
+
+/**
+ * Rol efectivo de un usuario. `ADMIN_EMAIL` siempre resuelve a `superadmin`,
+ * aunque el registro todavía diga `admin` (datos previos a la separación).
+ */
+function effectiveRole(user) {
+  if (!user) return DEFAULT_ROLE;
+  if (isSuperAdminEmail(user.email)) return 'superadmin';
+  const role = String(user.role || '').trim().toLowerCase();
+  return ROLES.includes(role) ? role : DEFAULT_ROLE;
+}
+
+/** ¿Puede supervisar la operación de otras cuentas? */
+function isSupervisor(user) {
+  const role = effectiveRole(user);
+  return role === 'superadmin' || role === 'admin';
+}
+
+/** Alias histórico: `isAdminEmail` pasó a significar SuperAdmin. */
+function isAdminEmail(email) {
+  return isSuperAdminEmail(email);
 }
 
 function updateSettings(newSettings) {
@@ -502,17 +542,23 @@ async function updateUserStatus(userId, newStatus) {
 }
 
 /**
- * Actualiza el rol de un usuario (`admin` | `user`).
+ * Actualiza el rol de un usuario (`superadmin` | `admin` | `user`).
  * El SuperAdmin no se puede degradar a sí mismo.
  */
 async function updateUserRole(userId, newRole) {
   const db = readDb();
   const user = (db.users || []).find((u) => String(u.id) === String(userId));
   if (!user) return { ok: false, error: 'Usuario no encontrado' };
-  if (isAdminEmail(user.email) && newRole !== 'admin') {
-    return { ok: false, error: 'No podés quitarte a vos mismo el rol de administrador.' };
+  if (isSuperAdminEmail(user.email) && newRole !== 'superadmin') {
+    return { ok: false, error: 'No podés quitarte a vos mismo el rol de SuperAdmin.' };
   }
-  user.role = newRole === 'admin' ? 'admin' : 'user';
+  // No se puede nombrar a otro SuperAdmin: el dueño de la plataforma es único
+  // y se define por `ADMIN_EMAIL`.
+  if (newRole === 'superadmin') {
+    return { ok: false, error: 'El rol SuperAdmin es único y se define con ADMIN_EMAIL.' };
+  }
+  const role = newRole === 'admin' ? 'admin' : 'user';
+  user.role = role;
   writeDb(db);
   try {
     await neon.updateUserRoleInNeon(userId, user.role);
@@ -527,8 +573,8 @@ async function setUserSuspended(userId, suspended, sessionsOf) {
   const db = readDb();
   const user = (db.users || []).find((u) => String(u.id) === String(userId));
   if (!user) return { ok: false, error: 'Usuario no encontrado' };
-  if (isAdminEmail(user.email)) {
-    return { ok: false, error: 'No podés suspender la cuenta administradora.' };
+  if (isSuperAdminEmail(user.email)) {
+    return { ok: false, error: 'No podés suspender la cuenta del SuperAdmin.' };
   }
 
   user.status = suspended ? 'suspended' : 'active';
@@ -574,7 +620,7 @@ async function revokeAllSessions(email) {
  * Mercado Libre vinculadas y sesiones activas.
  */
 async function getPlatformOverview() {
-  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const superAdminEmail = getSuperAdminEmail();
   const users = await getAllUsers();
 
   const byStatus = { active: 0, pending: 0, rejected: 0, suspended: 0 };
@@ -595,7 +641,16 @@ async function getPlatformOverview() {
       /* sin datos de ML: se reporta como no vinculado */
     }
     if (linked) linkedAccounts += 1;
-    accounts.push({ email: u.email, linked, nickname, isSuperAdmin: u.email === adminEmail });
+    accounts.push({
+      id: u.id,
+      name: u.name || '',
+      email: u.email,
+      linked,
+      nickname,
+      status: u.status || '',
+      role: effectiveRole(u),
+      isSuperAdmin: u.email === superAdminEmail,
+    });
   }
 
   let activeSessions = 0;
@@ -614,9 +669,53 @@ async function getPlatformOverview() {
     byStatus,
     linkedAccounts,
     activeSessions,
-    superAdminEmail: adminEmail,
+    superAdminEmail,
     accounts,
   };
+}
+
+/**
+ * Cuentas que un supervisor (Admin o SuperAdmin) puede operar.
+ *
+ * Es un listing de SOLO lectura y sin controles de plataforma: el Admin puede
+ * ver qué cuentas existen y entrar a su operación, pero no aprueba, suspende ni
+ * cambia roles aquí. Esa gestión vive en `getPlatformOverview`, exclusivo del
+ * SuperAdmin.
+ */
+async function getSupervisableAccounts() {
+  const users = await getAllUsers();
+  const accounts = [];
+
+  for (const u of users) {
+    // Una cuenta suspendida o pendiente no se puede operar.
+    if (u.status !== 'active') continue;
+
+    let nickname = '';
+    let linked = false;
+    try {
+      const auth = await neon.getAuthFromNeon(u.email);
+      if (auth && auth.accessToken) {
+        linked = true;
+        nickname = auth.nickname || '';
+      }
+    } catch {
+      /* sin datos de ML: se reporta como no vinculado */
+    }
+
+    accounts.push({
+      id: u.id,
+      name: u.name || '',
+      email: u.email,
+      avatar: u.avatar || '',
+      role: effectiveRole(u),
+      isSuperAdmin: isSuperAdminEmail(u.email),
+      linked,
+      nickname,
+      lastLoginAt: u.lastLoginAt || null,
+    });
+  }
+
+  return accounts;
 }
 
 async function createLoginToken(email, code, token, expireMinutes = 15) {
@@ -920,6 +1019,10 @@ async function touchDevice(id) {
 module.exports = {
   getSettings,
   isAdminEmail,
+  isSuperAdminEmail,
+  getSuperAdminEmail,
+  effectiveRole,
+  isSupervisor,
   updateSettings,
   getAuth,
   updateAuth,
@@ -939,6 +1042,7 @@ module.exports = {
   setUserSuspended,
   revokeAllSessions,
   getPlatformOverview,
+  getSupervisableAccounts,
   createLoginToken,
   verifyLoginToken,
   getDatabaseStatus,

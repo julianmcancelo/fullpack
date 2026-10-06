@@ -10,6 +10,7 @@ import {
   Users,
   ChevronDown,
   Smartphone,
+  Eye,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -22,11 +23,10 @@ export default function Navbar({
   onNavigate,
   onOpenCommand,
   onOpenLogin,
-  onOpenUsersAdmin,
   onOpenPairDevice,
 }) {
   const { isDark, toggleTheme } = useTheme();
-  const { currentUser, logout, isAdmin } = useAuth();
+  const { currentUser, logout, isSuperAdmin, isSupervisor, roleLabel } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
   const menuRef = React.useRef(null);
 
@@ -169,7 +169,12 @@ export default function Navbar({
                   <span className="truncate text-xs font-bold text-ink">
                     {currentUser.name || currentUser.email}
                   </span>
-                  {isAdmin && <span className="badge badge-brand !py-0">Admin</span>}
+                  {isSuperAdmin && (
+                  <span className="badge badge-brand !py-0">SuperAdmin</span>
+                )}
+                {!isSuperAdmin && isSupervisor && (
+                  <span className="badge badge-accent !py-0">Admin</span>
+                )}
                 </span>
                 <ChevronDown
                   className={`h-3.5 w-3.5 text-ink-subtle transition-transform duration-200 ${
@@ -188,15 +193,35 @@ export default function Navbar({
                     <div className="mt-2 flex items-center gap-1.5">
                       <span className="h-1.5 w-1.5 rounded-full bg-success" />
                       <span className="text-[10px] font-extrabold uppercase tracking-wider text-success">
-                        {isAdmin ? 'SuperAdmin principal' : 'Usuario autorizado'}
+                        {roleLabel === 'SuperAdmin'
+                          ? 'Dueño de la plataforma'
+                          : roleLabel === 'Administrador'
+                            ? 'Supervisa otras cuentas'
+                            : 'Usuario autorizado'}
                       </span>
                     </div>
                   </div>
 
                   <div className="py-1">
-                    {/* La gestión de cuentas vive en la sección de plataforma
-                        del menú lateral; acá sólo se navega hasta ella. */}
-                    {isAdmin && (
+                    {/* Supervisión: sólo para quien puede operar la cuenta de
+                        otro. No gestiona cuentas, sólo entra a operarlas. */}
+                    {isSupervisor && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          onNavigate('adminsupervision');
+                        }}
+                        className="menu-item"
+                      >
+                        <Eye className="h-4 w-4 text-accent" />
+                        <span>Supervisar cuentas</span>
+                      </button>
+                    )}
+
+                    {/* Gestión de cuentas: exclusiva del SuperAdmin. */}
+                    {isSuperAdmin && (
                       <button
                         type="button"
                         role="menuitem"

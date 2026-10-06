@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const store = require('../db/store');
 const neon = require('../db/neon');
 const mailer = require('../services/mailer');
-const { requireSession, requireAdmin } = require('../middleware/session');
+const { requireSession, requireAdmin, requireSuperAdmin } = require('../middleware/session');
 
 // POST /api/users/google-login
 // Handles Google OAuth sign-in / verification
@@ -32,7 +32,7 @@ router.post('/google-login', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const isAdmin = store.isAdminEmail(cleanEmail);
+    const isSuperAdmin = store.isSuperAdminEmail(cleanEmail);
     const existentes = await store.getAllUsers();
     const esPrimero = !existentes || existentes.length === 0;
 
@@ -45,13 +45,13 @@ router.post('/google-login', async (req, res) => {
         email: cleanEmail,
         name: name || cleanEmail.split('@')[0],
         avatar: avatar || '',
-        role: (isAdmin || esPrimero) ? 'admin' : 'user',
-        status: (isAdmin || esPrimero) ? 'active' : 'pending',
+        role: isSuperAdmin ? 'superadmin' : 'user',
+        status: (isSuperAdmin || esPrimero) ? 'active' : 'pending',
         authProvider: 'google',
       });
-    } else if (isAdmin) {
-      // Enforce active admin for the configured admin account
-      user.role = 'admin';
+    } else if (isSuperAdmin) {
+      // El dueño de la plataforma siempre entra activo y como SuperAdmin.
+      user.role = 'superadmin';
       user.status = 'active';
     }
 
@@ -102,7 +102,7 @@ router.post('/request-code', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const isAdmin = store.isAdminEmail(cleanEmail);
+    const isSuperAdmin = store.isSuperAdminEmail(cleanEmail);
     const existentes = await store.getAllUsers();
     const esPrimero = !existentes || existentes.length === 0;
 
@@ -113,8 +113,8 @@ router.post('/request-code', async (req, res) => {
         email: cleanEmail,
         name: name || cleanEmail.split('@')[0],
         avatar: '',
-        role: (isAdmin || esPrimero) ? 'admin' : 'user',
-        status: (isAdmin || esPrimero) ? 'active' : 'pending',
+        role: isSuperAdmin ? 'superadmin' : 'user',
+        status: (isSuperAdmin || esPrimero) ? 'active' : 'pending',
         authProvider: 'email',
       });
     }
@@ -237,7 +237,15 @@ router.post('/logout', requireSession, async (req, res) => {
 });
 
 // GET /api/users/list (Admin only - List all platform users and pending approvals)
-router.get('/list', requireSession, requireAdmin, async (req, res) => {
+// ---------------------------------------------------------------------------
+// SuperAdmin: administración de la plataforma (distinta de operar una cuenta
+// de Mercado Libre). Todo exige requireSession + requireSuperAdmin.
+// ---------------------------------------------------------------------------
+
+const VALID_STATUS = ['active', 'pending', 'rejected', 'suspended'];
+
+// GET /api/users/list (SuperAdmin) - listado crudo, con datos de autenticación
+router.get('/list', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const users = await store.getAllUsers();
     res.json({ success: true, users });
@@ -246,15 +254,8 @@ router.get('/list', requireSession, requireAdmin, async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// SuperAdmin: administración de la plataforma (distinta de operar una cuenta
-// de Mercado Libre). Todo exige requireSession + requireAdmin.
-// ---------------------------------------------------------------------------
-
-const VALID_STATUS = ['active', 'pending', 'rejected', 'suspended'];
-
 // GET /api/users/overview (SuperAdmin) - KPIs y estado de la plataforma
-router.get('/overview', requireSession, requireAdmin, async (req, res) => {
+router.get('/overview', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const overview = await store.getPlatformOverview();
     const db = await store.getDatabaseStatus();
@@ -265,7 +266,7 @@ router.get('/overview', requireSession, requireAdmin, async (req, res) => {
 });
 
 // PATCH /api/users/:id/status (SuperAdmin) - suspender / reactivar / rechazar
-router.patch('/:id/status', requireSession, requireAdmin, async (req, res) => {
+router.patch('/:id/status', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const { status } = req.body;
     if (!VALID_STATUS.includes(status)) {
@@ -301,8 +302,8 @@ router.patch('/:id/status', requireSession, requireAdmin, async (req, res) => {
   }
 });
 
-// PATCH /api/users/:id/role (SuperAdmin) - promover o degradar a admin
-router.patch('/:id/role', requireSession, requireAdmin, async (req, res) => {
+// PATCH /api/users/:id/role (SuperAdmin) - promover a admin o degradar a user
+router.patch('/:id/role', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const { role } = req.body;
     if (!['admin', 'user'].includes(role)) {
@@ -321,7 +322,7 @@ router.patch('/:id/role', requireSession, requireAdmin, async (req, res) => {
 });
 
 // POST /api/users/:id/revoke-sessions (SuperAdmin) - cerrar sesiones y equipos
-router.post('/:id/revoke-sessions', requireSession, requireAdmin, async (req, res) => {
+router.post('/:id/revoke-sessions', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const users = await store.getAllUsers();
     const target = users.find((u) => String(u.id) === String(req.params.id));
@@ -336,8 +337,8 @@ router.post('/:id/revoke-sessions', requireSession, requireAdmin, async (req, re
   }
 });
 
-// POST /api/users/approve (Admin only - Approve or reject pending user)
-router.post('/approve', requireSession, requireAdmin, async (req, res) => {
+// POST /api/users/approve (SuperAdmin only - Approve or reject pending user)
+router.post('/approve', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const { userId, status } = req.body;
 
@@ -352,11 +353,30 @@ router.post('/approve', requireSession, requireAdmin, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Admin: supervisión de la operación de otras cuentas.
+//
+// Deliberadamente NO expone `getPlatformOverview` ni ninguna acción de gestión
+// de cuentas (aprobar/suspender/roles/reset). Un Admin puede ver qué cuentas
+// existen y entrar a su operación; decidir quién entra a la plataforma es
+// territorio exclusivo del SuperAdmin.
+// ---------------------------------------------------------------------------
+
+// GET /api/users/supervisable (Admin o SuperAdmin)
+router.get('/supervisable', requireSession, requireAdmin, async (req, res) => {
+  try {
+    const accounts = await store.getSupervisableAccounts();
+    res.json({ success: true, accounts, superAdminEmail: store.getSuperAdminEmail() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/users/reset-platform (SuperAdmin only)
 // Deja la plataforma como recién creada: sin cuentas de Mercado Libre, sin
 // sesiones, sin packing previo y con un único usuario (el admin).
 // Es una acción destructiva e irreversible.
-router.post('/reset-platform', requireSession, requireAdmin, async (req, res) => {
+router.post('/reset-platform', requireSession, requireSuperAdmin, async (req, res) => {
   try {
     const result = await store.factoryResetAll();
     res.json({

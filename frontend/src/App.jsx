@@ -8,6 +8,7 @@ import BarcodeScannerModal from './components/BarcodeScannerModal';
 import PairDeviceModal from './components/PairDeviceModal';
 import OnboardingWizard from './components/OnboardingWizard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import NewSaleNotification from './components/NewSaleNotification';
 import NewQuestionNotification from './components/NewQuestionNotification';
 import Dashboard from './pages/Dashboard';
@@ -26,10 +27,10 @@ import { playCashRegisterSound, playSuccessBeep } from './utils/audio';
 import { celebrate } from './utils/celebrate';
 
 export default function App() {
-  const { currentUser, isAdmin, authReady } = useAuth();
-  // `isSuperAdmin` gobierna la sección de plataforma. Un usuario administrador
-  // que no es SuperAdmin opera su cuenta pero no gestiona cuentas ajenas.
-  const isSuperAdmin = Boolean(isAdmin);
+  // Dos permisos distintos: `isSuperAdmin` gobierna la gestión de cuentas de la
+  // plataforma; `isSupervisor` permite operar la cuenta de otro usuario. Un
+  // Administrador tiene el segundo y no el primero.
+  const { currentUser, isSuperAdmin, isSupervisor, authReady } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [connection, setConnection] = useState(null);
   const [stats, setStats] = useState(null);
@@ -177,10 +178,48 @@ export default function App() {
     };
   }, [authReady, isSuperAdmin]);
 
-  // Un usuario no SuperAdmin nunca puede quedar en la sección de plataforma.
+  // Guard de navegación por rol. Cada sección tiene su propio permiso: un Admin
+  // puede abrir Supervisión pero nunca Administración de la plataforma, y un
+  // usuario común no ve ninguna de las dos.
   useEffect(() => {
-    if (!isSuperAdmin && activeTab === 'superadmin') setActiveTab('dashboard');
-  }, [isSuperAdmin, activeTab]);
+    if (activeTab === 'superadmin' && !isSuperAdmin) setActiveTab('dashboard');
+    if (activeTab === 'adminsupervision' && !isSupervisor) setActiveTab('dashboard');
+  }, [isSuperAdmin, isSupervisor, activeTab]);
+
+  // Cuenta de Mercado Libre que se está supervisando, si la hay. Vive acá para
+  // que toda la app la use: el backend la recibe en `X-Acting-User`.
+  const [actingAsEmail, setActingAsEmail] = useState(() => api.getActingUser());
+
+  // Sólo un supervisor puede quedarse mirando la cuenta de otro. Si pierde el
+  // rol, cierra sesión, o la selección quedó huérfana, se descarta: dejarla
+  // puesta filtraría datos de otra cuenta a quien ya no corresponde.
+  useEffect(() => {
+    if (actingAsEmail && (!isSupervisor || !currentUser)) {
+      api.setActingUser(null);
+      setActingAsEmail(null);
+    }
+  }, [actingAsEmail, isSupervisor, currentUser]);
+
+  // Al cerrar sesión, la selección de supervisión no puede sobrevivir en el
+  // navegador. `AuthContext.logout` ya limpia `ml_acting_user`; acá se limpia
+  // el estado local para que el aviso desaparezca en la misma pantalla.
+  useEffect(() => {
+    if (!currentUser && actingAsEmail) setActingAsEmail(null);
+  }, [currentUser, actingAsEmail]);
+
+  const stopSupervising = useCallback(() => {
+    api.setActingUser(null);
+    setActingAsEmail(null);
+  }, []);
+
+  // Al cambiar de cuenta supervisada, los datos de la operación se recargan:
+  // sin esto la pantalla seguiría mostrando los números del usuario anterior.
+  useEffect(() => {
+    if (!actingAsEmail || !currentUser) return;
+    refreshAll();
+    loadConnectionStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actingAsEmail]);
 
   // Background Polling for Live New Sales (every 15 seconds)
   useEffect(() => {
@@ -447,7 +486,6 @@ export default function App() {
         onNavigate={setActiveTab}
         onOpenCommand={setCommandOpen}
         onOpenLogin={() => setLoginModalOpen(true)}
-        onOpenUsersAdmin={() => setActiveTab('superadmin')}
         onOpenPairDevice={() => setPairModalOpen(true)}
       />
 
@@ -462,6 +500,8 @@ export default function App() {
           stats={stats}
           shipments={shipments}
           pendingAdmins={pendingAdmins}
+          actingAsEmail={actingAsEmail}
+          onStopSupervising={stopSupervising}
         />
 
         {/* Dynamic Page Content */}
@@ -497,8 +537,20 @@ export default function App() {
 
           {activeTab === 'calculator' && <FeeCalculator />}
 
+          {/* Supervisión (Admin y SuperAdmin): operar la cuenta de otro usuario.
+              Sin controles de plataforma: aprobar/suspender es del SuperAdmin. */}
+          {activeTab === 'adminsupervision' && isSupervisor && (
+            <AdminDashboard
+              onNavigate={setActiveTab}
+              onSupervise={(account) => {
+                setActingAsEmail(account.email);
+                setActiveTab('dashboard');
+              }}
+            />
+          )}
+
           {/* Gestión de la plataforma: sólo SuperAdmin. Es una sección
-              distinta de la operación de la cuenta de Mercado Libre. */}
+              distinta tanto de la operación como de la supervisión. */}
           {activeTab === 'superadmin' && isSuperAdmin && (
             <SuperAdminDashboard onNavigate={setActiveTab} />
           )}

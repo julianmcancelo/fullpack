@@ -2,10 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { getOverview } = require('../services/overview.service');
 const { optionalSession } = require('../middleware/session');
-const { resolveMlEmail } = require('../middleware/mlContext');
+const { resolveMlEmail, resolveEffectiveOwnerEmail } = require('../middleware/mlContext');
+const { resolveActingUser } = require('../middleware/actingUser');
 
 // Resuelve la cuenta de ML del llamante (sesión web o dispositivo móvil).
+// `resolveActingUser` permite que un Admin opere la cuenta de otro usuario.
 router.use(optionalSession);
+router.use(resolveActingUser);
 
 // GET /api/stats/dashboard (resumen canónico compartido con la app móvil)
 router.get('/dashboard', async (req, res) => {
@@ -22,6 +25,9 @@ router.get('/dashboard', async (req, res) => {
       ordersError: data.errors.orders,
       shipmentsError: data.errors.shipments,
       serverTime: data.serverTime,
+      // De qué cuenta vienen estos números: la propia o una supervisionada.
+      ownerEmail: resolveEffectiveOwnerEmail(req),
+      actingAs: Boolean(req.actingUser),
     });
   } catch (err) {
     res.json({

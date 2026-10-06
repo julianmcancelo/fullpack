@@ -11,14 +11,16 @@ import {
   ExternalLink,
   Sparkles,
   ShieldCheck,
+  Eye,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice, stats, shipments, pendingAdmins = 0 }) {
-  const { isAdmin } = useAuth();
-  // La sección de plataforma es exclusiva del SuperAdmin: los demás usuarios
-  // administrados no ven (ni pueden abrir) la gestión de cuentas.
-  const isSuperAdmin = isAdmin;
+export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice, stats, shipments, pendingAdmins = 0, actingAsEmail = null, onStopSupervising }) {
+  // Dos capacidades distintas, no una sola:
+  //   isSuperAdmin -> gestiona las cuentas de la plataforma (sección Plataforma)
+  //   isSupervisor -> puede operar la cuenta de otro usuario (sección Supervisión)
+  // El Admin tiene la segunda y NO la primera.
+  const { isSuperAdmin, isSupervisor } = useAuth();
   const summary = stats?.summary || {};
   // Solo se muestra badge con dato real ya cargado: nunca 0 ni inventados.
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('es-AR') : null);
@@ -36,8 +38,21 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
     { id: 'mobile_terminal', label: 'Terminal Móvil', icon: Smartphone, badge: null, title: null },
     { id: 'questions', label: 'Preguntas Clientes', icon: MessageSquare, badge: null, title: null },
     { id: 'calculator', label: 'Calculadora ML', icon: Calculator, badge: null, title: null },
-    // Sección de plataforma: sólo SuperAdmin. Administra cuentas de usuario,
-    // no la operación de Mercado Libre (eso vive en las pestañas de arriba).
+    // Sección de SUPERVISIÓN (Admin y SuperAdmin): operar la cuenta de otro.
+    // No gestiona cuentas: sólo se entra a mirar y trabajar su operación.
+    ...(isSupervisor
+      ? [
+          {
+            id: 'adminsupervision',
+            label: 'Supervisión',
+            icon: Eye,
+            badge: null,
+            title: null,
+            group: 'supervision',
+          },
+        ]
+      : []),
+    // Sección de PLATAFORMA (sólo SuperAdmin): gestión de cuentas de usuario.
     ...(isSuperAdmin
       ? [
           {
@@ -46,7 +61,7 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
             icon: ShieldCheck,
             badge: pendingAdmins || null,
             title: pendingAdmins ? `${pendingAdmins} pendientes de aprobación` : null,
-            super: true,
+            group: 'platform',
           },
         ]
       : []),
@@ -73,10 +88,25 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
         </div>
 
         <nav className="space-y-1">
-          {navItems.map((item) => {
+          {navItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            // Separador con título antes de cada sección de gestión.
+            const previous = navItems[index - 1];
+            const startsGroup = item.group && (!previous || previous.group !== item.group);
             return (
+              <React.Fragment key={item.id}>
+                {startsGroup && (
+                  <div className="px-3 pb-1 pt-5">
+                    <span className="nav-label !px-0">
+                      {item.group === 'platform'
+                        ? 'Plataforma'
+                        : item.group === 'supervision'
+                          ? 'Supervisión'
+                          : ''}
+                    </span>
+                  </div>
+                )}
               <button
                 key={item.id}
                 type="button"
@@ -107,17 +137,30 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
                   </span>
                 )}
               </button>
+              </React.Fragment>
             );
           })}
-
-          {/* Separador: a partir de acá es gestión de la plataforma, no
-              operación de la cuenta de Mercado Libre. */}
-          {isSuperAdmin && navItems.some((i) => i.super) && (
-            <div className="px-3 pb-2 pt-5">
-              <span className="nav-label !px-0">Plataforma</span>
-            </div>
-          )}
         </nav>
+
+        {/* Aviso persistente mientras se está operando la cuenta de otro. Sin
+            esto el Supervisor podría creerse estar en su propia tienda. */}
+        {actingAsEmail && (
+          <div className="mt-5 rounded-2xl border border-warning/40 bg-warning-soft px-3.5 py-3">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-warning">
+              Operando otra cuenta
+            </p>
+            <p className="mt-1 truncate font-mono text-[11px] font-semibold text-ink">
+              {actingAsEmail}
+            </p>
+            <button
+              type="button"
+              onClick={onStopSupervising}
+              className="btn btn-outline btn-sm mt-2 w-full"
+            >
+              Volver a mi cuenta
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Footer info card */}

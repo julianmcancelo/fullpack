@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { loginWithFirebaseGoogle, logoutFirebase, onAuthStateChanged, auth } from '../services/firebase';
+import {
+  loginWithFirebaseGoogle,
+  logoutFirebase,
+  onAuthStateChanged,
+  consumeGoogleRedirectResult,
+  auth,
+} from '../services/firebase';
 
 const AuthContext = createContext();
 
@@ -60,6 +66,27 @@ export function AuthProvider({ children }) {
     window.addEventListener('ml:session-expired', onExpired);
     return () => window.removeEventListener('ml:session-expired', onExpired);
   }, []); // <-- dependency: revalida cuando cambia el token
+
+  /**
+   * Resultado de la vuelta desde Google.
+   *
+   * `onAuthStateChanged` sola no alcanza: si el navegador bloqueó el
+   * almacenamiento en iframes, la app vuelve sin credencial y el modal queda
+   * esperando para siempre. Se escucha `ml:google-login-failed` para que el
+   * LoginModal pueda explicar qué pasó.
+   */
+  useEffect(() => {
+    consumeGoogleRedirectResult()
+      .then((outcome) => {
+        if (outcome.ok) return;
+        const detail = outcome.blocked || outcome.message;
+        if (!detail) return;
+        window.dispatchEvent(
+          new CustomEvent('ml:google-login-failed', { detail: { message: detail, blocked: outcome.blocked } })
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   // Sync with Firebase Auth state
   useEffect(() => {
@@ -159,9 +186,25 @@ export function AuthProvider({ children }) {
     setSessionToken(null);
     localStorage.removeItem('ml_saas_user');
     localStorage.removeItem('ml_saas_token');
+    // La cuenta que se estaba supervisando no puede sobrevivir al cierre de
+    // sesión: si no, el próximo login en este equipo heredaría ese acceso.
+    localStorage.removeItem('ml_acting_user');
   };
 
-  const isAdmin = currentUser?.email?.toLowerCase() === ADMIN_EMAIL || currentUser?.role === 'admin';
+  // Rol efectivo, con la misma precedencia que el backend:
+  //   superadmin -> dueño de la plataforma (gestiona cuentas de usuario).
+  //   admin      -> supervisa la operación de otras cuentas.
+  //   user       -> sólo su propia cuenta.
+  // `ADMIN_EMAIL` siempre gana: es la fuente de verdad del SuperAdmin.
+  const email = currentUser?.email?.trim().toLowerCase() || '';
+  const role = email && email === ADMIN_EMAIL ? 'superadmin' : currentUser?.role || 'user';
+
+  const isSuperAdmin = role === 'superadmin';
+  // Supervisar es una capacidad compartida por Admin y SuperAdmin.
+  const isSupervisor = role === 'superadmin' || role === 'admin';
+
+  const roleLabel =
+    role === 'superadmin' ? 'SuperAdmin' : role === 'admin' ? 'Administrador' : 'Usuario';
 
   return (
     <AuthContext.Provider
@@ -169,7 +212,13 @@ export function AuthProvider({ children }) {
         currentUser,
         sessionToken,
         authReady,
-        isAdmin,
+        role,
+        roleLabel,
+        isSuperAdmin,
+        isSupervisor,
+        // Se conserva por compatibilidad con los componentes que aún lo usan
+        // para decidir si pueden supervisar.
+        isAdmin: isSupervisor,
         adminEmail: ADMIN_EMAIL,
         loginWithGoogle,
         loginWithOtp,

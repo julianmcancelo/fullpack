@@ -26,6 +26,14 @@ export async function fetchApi(endpoint, options = {}) {
       }
     } catch {}
   }
+  // Cuenta de Mercado Libre que el supervisor está mirando. `null` significa
+  // "la propia". El backend lo valida (`middleware/actingUser.js`): un usuario
+  // común que lo intente recibe 403, así que no alcanza para ver datos ajenos.
+  try {
+    const actingUser = localStorage.getItem('ml_acting_user');
+    if (actingUser) headers['X-Acting-User'] = actingUser;
+  } catch {}
+
   // `token` es una opción propia de este cliente: no se envía a fetch.
   const { headers: _ignored, token: _token, ...rest } = options;
   const response = await fetch(url, {
@@ -94,8 +102,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, code }),
     }),
+  // --- Gestión de la plataforma (exclusiva del SuperAdmin) ---
   getUsersList: () => fetchApi('/users/list'),
-  // SuperAdmin: gestión de la plataforma
   getPlatformOverview: () => fetchApi('/users/overview'),
   updateUserStatus: (userId, status) =>
     fetchApi(`/users/${encodeURIComponent(userId)}/status`, {
@@ -121,6 +129,25 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  // --- Supervisión (Admin y SuperAdmin) ---
+  // Lista de cuentas activas que el supervisor puede operar. No expone
+  // controles de plataforma: eso es exclusivo del SuperAdmin.
+  getSupervisableAccounts: () => fetchApi('/users/supervisable'),
+  /** Fija (o limpia) la cuenta de ML que se está supervisando. */
+  setActingUser: (email) => {
+    try {
+      if (email) localStorage.setItem('ml_acting_user', email);
+      else localStorage.removeItem('ml_acting_user');
+    } catch {}
+  },
+  getActingUser: () => {
+    try {
+      return localStorage.getItem('ml_acting_user') || null;
+    } catch {
+      return null;
+    }
+  },
+
   getMe: (token) => fetchApi('/users/me', token ? { token } : {}),
   logoutSession: () => fetchApi('/users/logout', { method: 'POST' }),
 

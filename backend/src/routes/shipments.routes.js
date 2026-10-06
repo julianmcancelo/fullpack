@@ -10,9 +10,12 @@ const {
 const { addScanLog, getScanLogs, updatePackingMetadataAsync } = require('../db/store');
 const { optionalSession } = require('../middleware/session');
 const { resolveMlEmail } = require('../middleware/mlContext');
+const { resolveActingUser } = require('../middleware/actingUser');
 
 // Resuelve la cuenta de ML del llamante (sesión web o dispositivo móvil).
+// `resolveActingUser` permite que un Admin opere la cuenta de otro usuario.
 router.use(optionalSession);
+router.use(resolveActingUser);
 const mlCtx = (req) => ({ email: resolveMlEmail(req) });
 
 // ---------------------------------------------------------------------------

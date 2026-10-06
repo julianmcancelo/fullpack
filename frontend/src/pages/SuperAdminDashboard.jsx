@@ -28,6 +28,25 @@ import UserAvatar from '../components/UserAvatar';
  * Configuración de estados: etiqueta, color e icono. Se usa en filtros,
  * contador y acciones para que el estado se lea igual en toda la pantalla.
  * ------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+ * Roles de la plataforma. El SuperAdmin gestiona estas cuentas; el Admin sólo
+ * puede verlas y operar su Mercado Libre (pantalla "Supervisión"), nunca
+ * aprobarlas ni suspenderlas.
+ * ------------------------------------------------------------------------- */
+const ROLES = {
+  superadmin: { label: 'SuperAdmin', badge: 'badge-brand', icon: Crown },
+  admin: { label: 'Administrador', badge: 'badge-accent', icon: ShieldCheck },
+  user: { label: 'Usuario', badge: 'badge-neutral', icon: Users },
+};
+
+/** Etiqueta legible del rol de un usuario (respeta al SuperAdmin por email). */
+export function roleLabel(user, superAdminEmail) {
+  if (!user) return 'Usuario';
+  const email = String(user.email || '').trim().toLowerCase();
+  const role = email === String(superAdminEmail || '').trim().toLowerCase() ? 'superadmin' : user.role;
+  return (ROLES[role] || ROLES.user).label;
+}
+
 const STATUS = {
   active: { label: 'Activo', badge: 'badge-success', Icon: UserCheck, chip: 'border-success/40 bg-success-soft text-success' },
   pending: { label: 'Pendiente', badge: 'badge-warning', Icon: Clock, chip: 'border-warning/40 bg-warning-soft text-warning' },
@@ -196,8 +215,9 @@ export default function SuperAdminDashboard({ onNavigate }) {
             </span>
           </div>
           <p className="page-sub text-pretty">
-            Gestionás las cuentas de la plataforma. La operación de Mercado Libre de cada
-            usuario se administra aparte, en su propio tablero.
+            Gestionás las cuentas de la plataforma: quién entra, con qué rol y qué
+            sesiones tiene abiertas. La operación de Mercado Libre de cada usuario se
+            administra aparte, en su propio tablero.
           </p>
         </div>
 
@@ -434,6 +454,12 @@ export default function SuperAdminDashboard({ onNavigate }) {
                               SuperAdmin
                             </span>
                           )}
+                          {!isSuper && u.role === 'admin' && (
+                            <span className="badge badge-accent">
+                              <ShieldCheck className="h-3 w-3" />
+                              Administrador
+                            </span>
+                          )}
                           <span className={`badge ${cfg.badge}`}>
                             <StatusIcon className="h-3 w-3" />
                             {cfg.label}
@@ -462,7 +488,7 @@ export default function SuperAdminDashboard({ onNavigate }) {
                           </span>
                           <span className="inline-flex items-center gap-1">
                             <ShieldCheck className="h-3 w-3" />
-                            {u.role === 'admin' ? 'Admin' : 'Usuario'}
+                            {roleLabel(u, overview?.superAdminEmail)}
                           </span>
                           <span>Último acceso: {relativeTime(u.lastLoginAt)}</span>
                         </div>
@@ -564,8 +590,8 @@ export default function SuperAdminDashboard({ onNavigate }) {
                                   <ShieldCheck className="h-4 w-4 text-brand-500" />
                                   <span>
                                     {u.role === 'admin'
-                                      ? 'Quitar rol de admin'
-                                      : 'Dar rol de admin'}
+                                      ? 'Quitar rol de administrador'
+                                      : 'Dar rol de administrador'}
                                   </span>
                                 </button>
                                 <button
