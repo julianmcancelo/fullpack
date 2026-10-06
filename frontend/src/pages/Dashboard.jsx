@@ -179,7 +179,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
         {/* Ventas cobradas */}
-        <div className="kpi">
+        <div className="kpi kpi-success">
           <div className="flex items-start justify-between gap-3">
             <span className="kpi-label">Ventas Cobradas</span>
             <div className="kpi-icon kpi-icon-success">
@@ -199,7 +199,7 @@ export default function Dashboard({ stats, loading, onNavigate, onRefresh, conne
         </div>
 
         {/* Ticket promedio */}
-        <div className="kpi">
+        <div className="kpi kpi-accent">
           <div className="flex items-start justify-between gap-3">
             <span className="kpi-label">Ticket Promedio</span>
             <div className="kpi-icon kpi-icon-accent">

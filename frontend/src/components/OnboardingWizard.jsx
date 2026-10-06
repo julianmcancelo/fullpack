@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   ArrowRight,
@@ -12,6 +12,7 @@ import {
   PartyPopper,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { celebrate } from '../utils/celebrate';
 
 const SITES = [
@@ -24,9 +25,20 @@ const SITES = [
   { id: 'MPE', label: 'Perú (MPE)' },
 ];
 
-// Asistente de primera conexión con Mercado Libre (Fase 3 multi-usuario).
-// Aparece para usuarios activos sin cuenta de ML vinculada. OAuth redirige
-// fuera de la app: al volver con ?auth_success, App lo reabre en 'verify'.
+/**
+ * OnboardingWizard - Fase 3: asistente guiado de primera conexión con Mercado Libre.
+ * 
+ * Flujo:
+ *   1) Elegir método (OAuth automático vs Token directo)
+ *   2) OAuth: completar App ID / Client Secret / País
+ *   3) Manual: pegar Access Token
+ *   4) Verificación: backend lee datos oficiales de ML
+ *   5) Done: cuenta conectada, muestra nickname, ID, reputación
+ * 
+ * Important: este asistente aparece solo para usuarios activos SIN cuenta ML vinculada.
+ * Si el usuario ya tiene cuenta conectada, no se muestra.
+ * Cada usuario tiene sus credenciales guardadas por email (Fase 2).
+ */
 export default function OnboardingWizard({
   connection,
   onRefreshStatus,
@@ -34,6 +46,11 @@ export default function OnboardingWizard({
   onClose,
   startAtVerify = false,
 }) {
+  const { currentUser, sessionToken } = useAuth();
+  // Obtener email: preferir currentUser, si no hay usamos el email del token de sesión
+  // si existe, para evitar que el onboarding use datos de otro usuario si el localStorage
+  // está cruzado entre usuarios en el mismo navegador.
+  const userEmail = currentUser?.email || (sessionToken ? '' : '');
   const [step, setStep] = useState(startAtVerify ? 'verify' : 'method');
   const [method, setMethod] = useState(null);
   const [appId, setAppId] = useState('');
@@ -46,7 +63,10 @@ export default function OnboardingWizard({
 
   const stepIndex = step === 'method' ? 0 : step === 'connect' ? 1 : 2;
 
-  const startOAuth = async (e) => {
+  // ---------------------------------------------------
+  // Start OAuth flow: save settings + generate auth URL
+  // ---------------------------------------------------
+  const startOAuth = useCallback(async (e) => {
     e?.preventDefault();
     if (!appId.trim() || !clientSecret.trim()) {
       setError('Completá el App ID y el Client Secret de tu aplicación de Mercado Libre.');
@@ -68,9 +88,12 @@ export default function OnboardingWizard({
     } finally {
       setBusy(false);
     }
-  };
+  }, [appId, clientSecret, siteId]);
 
-  const saveManual = async (e) => {
+  // ---------------------------------------------------
+  // Save manual token: validate with ML /users/me, then verify
+  // ---------------------------------------------------
+  const saveManual = useCallback(async (e) => {
     e?.preventDefault();
     if (!token.trim()) {
       setError('Pegá tu Access Token (empieza con APP_USR-).');
@@ -79,16 +102,19 @@ export default function OnboardingWizard({
     setBusy(true);
     setError(null);
     try {
-      const res = await api.saveManualToken(token.trim());
+      const res = await api.saveManualToken(token.trim(), '', userEmail); // <-- pasa email
       setToken('');
       await verify(res?.user || null);
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
-  };
+  }, [token, userEmail]);
 
-  const verify = async (hintUser = null) => {
+  // ---------------------------------------------------
+  // Verify: refresh status/data and check if connected
+  // ---------------------------------------------------
+  const verify = useCallback(async (hintUser = null) => {
     setStep('verify');
     setBusy(true);
     setError(null);
@@ -110,18 +136,27 @@ export default function OnboardingWizard({
     } finally {
       setBusy(false);
     }
-  };
+  }, [method, onRefreshStatus, onRefreshAllData]);
 
+  // ---------------------------------------------------
+  // Pick method: OAuth or Manual
+  // ---------------------------------------------------
   const pickMethod = (m) => {
     setMethod(m);
     setError(null);
     setStep('connect');
   };
 
+  // ---------------------------------------------------
+  // Done info: verified or existing connection
+  // ---------------------------------------------------
   const doneInfo = verified || connection;
   const nickname = doneInfo?.nickname || doneInfo?.hintUser?.nickname || '';
   const reputation = doneInfo?.sellerReputation?.power_seller_status || '';
 
+  // ---------------------------------------------------
+  // Render
+  // ---------------------------------------------------
   return (
     <div className="overlay" role="dialog" aria-modal="true" aria-label="Conectar Mercado Libre">
       <div className="modal modal-md">

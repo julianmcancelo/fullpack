@@ -902,19 +902,21 @@ export default function Settings({
             preferencia de tu sistema operativo.
           </p>
           <div className="segmented shrink-0" role="group" aria-label="Tema de la interfaz">
-            {THEME_OPTIONS.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setMode(id)}
-                aria-pressed={mode === id}
-                className={`segmented-btn flex items-center gap-1.5 ${
-                  mode === id ? 'segmented-btn-active' : ''
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{label}</span>
-              </button>
+            {THEME_OPTIONS.map(({ id, label, Icon, description }) => (
+              <React.Fragment key={id}>
+                <button
+                  type="button"
+                  onClick={() => setMode(id)}
+                  aria-pressed={mode === id}
+                  className={`segmented-btn flex items-center gap-1.5 ${
+                    mode === id ? 'segmented-btn-active' : ''
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{label}</span>
+                </button>
+                <span className="text-[10px] text-ink-muted/{mode === id ? 'block' : 'hidden'} sm:block ml-2">{description}</span>
+              </React.Fragment>
             ))}
           </div>
         </div>

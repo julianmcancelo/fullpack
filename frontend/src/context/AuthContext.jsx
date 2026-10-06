@@ -37,8 +37,7 @@ export function AuthProvider({ children }) {
         setCurrentUser(null);
         setSessionToken(null);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sessionToken]); // <-- dependency: revalida cuando cambia el token
 
   // Sync with Firebase Auth state
   useEffect(() => {

@@ -733,8 +733,8 @@ export default function ShipmentsManager({ connection }) {
                             {/* Scanning Confirmation */}
                             {packing.packed ? (
                               <span className="inline-flex animate-pop items-center gap-1.5 rounded-xl border border-success/30 bg-success-soft px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-success">
-                                <QrCode className="h-3.5 w-3.5" />
-                                <span>Leído por lector QR • Listo</span>
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                <span>Ya empaquetado • Listo para despachar</span>
                                 {packing.packedAt && (
                                   <span className="tabular border-l border-success/30 pl-1.5 font-mono text-[10px] opacity-90">
                                     {new Date(packing.packedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}

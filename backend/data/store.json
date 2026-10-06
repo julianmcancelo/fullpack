@@ -8,59 +8,15 @@
     "autoSyncMinutes": 15
   },
   "auth": {
-    "accessToken": "APP_USR-8410220120357196-100506-7e087211af016d57cd3d96a0c8966fc7-139483581",
-    "refreshToken": "TG-6ac3770163f33300014d1253-139483581",
-    "expiresAt": 1791216482276,
-    "userId": 139483581,
-    "nickname": "GRANA3DOK",
-    "permalink": "http://perfil.mercadolibre.com.ar/GRANA3DOK",
+    "accessToken": "",
+    "refreshToken": "",
+    "expiresAt": null,
+    "userId": "",
+    "nickname": "",
+    "permalink": "",
     "siteId": "MLA"
   },
-  "packingMetadata": {
-    "48168467003": {
-      "printed": false,
-      "packed": true,
-      "qualityChecked": true,
-      "note": "",
-      "packedAt": "2026-10-04T23:39:17.993Z",
-      "updatedAt": "2026-10-05T00:23:00.300Z",
-      "scanCount": 2,
-      "firstScannedAt": "2026-10-04T23:39:17.993Z",
-      "lastScannedAt": "2026-10-05T00:23:00.299Z"
-    },
-    "48167643408": {
-      "printed": false,
-      "packed": true,
-      "qualityChecked": true,
-      "note": "",
-      "updatedAt": "2026-10-04T23:39:22.615Z",
-      "packedAt": "2026-10-04T23:39:22.614Z"
-    },
-    "48164856585": {
-      "printed": true,
-      "packed": false,
-      "qualityChecked": false,
-      "note": "",
-      "updatedAt": "2026-10-04T23:39:24.579Z",
-      "printedAt": "2026-10-04T23:39:24.578Z"
-    },
-    "48163130772": {
-      "printed": true,
-      "packed": false,
-      "qualityChecked": false,
-      "note": "",
-      "updatedAt": "2026-10-04T23:39:46.390Z",
-      "printedAt": "2026-10-04T23:39:46.389Z"
-    },
-    "48162806765": {
-      "printed": true,
-      "packed": false,
-      "qualityChecked": false,
-      "note": "",
-      "updatedAt": "2026-10-04T23:55:05.568Z",
-      "printedAt": "2026-10-04T23:55:05.568Z"
-    }
-  },
+  "packingMetadata": {},
   "scanLogs": [],
   "users": [
     {
@@ -72,17 +28,6 @@
       "status": "active",
       "authProvider": "google",
       "createdAt": "2026-01-01T00:00:00.000Z"
-    },
-    {
-      "id": 1791164630997,
-      "email": "test@example.com",
-      "name": "Test",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=test@example.com",
-      "role": "user",
-      "status": "pending",
-      "authProvider": "email",
-      "createdAt": "2026-10-05T01:43:50.997Z",
-      "lastLoginAt": "2026-10-05T01:43:50.998Z"
     }
   ],
   "loginTokens": [],
