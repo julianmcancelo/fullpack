@@ -132,8 +132,22 @@ function writeDb(data) {
 }
 
 // Background sync from Neon if available
+// Si el store local está limpio (reset), limpia Neon para empezar de cero
 (async () => {
   try {
+    const localDb = readDb();
+    const isLocalClean = !localDb.auth?.accessToken && (!localDb.users || localDb.users.length <= 1);
+
+    if (isLocalClean) {
+      // Reset total: limpiar Neon para empezar de cero
+      await neon.clearAuthInNeon('default').catch(() => {});
+      await neon.clearAllSessionsInNeon().catch(() => {});
+      await neon.clearAllUsersInNeon().catch(() => {});
+      await neon.clearPackingMetadataInNeon().catch(() => {});
+      console.log('[store] Neon limpiado - sistema reseteado');
+      return;
+    }
+
     const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const neonAuth = adminEmail ? await neon.getAuthFromNeon(adminEmail) : null;
     if (neonAuth && neonAuth.accessToken) {

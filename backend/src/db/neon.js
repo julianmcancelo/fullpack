@@ -856,6 +856,53 @@ async function purgeExpiredPairingSessionsInNeon() {
   }
 }
 
+// Reset total: limpiar todas las sesiones
+async function clearAllSessionsInNeon() {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await p.query('DELETE FROM ml_sessions');
+    return true;
+  } catch (e) {
+    console.warn('Neon clearAllSessions error:', e.message);
+    return false;
+  }
+}
+
+// Reset total: limpiar todos los usuarios excepto el admin
+async function clearAllUsersInNeon() {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+    if (adminEmail) {
+      await p.query('DELETE FROM ml_users WHERE LOWER(email) != LOWER($1)', [adminEmail]);
+    } else {
+      await p.query('DELETE FROM ml_users');
+    }
+    return true;
+  } catch (e) {
+    console.warn('Neon clearAllUsers error:', e.message);
+    return false;
+  }
+}
+
+// Reset total: limpiar metadata de empaque
+async function clearPackingMetadataInNeon() {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await p.query('DELETE FROM ml_packing_metadata');
+    return true;
+  } catch (e) {
+    console.warn('Neon clearPackingMetadata error:', e.message);
+    return false;
+  }
+}
+
 module.exports = {
   getConnectionString,
   initNeonDb,
@@ -879,8 +926,11 @@ module.exports = {
   deleteSessionFromNeon,
   clearAuthInNeon,
   purgeExpiredSessionsInNeon,
+  clearAllSessionsInNeon,
+  clearAllUsersInNeon,
+  clearPackingMetadataInNeon,
   createPairingSessionInNeon,
-  getPairingSessionFromNeon,
+  getPairingSessionInNeon,
   claimPairingSessionInNeon,
   createDeviceInNeon,
   getDeviceByTokenFromNeon,
