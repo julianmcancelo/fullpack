@@ -861,7 +861,6 @@ async function clearAllAuthInNeon() {
   const p = getPool();
   if (!p) return false;
   try {
-    await initNeonDb();
     await p.query('DELETE FROM ml_auth');
     return true;
   } catch (e) {
@@ -875,7 +874,6 @@ async function clearAllSessionsInNeon() {
   const p = getPool();
   if (!p) return false;
   try {
-    await initNeonDb();
     await p.query('DELETE FROM ml_sessions');
     return true;
   } catch (e) {
@@ -889,7 +887,6 @@ async function clearAllUsersInNeon() {
   const p = getPool();
   if (!p) return false;
   try {
-    await initNeonDb();
     const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     if (adminEmail) {
       await p.query('DELETE FROM ml_users WHERE LOWER(email) != LOWER($1)', [adminEmail]);
@@ -908,7 +905,6 @@ async function clearPackingMetadataInNeon() {
   const p = getPool();
   if (!p) return false;
   try {
-    await initNeonDb();
     await p.query('DELETE FROM ml_packing_metadata');
     return true;
   } catch (e) {
