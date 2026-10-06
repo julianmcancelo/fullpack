@@ -11,14 +11,23 @@ export async function fetchApi(endpoint, options = {}) {
     'Content-Type': 'application/json',
     ...options.headers,
   };
-  // Sesión SaaS real: el backend sabe quién llama (Fase 1 multi-usuario).
-  try {
-    const token = localStorage.getItem('ml_saas_token');
-    if (token && !headers.Authorization) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-  } catch {}
-  const { headers: _ignored, ...rest } = options;
+  // `options.token` envía una sesión explícita sin tocar el almacenamiento.
+  // Se usa para validar la sesión recién emitida: en ese momento el token
+  // todavía no está persistido, y leerlo de localStorage provocaba un 401
+  // espurio que terminaba cerrando la sesión que acababa de abrirse.
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`;
+  } else {
+    // Sesión SaaS real: el backend sabe quién llama (Fase 1 multi-usuario).
+    try {
+      const token = localStorage.getItem('ml_saas_token');
+      if (token && !headers.Authorization) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {}
+  }
+  // `token` es una opción propia de este cliente: no se envía a fetch.
+  const { headers: _ignored, token: _token, ...rest } = options;
   const response = await fetch(url, {
     headers,
     ...rest,
@@ -32,14 +41,30 @@ export async function fetchApi(endpoint, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     // Una sesión vencida o revocada no puede volver a servir: se descarta la
-    // credencial local para que ningún otro request la reintente (y para que el
-    // listener de Firebase re-emita una sesión válida al volver).
-    if (response.status === 401 && headers.Authorization) {
-      try {
-        localStorage.removeItem('ml_saas_token');
-        localStorage.removeItem('ml_saas_user');
-        window.dispatchEvent(new CustomEvent('ml:session-expired'));
-      } catch {}
+    // credencial local para que ningún otro request la reintente.
+    //
+    // Sólo se descarta si el token rechazado sigue siendo el guardado en el
+    // navegador. Si meanwhile se emitió otra sesión (p. ej. el usuario se
+    // acaba de loguear mientras volaba un pedido viejo), ese 401 es obsoleto
+    // y cerrar la sesión nueva sería un error. Tampoco aplica a las
+    // validaciones con token explícito, donde el 401 sólo dice "esta sesión
+    // no es válida".
+    if (response.status === 401 && !options.token) {
+      const rejected = String(headers.Authorization || '').replace(/^Bearer\s+/i, '');
+      const stored = (() => {
+        try {
+          return localStorage.getItem('ml_saas_token') || '';
+        } catch {
+          return '';
+        }
+      })();
+      if (rejected && stored && rejected === stored) {
+        try {
+          localStorage.removeItem('ml_saas_token');
+          localStorage.removeItem('ml_saas_user');
+          window.dispatchEvent(new CustomEvent('ml:session-expired'));
+        } catch {}
+      }
     }
 
     let errorMsg = data.error || data.message || `Error en la solicitud: ${response.statusText}`;
@@ -96,7 +121,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
-  getMe: () => fetchApi('/users/me'),
+  getMe: (token) => fetchApi('/users/me', token ? { token } : {}),
   logoutSession: () => fetchApi('/users/logout', { method: 'POST' }),
 
   // Mercado Libre Connection status & Auth

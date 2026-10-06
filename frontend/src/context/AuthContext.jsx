@@ -31,12 +31,13 @@ export function AuthProvider({ children }) {
 
   // Revalida la sesión guardada contra el backend al abrir la app:
   // si el token venció o fue revocado, se cierra la sesión local.
+  // Se pasa el token explícito: recién emitido aún no está en localStorage.
   useEffect(() => {
     if (!sessionToken) {
       setAuthReady(true);
       return;
     }
-    api.getMe()
+    api.getMe(sessionToken)
       .then((res) => {
         if (res?.user) setCurrentUser(res.user);
       })

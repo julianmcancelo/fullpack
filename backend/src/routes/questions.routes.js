@@ -15,6 +15,19 @@ router.get('/', async (req, res) => {
     const data = await getReceivedQuestions(status, mlCtx(req));
     res.json(data);
   } catch (err) {
+    // Sin cuenta de Mercado Libre vinculada es un estado normal (recién
+    // registrado o esperando el onboarding), no un error del servidor: se
+    // responde 200 con `connected: false` para que la UI ofrezca conectar en
+    // lugar de mostrar un fallo.
+    if (/conectar tu cuenta de Mercado Libre/i.test(err.message || '')) {
+      return res.json({
+        connected: false,
+        questions: [],
+        total: 0,
+        unanswered_count: 0,
+        message: 'Conectá tu cuenta de Mercado Libre para ver las preguntas de tus compradores.',
+      });
+    }
     res.status(500).json({ error: err.response?.data || err.message });
   }
 });
