@@ -25,10 +25,17 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // `authReady` marca que la sesión guardada ya fue validada (o que no había
+  // ninguna). La app espera esta señal antes de pedir datos.
+  const [authReady, setAuthReady] = useState(false);
+
   // Revalida la sesión guardada contra el backend al abrir la app:
   // si el token venció o fue revocado, se cierra la sesión local.
   useEffect(() => {
-    if (!sessionToken) return;
+    if (!sessionToken) {
+      setAuthReady(true);
+      return;
+    }
     api.getMe()
       .then((res) => {
         if (res?.user) setCurrentUser(res.user);
@@ -36,8 +43,22 @@ export function AuthProvider({ children }) {
       .catch(() => {
         setCurrentUser(null);
         setSessionToken(null);
-      });
-  }, [sessionToken]); // <-- dependency: revalida cuando cambia el token
+      })
+      .finally(() => setAuthReady(true));
+  }, [sessionToken]);
+
+  // Una sesión rechazada por el backend (401) limpia también la sesión de
+  // Firebase: si no, el listener de `onAuthStateChanged` re-emite la misma
+  // credencial vencida y el panel intenta volver a entrar en bucle.
+  useEffect(() => {
+    const onExpired = () => {
+      setCurrentUser(null);
+      setSessionToken(null);
+      logoutFirebase().catch(() => {});
+    };
+    window.addEventListener('ml:session-expired', onExpired);
+    return () => window.removeEventListener('ml:session-expired', onExpired);
+  }, []); // <-- dependency: revalida cuando cambia el token
 
   // Sync with Firebase Auth state
   useEffect(() => {
@@ -146,6 +167,7 @@ export function AuthProvider({ children }) {
       value={{
         currentUser,
         sessionToken,
+        authReady,
         isAdmin,
         adminEmail: ADMIN_EMAIL,
         loginWithGoogle,

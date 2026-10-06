@@ -31,6 +31,17 @@ export async function fetchApi(endpoint, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    // Una sesión vencida o revocada no puede volver a servir: se descarta la
+    // credencial local para que ningún otro request la reintente (y para que el
+    // listener de Firebase re-emita una sesión válida al volver).
+    if (response.status === 401 && headers.Authorization) {
+      try {
+        localStorage.removeItem('ml_saas_token');
+        localStorage.removeItem('ml_saas_user');
+        window.dispatchEvent(new CustomEvent('ml:session-expired'));
+      } catch {}
+    }
+
     let errorMsg = data.error || data.message || `Error en la solicitud: ${response.statusText}`;
     if (typeof errorMsg === 'object') {
       errorMsg = errorMsg.message || errorMsg.error || JSON.stringify(errorMsg);

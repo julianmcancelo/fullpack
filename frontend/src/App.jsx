@@ -26,7 +26,7 @@ import { playCashRegisterSound, playSuccessBeep } from './utils/audio';
 import { celebrate } from './utils/celebrate';
 
 export default function App() {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, authReady } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [connection, setConnection] = useState(null);
   const [stats, setStats] = useState(null);
@@ -130,9 +130,12 @@ export default function App() {
     }
   };
 
+  // No se piden datos hasta que la sesión esté resuelta: evita disparar
+  // consultas con un token vencido (401) en cada arranque.
   useEffect(() => {
+    if (!authReady) return;
     refreshAll();
-  }, []);
+  }, [authReady]);
 
   // Background Polling for Live New Sales (every 15 seconds)
   useEffect(() => {
