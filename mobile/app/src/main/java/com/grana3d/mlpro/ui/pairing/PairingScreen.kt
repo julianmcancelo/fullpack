@@ -185,7 +185,7 @@ fun PairingScreen(onLinked: () -> Unit) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Fullpack",
+                            text = "Plataforma",
                             style = MlTheme.type.display,
                             color = MlTheme.colors.ink,
                         )
@@ -363,7 +363,7 @@ fun PairingScreen(onLinked: () -> Unit) {
                         )
                         Spacer(Modifier.height(MlTheme.spacing.xs))
                         Text(
-                            text = "Estamos asociando este celular a tu cuenta de Fullpack.",
+                            text = "Estamos asociando este celular a tu cuenta de Plataforma.",
                             style = MlTheme.type.body,
                             color = MlTheme.colors.inkMuted,
                             textAlign = TextAlign.Center,

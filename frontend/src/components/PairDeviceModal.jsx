@@ -18,7 +18,7 @@ const POLL_INTERVAL_MS = 3000;
 const TICK_INTERVAL_MS = 1000;
 
 const STEPS = [
-  'Abrí la app ML Pro Suite en tu celular Android e iniciá sesión con tu misma cuenta.',
+  'Abrí la app Plataforma en tu celular Android e iniciá sesión con tu misma cuenta.',
   'Entrá a «Vincular dispositivo» y apuntá la cámara al código QR de esta pantalla.',
   'Cuando la app confirme, esta pantalla se actualiza sola y el celular aparece en la lista de abajo.',
 ];

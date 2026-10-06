@@ -65,9 +65,8 @@ export default function Navbar({
           <span className="hidden sm:block">
             <span className="flex items-center gap-1.5">
               <span className="font-display text-lg font-extrabold leading-none tracking-tight text-ink">
-                ML
+                Plataforma
               </span>
-              <span className="badge badge-brand !py-0">Pro Suite</span>
             </span>
             <span className="mt-0.5 block text-[11px] leading-none text-ink-subtle">
               Stock, ventas y envíos

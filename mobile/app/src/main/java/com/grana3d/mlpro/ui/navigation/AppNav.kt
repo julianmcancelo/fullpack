@@ -354,7 +354,7 @@ private fun AppSplash() {
                 )
             }
             Text(
-                text = "Fullpack",
+                text = "Plataforma",
                 style = MlTheme.type.title,
                 color = colors.ink,
             )

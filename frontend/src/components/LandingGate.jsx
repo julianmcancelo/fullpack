@@ -71,7 +71,7 @@ export default function LandingGate({ onOpenLogin, onOpenRequestAccess }) {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-display text-xl font-extrabold tracking-tight text-ink">
-                ML Pro
+                Plataforma
               </span>
               <span className="badge badge-brand">Gestión Privada</span>
             </div>

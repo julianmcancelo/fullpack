@@ -303,7 +303,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
             item {
                 MlCard {
                     Text(
-                        text = "Al desvincular, la app deja de operar con tu cuenta de Mercado Libre. Vas a necesitar un código QR nuevo desde la web de Fullpack.",
+                        text = "Al desvincular, la app deja de operar con tu cuenta de Mercado Libre. Vas a necesitar un código QR nuevo desde la web de Plataforma.",
                         fontSize = 13.sp,
                         color = colors.inkMuted,
                     )
@@ -344,7 +344,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Inventory2,
-                                contentDescription = "Logo de Fullpack",
+                                contentDescription = "Logo de Plataforma",
                                 tint = colors.brandInk,
                                 modifier = Modifier.size(24.dp),
                             )
@@ -352,7 +352,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Fullpack",
+                                text = "Plataforma",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = (-0.4).sp,
@@ -429,7 +429,7 @@ fun SettingsScreen(onUnlinked: () -> Unit) {
                     MlBadge(text = "Depósito", tone = MlTone.Neutral)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Fullpack · gestor de Mercado Libre",
+                        text = "Plataforma · gestión de Mercado Libre",
                         fontSize = 12.sp,
                         color = colors.inkSubtle,
                         textAlign = TextAlign.Start,

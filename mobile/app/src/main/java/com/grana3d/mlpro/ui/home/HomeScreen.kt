@@ -118,7 +118,7 @@ fun HomeScreen(
     }
 
     MlScaffold(
-        title = "Fullpack",
+        title = "Plataforma",
         subtitle = "Panel de depósito",
         actions = {
             MlButton(

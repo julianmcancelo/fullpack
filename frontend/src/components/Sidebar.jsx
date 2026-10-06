@@ -107,7 +107,7 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
             <span>Vincular celular</span>
           </span>
           <span className="mt-1.5 block text-[11px] leading-relaxed text-ink-muted">
-            Mostrá el código QR en pantalla y escanealo con la app ML Pro Mobile.
+            Mostrá el código QR en pantalla y escanealo con la app Plataforma.
           </span>
         </button>
 
