@@ -7,6 +7,7 @@ import MobileBottomNav from './components/MobileBottomNav';
 import BarcodeScannerModal from './components/BarcodeScannerModal';
 import PairDeviceModal from './components/PairDeviceModal';
 import OnboardingWizard from './components/OnboardingWizard';
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import NewSaleNotification from './components/NewSaleNotification';
 import NewQuestionNotification from './components/NewQuestionNotification';
 import Dashboard from './pages/Dashboard';
@@ -18,7 +19,6 @@ import FeeCalculator from './pages/FeeCalculator';
 import MobileTerminal from './pages/MobileTerminal';
 import Settings from './pages/Settings';
 import LoginModal from './components/LoginModal';
-import UsersAdminModal from './components/UsersAdminModal';
 import LandingGate from './components/LandingGate';
 import { api } from './services/api';
 import { useAuth } from './context/AuthContext';
@@ -27,6 +27,9 @@ import { celebrate } from './utils/celebrate';
 
 export default function App() {
   const { currentUser, isAdmin, authReady } = useAuth();
+  // `isSuperAdmin` gobierna la sección de plataforma. Un usuario administrador
+  // que no es SuperAdmin opera su cuenta pero no gestiona cuentas ajenas.
+  const isSuperAdmin = Boolean(isAdmin);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [connection, setConnection] = useState(null);
   const [stats, setStats] = useState(null);
@@ -35,9 +38,11 @@ export default function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [usersAdminModalOpen, setUsersAdminModalOpen] = useState(false);
   const [pairModalOpen, setPairModalOpen] = useState(false);
   const [shipments, setShipments] = useState([]);
+  // Solicitudes de acceso pendientes: alimenta el badge de la sección de
+  // plataforma para saber si hay algo esperando decisión.
+  const [pendingAdmins, setPendingAdmins] = useState(0);
 
   // Real-time new sale listener state
   const [newSaleAlert, setNewSaleAlert] = useState(null);
@@ -136,6 +141,36 @@ export default function App() {
     if (!authReady) return;
     refreshAll();
   }, [authReady]);
+
+  // Pendientes de aprobación (sólo SuperAdmin). Silencioso si falla: es un
+  // badge informativo y no debe interrumpir la carga del panel.
+  useEffect(() => {
+    if (!authReady || !isSuperAdmin) {
+      setPendingAdmins(0);
+      return undefined;
+    }
+    let active = true;
+    const loadPending = () =>
+      api
+        .getPlatformOverview()
+        .then((res) => {
+          if (active) setPendingAdmins(res?.byStatus?.pending || 0);
+        })
+        .catch(() => {
+          if (active) setPendingAdmins(0);
+        });
+    loadPending();
+    const id = setInterval(loadPending, 60000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [authReady, isSuperAdmin]);
+
+  // Un usuario no SuperAdmin nunca puede quedar en la sección de plataforma.
+  useEffect(() => {
+    if (!isSuperAdmin && activeTab === 'superadmin') setActiveTab('dashboard');
+  }, [isSuperAdmin, activeTab]);
 
   // Background Polling for Live New Sales (every 15 seconds)
   useEffect(() => {
@@ -365,9 +400,6 @@ export default function App() {
       {/* SaaS Login & Google/Token Auth Modal */}
       <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
 
-      {/* SaaS Users Admin Approval Modal */}
-      <UsersAdminModal isOpen={usersAdminModalOpen} onClose={() => setUsersAdminModalOpen(false)} />
-
       {/* Android app pairing modal (QR link) */}
       <PairDeviceModal isOpen={pairModalOpen} onClose={() => setPairModalOpen(false)} />
 
@@ -379,7 +411,7 @@ export default function App() {
         onNavigate={setActiveTab}
         onOpenCommand={setCommandOpen}
         onOpenLogin={() => setLoginModalOpen(true)}
-        onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
+        onOpenUsersAdmin={() => setActiveTab('superadmin')}
         onOpenPairDevice={() => setPairModalOpen(true)}
       />
 
@@ -393,6 +425,7 @@ export default function App() {
           onOpenPairDevice={() => setPairModalOpen(true)}
           stats={stats}
           shipments={shipments}
+          pendingAdmins={pendingAdmins}
         />
 
         {/* Dynamic Page Content */}
@@ -428,13 +461,18 @@ export default function App() {
 
           {activeTab === 'calculator' && <FeeCalculator />}
 
+          {/* Gestión de la plataforma: sólo SuperAdmin. Es una sección
+              distinta de la operación de la cuenta de Mercado Libre. */}
+          {activeTab === 'superadmin' && isSuperAdmin && (
+            <SuperAdminDashboard onNavigate={setActiveTab} />
+          )}
+
           {activeTab === 'settings' && (
             <Settings
               connection={connection}
               onRefreshStatus={loadConnectionStatus}
               onRefreshAllData={refreshAll}
               onOpenLogin={() => setLoginModalOpen(true)}
-              onOpenUsersAdmin={() => setUsersAdminModalOpen(true)}
               onOpenPairDevice={() => setPairModalOpen(true)}
             />
           )}

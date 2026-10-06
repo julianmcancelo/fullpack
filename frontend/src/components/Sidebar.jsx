@@ -10,9 +10,15 @@ import {
   Settings,
   ExternalLink,
   Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice, stats, shipments }) {
+export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPairDevice, stats, shipments, pendingAdmins = 0 }) {
+  const { isAdmin } = useAuth();
+  // La sección de plataforma es exclusiva del SuperAdmin: los demás usuarios
+  // administrados no ven (ni pueden abrir) la gestión de cuentas.
+  const isSuperAdmin = isAdmin;
   const summary = stats?.summary || {};
   // Solo se muestra badge con dato real ya cargado: nunca 0 ni inventados.
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('es-AR') : null);
@@ -30,6 +36,20 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
     { id: 'mobile_terminal', label: 'Terminal Móvil', icon: Smartphone, badge: null, title: null },
     { id: 'questions', label: 'Preguntas Clientes', icon: MessageSquare, badge: null, title: null },
     { id: 'calculator', label: 'Calculadora ML', icon: Calculator, badge: null, title: null },
+    // Sección de plataforma: sólo SuperAdmin. Administra cuentas de usuario,
+    // no la operación de Mercado Libre (eso vive en las pestañas de arriba).
+    ...(isSuperAdmin
+      ? [
+          {
+            id: 'superadmin',
+            label: 'Administración',
+            icon: ShieldCheck,
+            badge: pendingAdmins || null,
+            title: pendingAdmins ? `${pendingAdmins} pendientes de aprobación` : null,
+            super: true,
+          },
+        ]
+      : []),
     {
       id: 'settings',
       label: 'Credenciales & Config',
@@ -89,6 +109,14 @@ export default function Sidebar({ activeTab, setActiveTab, connection, onOpenPai
               </button>
             );
           })}
+
+          {/* Separador: a partir de acá es gestión de la plataforma, no
+              operación de la cuenta de Mercado Libre. */}
+          {isSuperAdmin && navItems.some((i) => i.super) && (
+            <div className="px-3 pb-2 pt-5">
+              <span className="nav-label !px-0">Plataforma</span>
+            </div>
+          )}
         </nav>
       </div>
 

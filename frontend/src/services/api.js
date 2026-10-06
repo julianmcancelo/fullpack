@@ -70,6 +70,20 @@ export const api = {
       body: JSON.stringify({ email, code }),
     }),
   getUsersList: () => fetchApi('/users/list'),
+  // SuperAdmin: gestión de la plataforma
+  getPlatformOverview: () => fetchApi('/users/overview'),
+  updateUserStatus: (userId, status) =>
+    fetchApi(`/users/${encodeURIComponent(userId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  updateUserRole: (userId, role) =>
+    fetchApi(`/users/${encodeURIComponent(userId)}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
+  revokeUserSessions: (userId) =>
+    fetchApi(`/users/${encodeURIComponent(userId)}/revoke-sessions`, { method: 'POST' }),
   approveUser: (userId, status) =>
     fetchApi('/users/approve', {
       method: 'POST',

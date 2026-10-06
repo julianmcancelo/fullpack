@@ -80,7 +80,6 @@ export default function Settings({
   onRefreshStatus,
   onRefreshAllData,
   onOpenLogin,
-  onOpenUsersAdmin,
   onOpenPairDevice,
 }) {
   const { currentUser, isAdmin, adminEmail } = useAuth();
@@ -117,9 +116,6 @@ export default function Settings({
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState(null);
   const [removingId, setRemovingId] = useState(null);
-
-  // Aprobaciones pendientes (solo admin, datos reales)
-  const [pendingCount, setPendingCount] = useState(null);
 
   // Load saved settings
   useEffect(() => {
@@ -168,25 +164,6 @@ export default function Settings({
       active = false;
     };
   }, [currentUser?.email]);
-
-  // Cuenta las aprobaciones pendientes para el admin
-  useEffect(() => {
-    if (!isAdmin) return;
-    let active = true;
-    api
-      .getUsersList()
-      .then((res) => {
-        if (!active) return;
-        const users = Array.isArray(res?.users) ? res.users : [];
-        setPendingCount(users.filter((u) => u.status === 'pending').length);
-      })
-      .catch(() => {
-        if (active) setPendingCount(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [isAdmin]);
 
   const handleSaveSettings = async (e) => {
     e?.preventDefault();
@@ -876,40 +853,27 @@ export default function Settings({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={onOpenUsersAdmin}
-                  className="btn btn-primary btn-sm"
-                >
-                  <Users className="h-4 w-4" />
-                  <span>Aprobar usuarios</span>
-                  {pendingCount != null && pendingCount > 0 && (
-                    <span className="badge badge-solid tabular">{pendingCount}</span>
-                  )}
-                </button>
+              {/* La gestión de cuentas se hizo en "Administración" del menú
+                  lateral; acá sólo se informa el estado de tu cuenta. */}
+              {isAdmin ? (
+                <p className="text-xs text-ink-muted">
+                  Gestionás las cuentas de la plataforma desde{' '}
+                  <b className="font-bold text-ink">Administración</b>, en el menú lateral.
+                </p>
+              ) : (
+                <p className="text-xs text-ink-muted">
+                  Tu cuenta fue autorizada por el administrador ({adminEmail}).
+                </p>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={onOpenLogin} className="btn btn-outline btn-sm">
                 <LogIn className="h-3.5 w-3.5" />
                 <span>Cambiar cuenta</span>
               </button>
             </div>
           </div>
-
-          {isAdmin && pendingCount != null && (
-            <p className="text-xs text-ink-muted">
-              {pendingCount === 0
-                ? 'No hay solicitudes pendientes de aprobación.'
-                : pendingCount === 1
-                  ? 'Hay 1 solicitud pendiente de aprobación.'
-                  : `Hay ${pendingCount} solicitudes pendientes de aprobación.`}
-            </p>
-          )}
-          {!isAdmin && (
-            <p className="text-xs text-ink-muted">
-              Tu cuenta fue autorizada por el administrador ({adminEmail}).
-            </p>
-          )}
         </div>
       </section>
 

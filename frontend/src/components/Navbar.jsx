@@ -194,18 +194,20 @@ export default function Navbar({
                   </div>
 
                   <div className="py-1">
+                    {/* La gestión de cuentas vive en la sección de plataforma
+                        del menú lateral; acá sólo se navega hasta ella. */}
                     {isAdmin && (
                       <button
                         type="button"
                         role="menuitem"
                         onClick={() => {
                           setUserMenuOpen(false);
-                          onOpenUsersAdmin();
+                          onNavigate('superadmin');
                         }}
                         className="menu-item"
                       >
                         <Users className="h-4 w-4 text-brand-500" />
-                        <span>Gestionar y aprobar usuarios</span>
+                        <span>Administrar plataforma</span>
                       </button>
                     )}
 

@@ -601,6 +601,22 @@ async function updateUserStatusInNeon(userId, newStatus) {
   }
 }
 
+async function updateUserRoleInNeon(userId, newRole) {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await query('UPDATE ml_users SET role = $1 WHERE id = $2', [
+      newRole === 'admin' ? 'admin' : 'user',
+      userId,
+    ]);
+    return true;
+  } catch (e) {
+    console.warn('Neon updateUserRole error:', e.message);
+    return false;
+  }
+}
+
 async function createLoginTokenInNeon(email, code, token, expireMinutes = 15) {
   const p = getPool();
   if (!p) return null;
@@ -986,6 +1002,8 @@ async function clearPackingMetadataInNeon() {
 module.exports = {
   getConnectionString,
   initNeonDb,
+  query,
+  updateUserRoleInNeon,
   isNeonConnected,
   debugSessionsInNeon,
   getAuthFromNeon,

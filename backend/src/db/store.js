@@ -501,6 +501,124 @@ async function updateUserStatus(userId, newStatus) {
   return true;
 }
 
+/**
+ * Actualiza el rol de un usuario (`admin` | `user`).
+ * El SuperAdmin no se puede degradar a sí mismo.
+ */
+async function updateUserRole(userId, newRole) {
+  const db = readDb();
+  const user = (db.users || []).find((u) => String(u.id) === String(userId));
+  if (!user) return { ok: false, error: 'Usuario no encontrado' };
+  if (isAdminEmail(user.email) && newRole !== 'admin') {
+    return { ok: false, error: 'No podés quitarte a vos mismo el rol de administrador.' };
+  }
+  user.role = newRole === 'admin' ? 'admin' : 'user';
+  writeDb(db);
+  try {
+    await neon.updateUserRoleInNeon(userId, user.role);
+  } catch (e) {
+    console.warn('Neon updateUserRole fallback:', e.message);
+  }
+  return { ok: true, user };
+}
+
+/** Suspende o reactiva una cuenta. Al suspender se revocan sus sesiones vivas. */
+async function setUserSuspended(userId, suspended, sessionsOf) {
+  const db = readDb();
+  const user = (db.users || []).find((u) => String(u.id) === String(userId));
+  if (!user) return { ok: false, error: 'Usuario no encontrado' };
+  if (isAdminEmail(user.email)) {
+    return { ok: false, error: 'No podés suspender la cuenta administradora.' };
+  }
+
+  user.status = suspended ? 'suspended' : 'active';
+  writeDb(db);
+  await updateUserStatus(userId, user.status);
+
+  // Un usuario suspendido no debe conservar una sesión abierta.
+  let revoked = 0;
+  if (suspended && typeof sessionsOf === 'function') {
+    revoked = await sessionsOf(user.email);
+  }
+  return { ok: true, user, revokedSessions: revoked };
+}
+
+/** Revoca todas las sesiones de un email (apertura y dispositivos). */
+async function revokeAllSessions(email) {
+  const clean = String(email || '').trim().toLowerCase();
+  if (!clean) return 0;
+  let revoked = 0;
+
+  try {
+    await neon.query('DELETE FROM ml_sessions WHERE LOWER(email) = LOWER($1)', [clean]);
+    revoked += 1;
+  } catch (e) {
+    console.warn('revokeAllSessions (web):', e.message);
+  }
+  try {
+    await neon.query('UPDATE ml_devices SET revoked = TRUE WHERE LOWER(email) = LOWER($1)', [clean]);
+  } catch (e) {
+    console.warn('revokeAllSessions (devices):', e.message);
+  }
+
+  const db = readDb();
+  const before = (db.sessions || []).length;
+  db.sessions = (db.sessions || []).filter((s) => s.email !== clean);
+  writeDb(db);
+
+  return Math.max(revoked, before - db.sessions.length);
+}
+
+/**
+ * Resumen de plataforma para el SuperAdmin: conteos por estado, cuentas de
+ * Mercado Libre vinculadas y sesiones activas.
+ */
+async function getPlatformOverview() {
+  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const users = await getAllUsers();
+
+  const byStatus = { active: 0, pending: 0, rejected: 0, suspended: 0 };
+  let linkedAccounts = 0;
+  const accounts = [];
+
+  for (const u of users) {
+    if (byStatus[u.status] !== undefined) byStatus[u.status] += 1;
+    let nickname = '';
+    let linked = false;
+    try {
+      const auth = await neon.getAuthFromNeon(u.email);
+      if (auth && auth.accessToken) {
+        linked = true;
+        nickname = auth.nickname || '';
+      }
+    } catch {
+      /* sin datos de ML: se reporta como no vinculado */
+    }
+    if (linked) linkedAccounts += 1;
+    accounts.push({ email: u.email, linked, nickname, isSuperAdmin: u.email === adminEmail });
+  }
+
+  let activeSessions = 0;
+  try {
+    const r = await neon.query(
+      'SELECT COUNT(*)::int AS n FROM ml_sessions WHERE expires_at > CURRENT_TIMESTAMP',
+      []
+    );
+    activeSessions = r.rows[0]?.n || 0;
+  } catch {
+    activeSessions = 0;
+  }
+
+  return {
+    totalUsers: users.length,
+    byStatus,
+    linkedAccounts,
+    activeSessions,
+    superAdminEmail: adminEmail,
+    accounts,
+  };
+}
+
 async function createLoginToken(email, code, token, expireMinutes = 15) {
   try {
     await neon.createLoginTokenInNeon(email, code, token, expireMinutes);
@@ -817,6 +935,10 @@ module.exports = {
   upsertUser,
   getAllUsers,
   updateUserStatus,
+  updateUserRole,
+  setUserSuspended,
+  revokeAllSessions,
+  getPlatformOverview,
   createLoginToken,
   verifyLoginToken,
   getDatabaseStatus,
