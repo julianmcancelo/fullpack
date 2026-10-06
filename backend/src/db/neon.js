@@ -656,8 +656,16 @@ async function createSessionInNeon(email, daysValid = 30) {
     const expiresAt = new Date(Date.now() + daysValid * 24 * 3600 * 1000);
     await query(
       'INSERT INTO ml_sessions (token, email, expires_at) VALUES ($1, $2, $3)',
-      [String(email).trim().toLowerCase(), token, expiresAt]
+      // El orden sigue el orden de las columnas: token, luego email.
+      [token, String(email).trim().toLowerCase(), expiresAt]
     );
+    // Limpieza de filas escritas con el orden de parámetros invertido: la
+    // columna `token` contenía un email y viceversa.
+    await query(
+      `DELETE FROM ml_sessions
+       WHERE token LIKE '%@%' OR email ~ '^[0-9a-f]{64}$'`,
+      []
+    ).catch(() => {});
     return { email: String(email).trim().toLowerCase(), token, expiresAt };
   } catch (e) {
     console.warn('Neon createSession error:', e.message);
