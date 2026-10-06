@@ -35,5 +35,5 @@
   "pairingSessions": [],
   "devices": [],
   "sessions": [],
-  "pendingFactoryReset": true
+  "pendingFactoryReset": false
 }
