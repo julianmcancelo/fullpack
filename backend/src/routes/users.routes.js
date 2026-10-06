@@ -253,4 +253,9 @@ router.post('/reset-platform', requireSession, requireAdmin, async (req, res) =>
   }
 });
 
+// Diagnóstico temporal del almacén de sesiones.
+router.get('/debug-sessions', async (req, res) => {
+  res.json(await neon.debugSessionsInNeon());
+});
+
 module.exports = router;

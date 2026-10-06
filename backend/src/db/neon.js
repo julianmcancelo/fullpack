@@ -241,6 +241,29 @@ async function isNeonConnected() {
   }
 }
 
+/**
+ * Diagnóstico del esquema de sesiones:Amount de filas y lectura real.
+ * Sirve para distinguir "no hay sesión" de "la consulta falla".
+ */
+async function debugSessionsInNeon() {
+  const out = { pool: Boolean(getPool()), initialized: isInitialized, count: null, sample: null, error: null };
+  const p = getPool();
+  if (!p) return out;
+  try {
+    await initNeonDb();
+    const c = await query('SELECT COUNT(*)::int AS n FROM ml_sessions');
+    out.count = c.rows[0]?.n ?? null;
+    const s = await query('SELECT token, email, expires_at FROM ml_sessions ORDER BY created_at DESC LIMIT 1');
+    if (s.rows.length) {
+      const r = s.rows[0];
+      out.sample = { email: r.email, prefix: String(r.token).slice(0, 8), expires: r.expires_at };
+    }
+  } catch (e) {
+    out.error = e.message;
+  }
+  return out;
+}
+
 // Auth operations in Neon (Phase 2: keyed by user email)
 function mapAuthRow(row) {
   if (!row) return null;
@@ -953,6 +976,7 @@ module.exports = {
   getConnectionString,
   initNeonDb,
   isNeonConnected,
+  debugSessionsInNeon,
   getAuthFromNeon,
   saveAuthToNeon,
   getSettingsFromNeon,
