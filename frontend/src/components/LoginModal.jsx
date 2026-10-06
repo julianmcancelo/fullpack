@@ -27,88 +27,12 @@ export default function LoginModal({ isOpen, onClose }) {
   const [successMsg, setSuccessMsg] = useState(null);
   const [debugOtp, setDebugOtp] = useState(null);
   const [pendingUser, setPendingUser] = useState(null);
-  const googleBtnRef = React.useRef(null);
 
-  // Helper to parse JWT from Google Identity Services without external libs
-  const parseJwt = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (e) {
-      return null;
-    }
-  };
-
-  const handleGoogleCredentialResponse = async (response) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const payload = parseJwt(response.credential);
-      if (!payload || !payload.email) {
-        throw new Error('No se pudo verificar la cuenta de Google.');
-      }
-
-      const res = await loginWithGoogle({
-        email: payload.email,
-        name: payload.name || payload.email.split('@')[0],
-        avatar: payload.picture || '',
-        googleId: payload.sub,
-      });
-
-      if (res.success) {
-        onClose();
-      }
-    } catch (err) {
-      if (err.message?.includes('pending_approval') || err.message?.includes('pendiente')) {
-        setAuthMode('pending_approval');
-        setPendingUser({ email: err.user?.email || 'Tu correo' });
-      } else {
-        setError(err.message || 'Error al validar credencial de Google');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Mount Google One-Tap & Render Button if available
-  React.useEffect(() => {
-    if (!isOpen) return;
-
-    const initGoogleGis = () => {
-      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-        try {
-          window.google.accounts.id.initialize({
-            client_id: '841022012035-7196.apps.googleusercontent.com', // Standard OAuth client format
-            callback: handleGoogleCredentialResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
-
-          if (googleBtnRef.current) {
-            window.google.accounts.id.renderButton(googleBtnRef.current, {
-              theme: 'outline',
-              size: 'large',
-              width: '100%',
-              text: 'continue_with',
-              shape: 'pill',
-            });
-          }
-        } catch (e) {
-          console.warn('GIS Init note:', e.message);
-        }
-      }
-    };
-
-    const timer = setTimeout(initGoogleGis, 300);
-    return () => clearTimeout(timer);
-  }, [isOpen, authMode]);
+  // Nota: el login de Google se hace por Firebase (redirect), no con Google
+  // Identity Services. El `client_id` de GIS estabatomado del App ID de
+  // Mercado Libre, que no es un proyecto de Google: Google rechazaba el
+  // credential y el botón no avanzaba. Firebase ya tiene su cliente OAuth
+  // válido y es la única fuente de verdad para autenticar con Google.
 
   if (!isOpen) return null;
 
@@ -246,21 +170,23 @@ export default function LoginModal({ isOpen, onClose }) {
           {authMode === 'options' && (
             <div className="space-y-3.5">
               
-              {/* Official Firebase Google Auth Button */}
+              {/* Login con Google vía Firebase (redirect) */}
               <button
                 onClick={async () => {
                   try {
                     setLoading(true);
                     setError(null);
                     await loginWithGoogle();
-                    onClose();
+                    // Con redirect la página se va y vuelve: no cerramos el
+                    // modal ni liberamos el botón, el listener de Firebase
+                    // completa el ingreso al volver.
+                    setError('Te redirigimos a Google… volvé en un momento.');
                   } catch (err) {
                     if (err.message?.includes('pending_approval') || err.message?.includes('pendiente')) {
                       setAuthMode('pending_approval');
-                    } else if (err.code !== 'auth/popup-closed-by-user') {
+                    } else {
                       setError(err.message || 'Error al autenticar con Google');
                     }
-                  } finally {
                     setLoading(false);
                   }
                 }}
