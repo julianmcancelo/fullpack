@@ -208,4 +208,21 @@ router.post('/approve', requireSession, requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/users/reset-platform (SuperAdmin only)
+// Deja la plataforma como recién creada: sin cuentas de Mercado Libre, sin
+// sesiones, sin packing previo y con un único usuario (el admin).
+// Es una acción destructiva e irreversible.
+router.post('/reset-platform', requireSession, requireAdmin, async (req, res) => {
+  try {
+    const result = await store.factoryResetAll();
+    res.json({
+      success: true,
+      message: 'Plataforma reseteada. Todos deben vincular su cuenta de Mercado Libre de nuevo.',
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

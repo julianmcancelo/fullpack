@@ -131,23 +131,12 @@ function writeDb(data) {
   }
 }
 
-// Background sync from Neon if available
-// Si el store local está limpio (reset), limpia Neon para empezar de cero
+// Background sync from Neon if available.
+// NOTA: no se deduce "reset" del store local: un usuario nuevo sin credenciales
+// locales NO puede implicar que Neon deba vaciarse. El reset es explícito vía
+// POST /api/admin/reset (requireSession + requireAdmin).
 (async () => {
   try {
-    const localDb = readDb();
-    const isLocalClean = !localDb.auth?.accessToken && (!localDb.users || localDb.users.length <= 1);
-
-    if (isLocalClean) {
-      // Reset total: limpiar Neon para empezar de cero
-      await neon.clearAllAuthInNeon().catch(() => {});
-      await neon.clearAllSessionsInNeon().catch(() => {});
-      await neon.clearAllUsersInNeon().catch(() => {});
-      await neon.clearPackingMetadataInNeon().catch(() => {});
-      console.log('[store] Neon limpiado - sistema reseteado');
-      return;
-    }
-
     const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const neonAuth = adminEmail ? await neon.getAuthFromNeon(adminEmail) : null;
     if (neonAuth && neonAuth.accessToken) {
@@ -270,6 +259,57 @@ function clearAuth() {
   const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   if (adminEmail) neon.clearAuthInNeon(adminEmail).catch(() => {});
   return db.auth;
+}
+
+/**
+ * Reset total y explícito (solo SuperAdmin): deja la plataforma como recién
+ * creada — sin cuentas de Mercado Libre, sin sesiones y sinpacking previo —
+ * conservando únicamente la cuenta administradora.
+ *
+ * A diferencia del sync del arranque, acá sí se vacía Neon: es una orden
+ * explícita del administrador, no una inferencia.
+ */
+async function factoryResetAll() {
+  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+
+  // 1) Neon: se inicializa el esquema antes de borrar (si las tablas no
+  //    existen, los DELETE fallarían y los datos quedarían intactos).
+  await neon.initNeonDb().catch(() => {});
+
+  const neonResults = {
+    auth: await neon.clearAllAuthInNeon().catch(() => false),
+    sessions: await neon.clearAllSessionsInNeon().catch(() => false),
+    users: await neon.clearAllUsersInNeon().catch(() => false),
+    packing: await neon.clearPackingMetadataInNeon().catch(() => false),
+  };
+
+  // 2) Store local (incluye /tmp en serverless): todo limpio + solo el admin.
+  const db = readDb();
+  db.auth = { ...defaultData.auth };
+  db.authByEmail = {};
+  db.packingMetadata = {};
+  db.scanLogs = [];
+  db.loginTokens = [];
+  db.pairingSessions = [];
+  db.devices = [];
+  db.sessions = [];
+  db.users = adminEmail
+    ? [
+        {
+          id: 1,
+          email: adminEmail,
+          name: 'Administrador',
+          avatar: '',
+          role: 'admin',
+          status: 'active',
+          authProvider: 'email',
+          createdAt: new Date().toISOString(),
+        },
+      ]
+    : [];
+  writeDb(db);
+
+  return { success: true, neon: neonResults, keptAdmin: adminEmail || null };
 }
 
 function getPackingMetadata() {
@@ -750,6 +790,7 @@ module.exports = {
   getAuth,
   updateAuth,
   clearAuth,
+  factoryResetAll,
   getPackingMetadata,
   updatePackingMetadata,
   updatePackingMetadataAsync,
