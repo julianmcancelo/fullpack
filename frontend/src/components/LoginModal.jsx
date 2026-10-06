@@ -26,6 +26,7 @@ export default function LoginModal({ isOpen, onClose }) {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [debugOtp, setDebugOtp] = useState(null);
+  const [otpNotice, setOtpNotice] = useState(null);
   const [pendingUser, setPendingUser] = useState(null);
 
   // Nota: el login de Google se hace por Firebase (redirect), no con Google
@@ -81,14 +82,13 @@ export default function LoginModal({ isOpen, onClose }) {
       setSuccessMsg(null);
 
       const res = await api.requestOtpCode(email, name);
+      // El backend devuelve el código solo cuando el correo no pudo enviarse
+      // (sin SMTP configurado). En ese caso lo mostramos y lo autocompletamos.
+      const code = res.code || res.debugOtp || null;
+      setOtpNotice(res.notice || null);
       setSuccessMsg(res.message);
-      if (res.debugOtp) {
-        setDebugOtp(res.debugOtp);
-        setOtpCode(res.debugOtp); // Auto-fill for ultra-convenience
-      } else {
-        setDebugOtp(null);
-        setOtpCode('');
-      }
+      setDebugOtp(code);
+      setOtpCode(code || '');
       setAuthMode('otp_verify');
     } catch (err) {
       setError(err.message);
@@ -300,10 +300,22 @@ export default function LoginModal({ isOpen, onClose }) {
               </div>
 
               {debugOtp ? (
-                <div className="rounded-xl border border-warning/30 bg-warning-soft p-2.5 text-center">
-                  <span className="text-[11px] font-bold text-warning">
-                    Código de acceso temporal: <b className="font-mono text-sm">{debugOtp}</b>
+                <div className="space-y-1.5 rounded-xl border border-warning/30 bg-warning-soft p-3 text-center">
+                  <span className="block text-[11px] font-semibold text-warning">
+                    {otpNotice || 'El correo no está configurado en el servidor: usá este código.'}
                   </span>
+                  <span className="block font-mono text-lg font-extrabold tracking-[0.35em] text-ink">
+                    {debugOtp}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(String(debugOtp));
+                    }}
+                    className="btn btn-ghost btn-xs mt-1"
+                  >
+                    Copiar código
+                  </button>
                 </div>
               ) : (
                 <div className="rounded-xl border border-line bg-muted/60 p-2.5 text-center">

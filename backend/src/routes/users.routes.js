@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const store = require('../db/store');
 const neon = require('../db/neon');
+const mailer = require('../services/mailer');
 const { requireSession, requireAdmin } = require('../middleware/session');
 
 // POST /api/users/google-login
@@ -124,17 +125,27 @@ router.post('/request-code', async (req, res) => {
 
     await store.createLoginToken(cleanEmail, otpCode, token, 15);
 
+    // Envío real del correo. Sin transporte configurado NO se dice "enviado":
+    // se devuelve el código para que el usuario pueda entrar igual.
+    const mail = await mailer.sendAccessCode({ to: cleanEmail, code: otpCode, minutes: 15 });
+
     const allowDebugOtp = process.env.ALLOW_DEBUG_OTP === 'true';
     const payload = {
       success: true,
-      message: allowDebugOtp
-        ? `Código de acceso de 6 dígitos generado para ${cleanEmail}. Expira en 15 minutos.`
-        : `Código de acceso enviado a ${cleanEmail}. Expira en 15 minutos.`,
+      message: mail.delivered
+        ? `Código de acceso enviado a ${cleanEmail}. Expira en 15 minutos.`
+        : `Código de acceso generado para ${cleanEmail}. Expira en 15 minutos.`,
       email: cleanEmail,
       status: user.status,
     };
-    if (allowDebugOtp) {
-      payload.debugOtp = otpCode;
+
+    if (!mail.delivered || allowDebugOtp) {
+      payload.code = otpCode;
+      payload.deliveredByEmail = mail.delivered;
+      if (!mail.delivered) {
+        payload.notice =
+          'El envío de correo no está configurado en el servidor, por eso te mostramos el código acá.';
+      }
     }
     res.json(payload);
   } catch (err) {
