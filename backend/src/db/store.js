@@ -140,7 +140,7 @@ function writeDb(data) {
 
     if (isLocalClean) {
       // Reset total: limpiar Neon para empezar de cero
-      await neon.clearAuthInNeon('default').catch(() => {});
+      await neon.clearAllAuthInNeon().catch(() => {});
       await neon.clearAllSessionsInNeon().catch(() => {});
       await neon.clearAllUsersInNeon().catch(() => {});
       await neon.clearPackingMetadataInNeon().catch(() => {});

@@ -856,6 +856,20 @@ async function purgeExpiredPairingSessionsInNeon() {
   }
 }
 
+// Reset total: limpiar todo el auth (todas las cuentas ML)
+async function clearAllAuthInNeon() {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await initNeonDb();
+    await p.query('DELETE FROM ml_auth');
+    return true;
+  } catch (e) {
+    console.warn('Neon clearAllAuth error:', e.message);
+    return false;
+  }
+}
+
 // Reset total: limpiar todas las sesiones
 async function clearAllSessionsInNeon() {
   const p = getPool();
@@ -925,6 +939,7 @@ module.exports = {
   getSessionFromNeon,
   deleteSessionFromNeon,
   clearAuthInNeon,
+  clearAllAuthInNeon,
   purgeExpiredSessionsInNeon,
   clearAllSessionsInNeon,
   clearAllUsersInNeon,
