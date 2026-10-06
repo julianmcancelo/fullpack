@@ -65,6 +65,16 @@ check(
   resolveRedirectUri(makeReq({ host: 'otro.vercel.app' })),
   'https://env.vercel.app/api/auth/callback'
 );
+
+// 5b) Un placeholder en la env var tampoco vale: fue lo que dejó el flujo sin
+// conectar en producción, así que no puede ganar por ser "explícito".
+process.env.ML_REDIRECT_URI = 'https://httpbin.org/get';
+fakeSettings = { appId: '123', clientSecret: 'shh', redirectUri: '' };
+check(
+  'ML_REDIRECT_URI con placeholder se descarta',
+  resolveRedirectUri(makeReq({ 'x-forwarded-proto': 'https', host: 'app.vercel.app' })),
+  'https://app.vercel.app/api/auth/callback'
+);
 delete process.env.ML_REDIRECT_URI;
 
 // 6) Localhost usa http.

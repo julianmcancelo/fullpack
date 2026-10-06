@@ -81,8 +81,16 @@ function getCallbackUrl(req) {
  * @returns {string} '' si no hay forma de construir una
  */
 function resolveRedirectUri(req) {
+  // La variable de entorno tiene prioridad, pero tampoco puede ser un
+  // placeholder: `ML_REDIRECT_URI=https://httpbin.org/get` en el panel de
+  // Vercel fue justamente lo que dejó el OAuth sin conectar.
   const fromEnv = String(process.env.ML_REDIRECT_URI || '').trim();
-  if (fromEnv) return fromEnv;
+  if (isUsableRedirectUri(fromEnv)) return fromEnv;
+  if (fromEnv) {
+    console.warn(
+      `[oauth] ML_REDIRECT_URI="${fromEnv}" no es utilizable como redirect_uri; se usa el callback del dominio actual.`
+    );
+  }
 
   // `require` diferido: este módulo lo usa `store`, que a su vez lo usa.
   const { getSettings } = require('../db/store');
